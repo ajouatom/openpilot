@@ -20,6 +20,7 @@ from opendbc.car.carlog import carlog
 from opendbc.car.fw_versions import ObdCallback
 from opendbc.car.car_helpers import get_car
 from opendbc.car.interfaces import CarInterfaceBase
+from opendbc.car.hyundai.values import HyundaiSafetyFlags
 from openpilot.selfdrive.pandad import can_capnp_to_list, can_list_to_can_capnp
 from openpilot.selfdrive.car.alternative_experience import get_alternative_experience
 from openpilot.selfdrive.car.card_diagnostics import should_log_card_diagnostics
@@ -131,7 +132,10 @@ class Car:
     else:
       self.CI, self.CP = CI, CI.CP
 
-    self.CP.alternativeExperience = get_alternative_experience(self.params.get_bool("DisengageOnAccelerator"))
+    self.CP.alternativeExperience = get_alternative_experience(
+      self.params.get_bool("DisengageOnAccelerator"), always_lateral=self.params.get_bool("AlwaysLateral"),
+      hyundai_canfd=any(cfg.safetyModel == structs.CarParams.SafetyModel.hyundaiCanfd and cfg.safetyParam & HyundaiSafetyFlags.CANFD_STRICT_CONTROL
+                       for cfg in self.CP.safetyConfigs))
     openpilot_enabled_toggle = self.params.get_bool("OpenpilotEnabledToggle")
     controller_available = self.CI.CC is not None and openpilot_enabled_toggle and not self.CP.dashcamOnly
     self.CP.passive = not controller_available or self.CP.dashcamOnly
@@ -183,6 +187,13 @@ class Car:
     self.params.put("CarParams", cp_bytes)
     self.params.put_nonblocking("CarParamsCache", cp_bytes)
     self.params.put_nonblocking("CarParamsPersistent", cp_bytes)
+
+    if self.params.get_bool("AutoVehicleSession"):
+      # Release settings consumers only after restore and CP construction finish.
+      from openpilot.common.auto_vehicle_branch import finish_identification
+      finish_identification(self.params, self.CP.carFingerprint)
+      self.params.put("AutoVehicleResolved", self.CP.carFingerprint)
+      self.params.put_bool("AutoVehicleReady", True)
 
     self.mock_carstate = MockCarState()
     self.v_cruise_helper = VCruiseCarrot(self.CP) #VCruiseHelper(self.CP)

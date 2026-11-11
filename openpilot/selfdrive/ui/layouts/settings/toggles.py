@@ -90,6 +90,12 @@ class TogglesLayout(Widget):
         "metric.png",
         False,
       ),
+      "CarrotNaviOnroad": (
+        lambda: "CarrotNavi Map",
+        "Show the phone map on the driving screen. Speed, driver monitoring, and safety alerts remain visible.",
+        "carrot_web.png",
+        False,
+      ),
     }
 
     self._long_personality_setting = multiple_button_item(

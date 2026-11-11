@@ -37,12 +37,15 @@ def screen():
   view = namespace["AugmentedRoadView"]()
   for name in ("camera", "_refresh_plot_mode", "_switch_stream_if_needed", "_update_calibration",
                "_model_renderer", "_hud_renderer", "_vision_renderer", "_alert_renderer", "_driver_state_renderer",
-               "_traffic_light", "_confidence_ball", "_bookmark_icon", "_offroad_label", "_pm", "_overlay_state", "client"):
+               "_traffic_light", "_confidence_ball", "_bookmark_icon", "_offroad_label", "_pm", "_overlay_state",
+               "_carrot_navi_map", "client"):
     setattr(view, name, Mock())
   view.stream_type = 0
   view.rect = SimpleNamespace(x=0, y=0, width=540, height=960)
   view._fade_texture = object()
   view._plot_mode = 0
+  view._show_carrot_navi_map = False
+  view._carrot_navi_map.render.return_value = False
   view._alert_renderer.will_render.return_value = (None, False)
   view._render_diagnostics = Mock()
   view._render_diagnostics.values = {}

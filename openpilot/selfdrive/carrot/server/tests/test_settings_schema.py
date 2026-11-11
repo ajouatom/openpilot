@@ -508,10 +508,16 @@ def test_cluster_camera_preference_is_in_brightness_and_view(settings, params):
     "ShowCustomBrightness",
     "ShowModelView",
     "ShowCameraWithCluster",
+    "CarrotNaviOnroad",
   ]
 
   params_keys = PARAMS_KEYS_PATH.read_text(encoding="utf-8")
   assert '{"ShowCameraWithCluster", {PERSISTENT, INT, "0"}}' in params_keys
+  assert '{"CarrotNaviOnroad", {PERSISTENT, BOOL, "0"}}' in params_keys
+
+  carrot_navi = by_name["CarrotNaviOnroad"]
+  assert (carrot_navi["min"], carrot_navi["max"], carrot_navi["default"]) == (0, 1, 0)
+  assert carrot_navi["control"] == "toggle"
 
 
 def test_carrot_radar_is_fixed_without_mode_or_sensitivity(settings, params):

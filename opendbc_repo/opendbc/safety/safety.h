@@ -657,14 +657,11 @@ bool longitudinal_interceptor_checks(const CANPacket_t *to_send) {
 }
 
 // Safety checks for torque-based steering commands
-bool steer_torque_cmd_checks(int desired_torque, int steer_req, const TorqueSteeringLimits limits) {
+bool steer_torque_cmd_checks_with_permission(int desired_torque, int steer_req, const TorqueSteeringLimits limits, bool lateral_allowed) {
   bool violation = false;
   uint32_t ts = microsecond_timer_get();
 
-  bool aol_allowed = true;
-  if (controls_allowed) acc_main_on = controls_allowed;
-  
-  if (controls_allowed || aol_allowed) {
+  if (lateral_allowed) {
     // *** global torque limit check ***
     violation |= max_limit_check(desired_torque, limits.max_steer, -limits.max_steer);
 
@@ -691,7 +688,7 @@ bool steer_torque_cmd_checks(int desired_torque, int steer_req, const TorqueStee
   }
 
   // no torque if controls is not allowed
-  if (!(controls_allowed || aol_allowed) && (desired_torque != 0)) {
+  if (!lateral_allowed && (desired_torque != 0)) {
     violation = true;
   }
 
@@ -733,7 +730,7 @@ bool steer_torque_cmd_checks(int desired_torque, int steer_req, const TorqueStee
   }
 
   // reset to 0 if either controls is not allowed or there's a violation
-  if (violation || !(controls_allowed || aol_allowed)) {
+  if (violation || !lateral_allowed) {
     valid_steer_req_count = 0;
     invalid_steer_req_count = 0;
     desired_torque_last = 0;
@@ -743,6 +740,13 @@ bool steer_torque_cmd_checks(int desired_torque, int steer_req, const TorqueStee
   }
 
   return violation;
+}
+
+bool steer_torque_cmd_checks(int desired_torque, int steer_req, const TorqueSteeringLimits limits) {
+  // Preserve legacy profiles outside the strict torque-steering Ioniq 5.
+  // That profile supplies its RX-validated lateral permission explicitly.
+  if (controls_allowed) acc_main_on = controls_allowed;
+  return steer_torque_cmd_checks_with_permission(desired_torque, steer_req, limits, true);
 }
 
 // Safety checks for angle-based steering commands

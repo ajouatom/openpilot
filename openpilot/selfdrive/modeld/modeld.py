@@ -23,7 +23,7 @@ from openpilot.common.transformations.model import get_warp_matrix
 from openpilot.selfdrive.controls.lib.desire_helper import DesireHelper
 from openpilot.selfdrive.controls.lib.desire_lib.boundary_observer import BoundaryObserver
 from openpilot.selfdrive.controls.lib.desire_lib.tesla_turn import turn_signal_context
-from openpilot.selfdrive.controls.lib.drive_helpers import get_accel_from_plan, smooth_value, get_curvature_from_plan
+from openpilot.selfdrive.controls.lib.drive_helpers import get_accel_from_plan, smooth_value, get_curvature_from_plan, supports_low_speed_torque_response
 from openpilot.selfdrive.modeld.parse_model_outputs import Parser
 from openpilot.selfdrive.modeld.compile_modeld import make_input_queues, WARP_INPUTS, POLICY_INPUTS
 from openpilot.selfdrive.modeld.fill_model_msg import fill_model_msg, fill_driving_model_data, fill_pose_msg, PublishState
@@ -419,7 +419,8 @@ def main(demo=False):
   from openpilot.selfdrive.car.voice_indicator import native_indicator
   DH = DesireHelper(fingerprint=CP.carFingerprint, native_voice_signal=native_indicator(CP) is not None,
                     tesla_auto_signals=CP.brand == "tesla" and bool(CP.flags & TeslaFlags.AUTO_TURN_SIGNALS),
-                    boundary_indicator_supported=CP.carFingerprint == 'HYUNDAI_IONIQ_5_PE')
+                    boundary_indicator_supported=CP.carFingerprint == 'HYUNDAI_IONIQ_5_PE',
+                    turn_completion_guard=supports_low_speed_torque_response(CP))
   boundary_observer = BoundaryObserver(cloudlog.event) if DH.boundary_indicator_supported else None
   nav_input = MapInput()
 
@@ -598,6 +599,8 @@ def main(demo=False):
         turn_hold_allowed &= indicator_valid
       DH.update(sm['carState'], modelv2_send.modelV2, sm['carControl'].latActive, lane_change_prob, sm['carrotMan'], sm['radarState'],
                 indicator_valid=indicator_valid, indicator_curvature=sm['carControl'].actuators.curvature,
+                turn_input_valid=indicator_valid and sm.valid['carrotMan'] and sm.alive['carrotMan'] and
+                                 0 <= indicator_now-sm.recv_time['carrotMan'] < .35,
                 indicator_yaw_rate=indicator_yaw_rate,
                 assistant_valid=indicator_valid and sm.valid['radarState'] and sm.alive['radarState'] and
                 0 <= indicator_now-sm.recv_time['radarState'] < .35,

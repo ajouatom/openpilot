@@ -5,7 +5,8 @@ import time
 from dataclasses import replace
 from typing import Any
 
-from cluster_models import (
+if __package__:
+  from .cluster_models import (
     NaviCrossroadInfo,
     NaviGuidanceInfo,
     NaviItemMeta,
@@ -16,7 +17,20 @@ from cluster_models import (
     NaviStatusInfo,
     NaviTrafficLightInfo,
     NaviVehicleInfo,
-)
+  )
+else:  # Direct cluster_run.py execution.
+  from cluster_models import (
+    NaviCrossroadInfo,
+    NaviGuidanceInfo,
+    NaviItemMeta,
+    NaviLaneInfo,
+    NaviLiveState,
+    NaviRouteInfo,
+    NaviSpeedInfo,
+    NaviStatusInfo,
+    NaviTrafficLightInfo,
+    NaviVehicleInfo,
+  )
 
 
 LIVE_TTL_S = 6.0

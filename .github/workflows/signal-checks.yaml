@@ -44,6 +44,9 @@ jobs:
             opendbc_repo/opendbc/safety/tests/test_pedal_interceptor.py \
             opendbc_repo/opendbc/car/hyundai/tests/test_alt2_adas_buttons.py \
             opendbc_repo/opendbc/safety/tests/test_hyundai_canfd_alt_buttons.py \
+            opendbc_repo/opendbc/safety/tests/test_hyundai_canfd_authorization.py \
+            opendbc_repo/opendbc/car/hyundai/tests/test_ioniq_safety_profile.py \
+            openpilot/selfdrive/car/tests/test_alternative_experience.py \
             opendbc_repo/opendbc/car/hyundai/tests/test_spas.py \
             opendbc_repo/opendbc/safety/tests/test_hyundai_spas.py \
             openpilot/selfdrive/car/tests/test_hyundai_spas.py \
@@ -61,6 +64,8 @@ jobs:
             openpilot/selfdrive/controls/tests/test_assistant_lane.py \
             openpilot/selfdrive/car/tests/test_assistant_speed.py \
             openpilot/selfdrive/controls/tests/test_lever_forced_turn.py \
+            openpilot/selfdrive/controls/tests/test_low_speed_steering_response.py \
+            openpilot/selfdrive/controls/tests/test_navigation_turn_completion.py \
             openpilot/selfdrive/carrot/tests/test_xiaoge_data.py \
             tools/signal_validation/test_trial_integration.py \
             tools/signal_validation/test_lane_line_time.py \

@@ -93,3 +93,32 @@ git apply --unidiff-zero /absolute/path/to/rav4-radar-display.patch
 
 Only the matching manual regions are edited. Validate both pages and regenerate
 the catalog before publishing, following the authoring guide.
+
+## Porter / Ioniq automatic branch handoff
+
+`auto-vehicle-switch.patch` documents `AutoVehicleSwitch` on both c3-pht-porter
+and c3-pht: confirmed vehicle mapping, Park/zero-wheel/noOutput startup guards,
+checkout plus OS restart, seven-setting restore and recalibration. Generate
+from the matching fork branch, apply with `git apply --check --unidiff-zero`
+and `git apply --unidiff-zero`, regenerate and validate. Both branches retain
+compatible handoff code and persistent setting registrations. This is a staged
+fork-specific patch, not an upstream live Wiki publication.
+
+## Ioniq 5 control safety
+
+`ioniq5-control-safety.patch` documents the ported strict torque-steering
+Ioniq 5 HDA2/CAMERA SCC=2 safety profile for `AlwaysLateral` and `AutoEngage`.
+It preserves this branch's Tesla-specific catalog behavior. Apply to fresh
+branch-generated pages with `git apply --check --unidiff-zero` and
+`git apply --unidiff-zero`, regenerate and validate. No upstream Wiki publication.
+
+## Porter and Ioniq 5 low-speed steering response
+
+`low-speed-steering-response.patch` supplies reviewed Korean, English and Chinese
+`LatSmoothSec` and `AutoTurnControl` explanations for the Porter II EV and Ioniq 5
+HDA2 CAMERA SCC torque profiles. Generate fresh pages from this branch catalog,
+apply with `git apply --check --unidiff-zero` / `git apply --unidiff-zero`,
+regenerate and validate. It documents the low-speed duplicate-filter removal,
+measured wheel-return completion and the bounded ten-second navigation request.
+Torque, rate and driver-override limits remain. This branch-specific patch does
+not publish to the live upstream Wiki.

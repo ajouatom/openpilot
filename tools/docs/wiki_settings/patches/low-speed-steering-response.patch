@@ -1,0 +1,138 @@
+--- a/KO-ATC-AutoTurnControl(0).md
++++ b/KO-ATC-AutoTurnControl(0).md
+@@ -30 +30,19 @@
+-<!-- CARROT:REVIEW reviewed-for="" -->
++<!-- CARROT:REVIEW reviewed-for="95f875649b5996bbd6d9c4beed3d700ca194799fc6dd5d79dcc111391559d318" reviewed-at="2026-11-10T00:00:00Z" -->
++<!-- CARROT:SECTION:BEGIN BEHAVIOR -->
++### 동작
++
++포터2 EV와 아이오닉5 HDA2·CAMERA SCC 토크 조향은 예상 회전율 감소만으로 내비 턴을 끝내지 않습니다. 해당 방향 핸들이 80도를 넘은 뒤 이동 중 ±15도 안으로 0.2초 복귀하면 종료하며, 같은 턴 안내는 최대 10초 실행합니다.
++<!-- CARROT:SECTION:END BEHAVIOR -->
++
++<!-- CARROT:SECTION:BEGIN USAGE -->
++### 사용
++
++ATC 1·2번과 활성 조향이 필요합니다. 내비 상태 변경·조향 해제·운전자 반대 방향 방향지시등 요청이 우선하고, 유효한 모델 출력과 최신 차량·조향·내비 상태가 필요하며, CAN·조향각 오류 시 턴 유지를 중단합니다.
++<!-- CARROT:SECTION:END USAGE -->
++
++<!-- CARROT:SECTION:BEGIN REFERENCE -->
++### 참고
++
++최대 토크·증가율·운전자 개입 제한은 유지합니다. 긴 회전은 시간 상한으로 종료될 수 있으며, 물리적 조향 한도나 크루즈 OFF 상태의 감속을 보장하지 않습니다.
++<!-- CARROT:SECTION:END REFERENCE -->
++
+--- a/EN-ATC-AutoTurnControl.md
++++ b/EN-ATC-AutoTurnControl.md
+@@ -30 +30,19 @@
+-<!-- CARROT:REVIEW reviewed-for="" -->
++<!-- CARROT:REVIEW reviewed-for="95f875649b5996bbd6d9c4beed3d700ca194799fc6dd5d79dcc111391559d318" reviewed-at="2026-11-10T00:00:00Z" -->
++<!-- CARROT:SECTION:BEGIN BEHAVIOR -->
++### Behavior
++
++Porter II EV and Ioniq 5 HDA2 CAMERA SCC torque steering do not finish a navigation turn solely on falling predicted yaw. After steering exceeds 80 degrees in the turn direction, return within ±15 degrees for 0.2s while moving finishes it; an unchanged turn cue executes for at most 10s.
++<!-- CARROT:SECTION:END BEHAVIOR -->
++
++<!-- CARROT:SECTION:BEGIN USAGE -->
++### Usage
++
++Requires ATC mode 1 or 2 and active lateral control. Navigation changes, lateral disengagement and opposite physical turn-signal requests take priority; valid model output and fresh vehicle, control and navigation state are required; invalid CAN or steering angle stops retention.
++<!-- CARROT:SECTION:END USAGE -->
++
++<!-- CARROT:SECTION:BEGIN REFERENCE -->
++### Reference
++
++Maximum torque, rate and driver-override limits remain. A long turn may reach the time bound. This does not increase physical steering capacity or provide deceleration with cruise OFF.
++<!-- CARROT:SECTION:END REFERENCE -->
++
+--- a/ZH-ATC-自动转向控制.md
++++ b/ZH-ATC-自动转向控制.md
+@@ -30 +30,19 @@
+-<!-- CARROT:REVIEW reviewed-for="" -->
++<!-- CARROT:REVIEW reviewed-for="95f875649b5996bbd6d9c4beed3d700ca194799fc6dd5d79dcc111391559d318" reviewed-at="2026-11-10T00:00:00Z" -->
++<!-- CARROT:SECTION:BEGIN BEHAVIOR -->
++### 行为
++
++波特II EV及IONIQ 5 HDA2 CAMERA SCC力矩转向不再仅因预测转动速度下降结束导航转弯。同方向转向角超过80度后，行驶中回到±15度内持续0.2秒结束；同一转弯提示最多执行10秒。
++<!-- CARROT:SECTION:END BEHAVIOR -->
++
++<!-- CARROT:SECTION:BEGIN USAGE -->
++### 使用
++
++需要ATC模式1或2及横向控制激活。导航变化、横向控制关闭及驾驶员反向转向灯请求优先；需要有效模型输出及最新车辆、控制和导航状态，无效CAN或转向角停止保持。
++<!-- CARROT:SECTION:END USAGE -->
++
++<!-- CARROT:SECTION:BEGIN REFERENCE -->
++### 参考
++
++最大力矩、变化率及驾驶员介入限制不变。较长转弯可能达到时间上限，不提高物理转向能力，也不提供巡航关闭时的减速。
++<!-- CARROT:SECTION:END REFERENCE -->
++
+--- a/KO-LatSmoothSec(13)x0.01.md
++++ b/KO-LatSmoothSec(13)x0.01.md
+@@ -30 +30,19 @@
+-<!-- CARROT:REVIEW reviewed-for="" -->
++<!-- CARROT:REVIEW reviewed-for="60cd1f91fb85c30661bf09dc53bc54d6482c0dc26a342a4eb4d0d48dfaf9ab94" reviewed-at="2026-11-10T00:00:00Z" -->
++<!-- CARROT:SECTION:BEGIN BEHAVIOR -->
++### 동작
++
++값을 높이면 모델 목표가 더 부드러워지는 대신 반응이 늦어질 수 있습니다. 포터2 EV와 아이오닉5 HDA2·CAMERA SCC 토크 조향의 레인리스 경로에서는 30km/h 이하의 추가 제어기 0.1초 필터를 생략하고 30~40km/h에서 기존 필터로 점진 복귀합니다.
++<!-- CARROT:SECTION:END BEHAVIOR -->
++
++<!-- CARROT:SECTION:BEGIN USAGE -->
++### 사용
++
++저속에서 목표 전달 지연을 줄여도 이 설정의 모델 필터는 유지됩니다. 차선 모드 및 40km/h 이상의 기존 응답은 유지하며, 조향 관련 설정은 한 번에 하나씩 비교합니다.
++<!-- CARROT:SECTION:END USAGE -->
++
++<!-- CARROT:SECTION:BEGIN REFERENCE -->
++### 참고
++
++최대 토크·증가율·운전자 개입 제한은 늘리지 않습니다. 목표가 더 빨리 전달되는 것과 실제 핸들 추종·차선 유지는 별도로 확인해야 합니다.
++<!-- CARROT:SECTION:END REFERENCE -->
++
+--- a/EN-LatSmoothSec(13).md
++++ b/EN-LatSmoothSec(13).md
+@@ -30 +30,19 @@
+-<!-- CARROT:REVIEW reviewed-for="" -->
++<!-- CARROT:REVIEW reviewed-for="60cd1f91fb85c30661bf09dc53bc54d6482c0dc26a342a4eb4d0d48dfaf9ab94" reviewed-at="2026-11-10T00:00:00Z" -->
++<!-- CARROT:SECTION:BEGIN BEHAVIOR -->
++### Behavior
++
++Higher values smooth the model target but can delay response. For Porter II EV and Ioniq 5 HDA2 CAMERA SCC torque steering on the laneless path, the extra 0.1s controller filter is omitted at or below 30km/h and blended back between 30 and 40km/h.
++<!-- CARROT:SECTION:END BEHAVIOR -->
++
++<!-- CARROT:SECTION:BEGIN USAGE -->
++### Usage
++
++The model filter controlled by this setting remains. Lane mode and operation at or above 40km/h retain their existing response; compare one steering setting at a time.
++<!-- CARROT:SECTION:END USAGE -->
++
++<!-- CARROT:SECTION:BEGIN REFERENCE -->
++### Reference
++
++Maximum torque, rate and driver-override limits are not raised. Earlier target delivery and actual wheel tracking or lane keeping require separate verification.
++<!-- CARROT:SECTION:END REFERENCE -->
++
+--- a/ZH-转向平滑时间(30).md
++++ b/ZH-转向平滑时间(30).md
+@@ -30 +30,19 @@
+-<!-- CARROT:REVIEW reviewed-for="" -->
++<!-- CARROT:REVIEW reviewed-for="60cd1f91fb85c30661bf09dc53bc54d6482c0dc26a342a4eb4d0d48dfaf9ab94" reviewed-at="2026-11-10T00:00:00Z" -->
++<!-- CARROT:SECTION:BEGIN BEHAVIOR -->
++### 行为
++
++提高数值使模型目标更平滑，但可能延迟响应。波特II EV及IONIQ 5 HDA2 CAMERA SCC力矩转向的无车道线控制，在30km/h及以下不再叠加控制器0.1秒滤波，30至40km/h逐渐恢复原滤波。
++<!-- CARROT:SECTION:END BEHAVIOR -->
++
++<!-- CARROT:SECTION:BEGIN USAGE -->
++### 使用
++
++本设置的模型滤波保留。车道线模式及40km/h以上保持既有响应，每次只比较一个转向设置。
++<!-- CARROT:SECTION:END USAGE -->
++
++<!-- CARROT:SECTION:BEGIN REFERENCE -->
++### 参考
++
++不提高最大力矩、变化率或驾驶员介入限制。目标更早传递并不等于实际方向盘跟踪或车道保持已经改善，需要分别验证。
++<!-- CARROT:SECTION:END REFERENCE -->
++

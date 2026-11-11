@@ -21,6 +21,7 @@ from openpilot.selfdrive.controls.lib.desire_lib.constants import (
 )
 from openpilot.selfdrive.controls.lib.desire_lib.side_state import SideState
 from openpilot.selfdrive.controls.lib.desire_lib.maneuver_classifier import classify_maneuver_type
+from openpilot.selfdrive.controls.lib.desire_lib.turn_completion import NavigationTurnCompletion
 from openpilot.selfdrive.controls.lib.desire_lib.lever import LEVER_REQUEST_WAIT_S, LaneCrossing, LeverForcedTurn, LeverRequestWait, lever_maneuver
 
 # Without a model-detected crossing, a lever press this early in laneChangeFinishing is still the driver
@@ -31,7 +32,7 @@ AUTO_APP_WAIT_S = 10.0
 
 
 class DesireHelper:
-  def __init__(self, tesla_auto_signals=False, boundary_indicator_supported=False, *, fingerprint='', native_voice_signal=False):
+  def __init__(self, tesla_auto_signals=False, boundary_indicator_supported=False, *, fingerprint='', native_voice_signal=False, turn_completion_guard=False):
     self.params = Params()
     self.boundary_indicator_supported = boundary_indicator_supported
     self.boundary_indicator_enabled = False
@@ -63,6 +64,9 @@ class DesireHelper:
     self.turn_desire_state = False
     self.desire_disable_count = 0
     self.turn_disable_count = 0
+    self.turn_completion_guard = turn_completion_guard
+    self.navigation_turn = NavigationTurnCompletion()
+    self.navigation_turn_inputs_valid = True
 
     # per-side states
     self.left = SideState("left")
@@ -162,7 +166,16 @@ class DesireHelper:
 
     self.turn_desire_state = (desire_state[1] + desire_state[2]) > 0.1
 
-    if maneuver_type == "turn" and abs(carstate.steeringAngleDeg) > 80 and orientation_rate_future < orientation_rate:
+    navigation_turn = self.turn_completion_guard and self.atc_type in ("turn left", "turn right") and maneuver_type == "turn"
+    if navigation_turn:
+      direction = BLINKER_LEFT if self.atc_type == "turn left" else BLINKER_RIGHT
+      self.navigation_turn.update(direction, carstate.steeringAngleDeg, carstate.vEgo > 0.3)
+      if not self.navigation_turn_inputs_valid:
+        self.navigation_turn.finished = True
+    else:
+      self.navigation_turn.reset()
+
+    if not navigation_turn and maneuver_type == "turn" and abs(carstate.steeringAngleDeg) > 80 and orientation_rate_future < orientation_rate:
       self.turn_disable_count = int(10.0 / DT_MDL)
     else:
       self.turn_disable_count = max(0, self.turn_disable_count - 1)
@@ -383,7 +396,7 @@ class DesireHelper:
   # ─────────────────────────────────────────────
   def update(self, carstate, modeldata, lateral_active, lane_change_prob, carrotMan, radarState, *,
              indicator_valid=False, indicator_curvature=None, assistant_valid=False, turn_hold_allowed=False, turn_pose=None,
-             indicator_yaw_rate=None):
+             indicator_yaw_rate=None, turn_input_valid=True):
     self.frame += 1
     self._update_params_periodic()
     if self.boundary_indicator_supported:
@@ -434,6 +447,9 @@ class DesireHelper:
       self.desireLog = "TRAILER:MANEUVER_BLOCKED"
 
     # desire state from model
+    self.navigation_turn_inputs_valid = turn_input_valid and carstate.canValid
+    if not lateral_active:
+      self.navigation_turn.reset()
     self._check_desire_state(modeldata, carstate, self.maneuver_type)
 
     # blinkers
@@ -498,6 +514,8 @@ class DesireHelper:
     if self.tesla_auto_signals:
       self._update_auto_app_request(carstate, lateral_active, carrotMan, remote, driver_st, stalk_press)
     atc_st, atc_enabled = self._update_atc_blinker(carrotMan, driver_st, remote)
+    if self.turn_completion_guard and self.atc_type in ("turn left", "turn right") and not self.navigation_turn_inputs_valid:
+      atc_enabled = False
 
     desire_enabled = driver_enabled or atc_enabled
     blinker_state = driver_st if driver_enabled else atc_st
@@ -609,7 +627,7 @@ class DesireHelper:
       # ─ TURN mode ─
       if desire_enabled and self.maneuver_type == "turn" and self.enable_turn_desires:
         self.lane_change_state = LaneChangeState.off
-        if self.turn_disable_count > 0:
+        if self.turn_disable_count > 0 or (self.navigation_turn.finished and not driver_enabled):
           self.turn_direction = TurnDirection.none
           self.lane_change_direction = LaneChangeDirection.none
         else:
