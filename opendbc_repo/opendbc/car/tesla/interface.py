@@ -63,7 +63,7 @@ class CarInterface(CarInterfaceBase):
       ret.safetyConfigs[0].safetyParam |= TeslaSafetyFlags.LONG_CONTROL.value
       if candidate in (CAR.TESLA_MODEL_3, CAR.TESLA_MODEL_Y) and Params().get_bool("TeslaCanTrafficStop"):
         ret.flags |= TeslaFlags.CAN_TRAFFIC_STOP.value
-      if has_vehicle_bus:
+      if has_vehicle_bus and Params().get_bool("TeslaAutoSpeedLimit"):
         ret.flags |= TeslaFlags.AUTO_SPEED_LIMIT.value
         ret.safetyConfigs[0].safetyParam |= TeslaSafetyFlags.AUTO_SPEED_LIMIT.value
 

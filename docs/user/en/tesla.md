@@ -18,7 +18,9 @@ The former behavior could repeatedly report `0x39D IBST_status not valid` and ma
 <a id="automatic-cruise-speed"></a>
 ## Automatic cruise set speed
 
-On supported Tesla vehicles with the additional vehicle CAN bus connected and detected, enabling **alpha longitudinal** (`AlphaLongitudinalEnabled`) also enables automatic cruise set-speed adjustment. While cruise and carrotpilot are engaged, the set speed follows the speed limit reported by the vehicle's DAS. This feature has no separate Carrot Web toggle; vehicles using stock longitudinal control do not use it.
+Carrot Web lists all six Tesla switches under **Driving > Tesla > Tesla Features**. `TeslaAutoSpeedLimit` (Tesla Automatic Speed Wheel) defaults to OFF and requires a full device restart after changing it. Supported Tesla vehicles also need the additional vehicle CAN bus connected and detected and **alpha longitudinal** (`AlphaLongitudinalEnabled`). While cruise and carrotpilot are engaged, ON adjusts the cruise set speed toward the limit reported by the vehicle's DAS; OFF disables automatic wheel messages and their Panda permission without disabling the driver's wheel, ordinary longitudinal control or other speed-control features. Vehicles using stock longitudinal control do not use it.
+
+Previously eligible vehicles enabled this automatically; after this update they must explicitly turn this switch ON and restart to retain that behavior. It follows the original vehicle limit, not a new Carrot target-speed source, and does not engage cruise by itself. Software checks do not establish physical speed response or road acceptance.
 
 Navigation/Carrot speed control takes precedence: while it is active, DAS-based set-speed adjustment pauses. When it ends, the controller waits for a stable DAS limit again before resuming; any manual wheel pause remains in effect. Simply connecting navigation without active speed control does not pause this feature.
 
