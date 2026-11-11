@@ -1,5 +1,16 @@
 # Repository memory
 
+- 2026-11-11: Restore Long Kp/Ki/Kf for identified Ray EV CommaPedal with
+  CC_ONLY_CAR/PEDAL_INTERCEPTOR and OP longitudinal. Shared capability gates
+  catalog/snapshot and actual speed-PID tuning, startup plus ~1s refresh.
+  Ki title corrected to x0.001. Existing defaults100/0/100 and saved values
+  retained; old saved values become effective. Related312 tests pass locally.
+  Fixed-input production replay of additional Ray00000003/0 matches1713
+  baseline commands within2.99e-8. Initial candidate100/50/100 adds mean-.022
+  m/s² at46..55s; Ki100 adds-.044. This is an estimate with recorded motion
+  fixed. Optimal gains/physical response/incident correspondence unverified.
+  Details docs/comma_pedal.md, private archive2026-11-11/ray-tuning.
+
 - 2026-11-11: Ioniq5 b4dcfe6ce00fe149 route8/7..10 on ed157919 confirms
   ShareData0/xiaoge stopped, little-core load64..76%, but model56.29ms and
   Jetson execution/completion39.13ms persist.947 frame gaps match invalid

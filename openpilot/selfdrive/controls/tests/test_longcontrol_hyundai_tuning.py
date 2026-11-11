@@ -19,7 +19,7 @@ if sys.platform == "win32":
   params_module.Params = object
   sys.modules.setdefault("openpilot.common.params", params_module)
 
-from opendbc.car.hyundai.values import HyundaiFlags
+from opendbc.car.hyundai.values import CAR, HyundaiFlags
 import openpilot.selfdrive.controls.lib.longcontrol as longcontrol_module
 from openpilot.selfdrive.controls.lib.longcontrol import (
   HYUNDAI_LONGITUDINAL_KF,
@@ -223,3 +223,51 @@ def test_other_brands_keep_adjustable_single_point_tuning():
   assert control.pid._k_p == ([0.0], [0.85])
   assert control.pid._k_i == ([0.0], [0.025])
   assert control.pid.k_f == 1.2
+
+
+def ray_cp():
+  cp = make_cp()
+  cp.carFingerprint = CAR.KIA_RAY_EV
+  cp.flags = HyundaiFlags.CC_ONLY_CAR | HyundaiFlags.PEDAL_INTERCEPTOR
+  return cp
+
+
+def test_ray_pedal_uses_saved_speed_pid_from_first_frame_and_refresh(monkeypatch):
+  params = DictParams({"StoppingAccel": -50, "LongTuningKpV": 85, "LongTuningKiV": 50, "LongTuningKf": 120})
+  monkeypatch.setattr(longcontrol_module, "Params", lambda: params)
+  control = LongControl(ray_cp())
+  assert not control.hyundai_fixed_longitudinal_tuning
+  assert not control.use_accel_pid
+  assert (control.pid.k_p, control.pid.k_i, control.pid.k_f) == (.85, .05, 1.2)
+  cs = SimpleNamespace(softHoldActive=0, vEgo=10., aEgo=7., brakePressed=False,
+                       cruiseState=SimpleNamespace(standstill=False))
+  plan = SimpleNamespace(aTarget=.2, vTargetNow=9.8, jTargetNow=0., shouldStop=False)
+  radar = SimpleNamespace(leadOne=SimpleNamespace(status=False))
+  output, _, _ = control.update(True, cs, plan, (-3.5, 2.), 0., radar)
+  assert control.pid.p == pytest.approx(-.17)
+  assert control.pid.i == pytest.approx(-.0001)
+  assert control.pid.f == pytest.approx(.24)
+  assert output == pytest.approx(.0699)
+  params.values.update(LongTuningKpV=100, LongTuningKiV=100, LongTuningKf=100)
+  for _ in range(9):
+    control.update(True, cs, plan, (-3.5, 2.), 0., radar)
+  assert (control.pid.k_p, control.pid.k_i, control.pid.k_f) == (1., .1, 1.)
+  assert control.pid.i < -.001
+  control.update(False, cs, plan, (-3.5, 2.), 0., radar)
+  assert control.pid.i == 0.
+
+
+@pytest.mark.parametrize("fingerprint,flags,longitudinal", [
+  (CAR.KIA_RAY_EV, HyundaiFlags.CC_ONLY_CAR, True),
+  (CAR.KIA_RAY_EV, HyundaiFlags.PEDAL_INTERCEPTOR, True),
+  (CAR.KIA_RAY_EV, HyundaiFlags.CC_ONLY_CAR | HyundaiFlags.PEDAL_INTERCEPTOR, False),
+  (CAR.HYUNDAI_SONATA, HyundaiFlags.CC_ONLY_CAR | HyundaiFlags.PEDAL_INTERCEPTOR, True),
+  (CAR.HYUNDAI_CASPER_EV, HyundaiFlags.CAMERA_SCC, True),
+])
+def test_other_hyundai_configurations_keep_fixed_tuning(monkeypatch, fingerprint, flags, longitudinal):
+  monkeypatch.setattr(longcontrol_module, "Params", RejectingParams)
+  cp = make_cp()
+  cp.carFingerprint, cp.flags, cp.openpilotLongitudinalControl = fingerprint, flags, longitudinal
+  control = LongControl(cp)
+  assert control.hyundai_fixed_longitudinal_tuning
+  assert (control.pid.k_p, control.pid.k_i, control.pid.k_f) == (1., 0., 1.)

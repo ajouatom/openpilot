@@ -73,6 +73,7 @@ jobs:
         run: |
           python tools/signal_validation/run.py \
             openpilot/selfdrive/controls/tests/test_controlsd_publish.py \
+            openpilot/selfdrive/controls/tests/test_longcontrol_hyundai_tuning.py \
             openpilot/selfdrive/selfdrived/tests/test_vehicle_faults.py \
             opendbc_repo/opendbc/car/hyundai/tests/test_casper_fault_reporting.py \
             opendbc_repo/opendbc/car/hyundai/tests/test_stop_object.py \

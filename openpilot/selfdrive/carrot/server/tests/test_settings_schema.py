@@ -13,6 +13,7 @@ import pytest
 from openpilot.selfdrive.carrot.server.services.settings import (
   build_menu_categories,
   current_vehicle_brand,
+  current_vehicle_settings_context,
   filter_settings_catalog_for_brand,
   group_index,
   with_vehicle_gap_limits,
@@ -253,6 +254,89 @@ def test_vehicle_brand_does_not_hide_settings_for_other_car_name():
       return {"CarParamsPersistent": None, "CarName": "TOYOTA_RAV4"}.get(name)
 
   assert current_vehicle_brand(FakeParams()) == ""
+
+
+@pytest.mark.parametrize("fingerprint,pedal,longitudinal,expected", [
+  ("KIA_RAY_EV", True, True, True),
+  ("KIA_RAY_EV", False, True, False),
+  ("KIA_RAY_EV", True, False, False),
+  ("HYUNDAI_CASPER_EV", True, True, False),
+])
+def test_ray_pedal_catalog_uses_identified_capability(settings, fingerprint, pedal, longitudinal, expected):
+  from openpilot.cereal import car
+  from opendbc.car.hyundai.values import HyundaiFlags
+  cp = car.CarParams.new_message(brand="hyundai", carFingerprint=fingerprint,
+                                openpilotLongitudinalControl=longitudinal)
+  cp.flags = int(HyundaiFlags.CC_ONLY_CAR | (HyundaiFlags.PEDAL_INTERCEPTOR if pedal else 0))
+  class FakeParams:
+    def get(self, name):
+      return {"CarParamsPersistent": cp.to_bytes(), "CarName": fingerprint,
+              "CommaPedalEnabled": b"1"}.get(name)
+  brand, active_pedal = current_vehicle_settings_context(FakeParams())
+  assert (brand, active_pedal) == ("hyundai", expected)
+  groups, by_name, groups_list = group_index(settings)
+  categories = build_menu_categories(settings, by_name)
+  filtered, counts, menu, hidden = filter_settings_catalog_for_brand(
+    groups, groups_list, categories, brand, ray_pedal_control=active_pedal)
+  tuning = {"LongTuningKpV", "LongTuningKiV", "LongTuningKf"}
+  visible = {item["name"] for items in filtered.values() for item in items}
+  menu_names = {name for category in menu for group in category["groups"]
+                for section in group["sections"] for name in section["items"]}
+  assert (tuning <= visible) == expected
+  assert (tuning <= menu_names) == expected
+  assert tuning <= {item["name"] for items in groups.values() for item in items}
+  assert all(group["count"] == sum(not item.get("detail_parent") and not item.get("search_only")
+                                  for item in filtered[group["group"]]) for group in counts)
+  assert hidden == (set() if expected else tuning)
+
+
+@pytest.mark.parametrize("car_params", [None, b"invalid"])
+def test_pending_pedal_toggle_alone_keeps_fixed_brand_catalog(car_params):
+  class FakeParams:
+    def get(self, name):
+      return {"CarParamsPersistent": car_params, "CarName": "KIA_RAY_EV", "CommaPedalEnabled": b"1"}.get(name)
+  assert current_vehicle_settings_context(FakeParams()) == ("hyundai", False)
+
+
+def test_settings_catalog_and_snapshot_follow_ray_capability_changes(monkeypatch, settings):
+  import importlib.util
+  import sys
+  import types
+  # Load the real settings feature independently of unrelated device/IPC routes.
+  package = "openpilot.selfdrive.carrot.server.features"
+  directory = Path(__file__).resolve().parents[1] / "features"
+  namespace = types.ModuleType(package)
+  namespace.__path__ = [str(directory)]
+  monkeypatch.setitem(sys.modules, package, namespace)
+  spec = importlib.util.spec_from_file_location(package + ".settings", directory / "settings.py")
+  feature = importlib.util.module_from_spec(spec)
+  spec.loader.exec_module(feature)
+  groups, by_name, groups_list = group_index(settings)
+  parts = settings, groups, by_name, groups_list
+  monkeypatch.setattr(feature, "get_settings_cached", lambda: parts)
+  monkeypatch.setitem(feature.settings_cache, "categories", build_menu_categories(settings, by_name))
+  monkeypatch.setattr(feature, "HAS_PARAMS", False)
+  for name, result in (
+    ("get_ssh_key_status", {}), ("read_setting_favorites", {"favorites": ["LongTuningKiV"]}),
+    ("read_setting_profiles", {}), ("read_popular_values_memory", {}), ("read_setting_unit_index", {}),
+    ("get_device_network_snapshot", {}), ("get_device_setting_group_names", []),
+  ):
+    monkeypatch.setattr(feature, name, lambda result=result: result)
+  monkeypatch.setattr(feature, "get_device_setting_values", lambda status: {})
+  monkeypatch.setattr(feature, "observe_param_values", lambda values: None)
+  monkeypatch.setattr(feature, "get_param_values", lambda names, defaults: {
+    name: 50 if name == "LongTuningKiV" else defaults[name] for name in names})
+  tuning = {"LongTuningKpV", "LongTuningKiV", "LongTuningKf"}
+  for active in (True, False, True):
+    monkeypatch.setattr(feature, "current_vehicle_settings_context", lambda active=active: ("hyundai", active))
+    catalog = feature._settings_catalog_payload()
+    snapshot = feature._settings_snapshot_payload()
+    visible = {item["name"] for items in catalog["items_by_group"].values() for item in items}
+    assert (tuning <= visible) == active
+    assert (tuning <= snapshot["values"].keys()) == active
+    assert snapshot["favorites"] == (["LongTuningKiV"] if active else [])
+    if active:
+      assert snapshot["values"]["LongTuningKiV"] == 50
 
 
 def test_c3x_lite_hardware_setting_is_exposed(settings, params):

@@ -15,16 +15,18 @@ from ..services.popular_values import read_popular_values_memory, schedule_popul
 from ..services.setting_favorites import read_setting_favorites
 from ..services.setting_profiles import read_setting_profiles
 from ..services.setting_unit_index import read_setting_unit_index, update_setting_unit_index
-from ..services.settings import current_vehicle_brand, filter_settings_catalog_for_brand, get_settings_cached, settings_cache
+from ..services.settings import current_vehicle_settings_context, filter_settings_catalog_for_brand, get_settings_cached, settings_cache
 from ..services.ssh_keys import get_ssh_key_status
 
 
-def _settings_catalog_payload(cache_parts: tuple | None = None, vehicle_brand: str | None = None) -> dict:
+def _settings_catalog_payload(cache_parts: tuple | None = None, vehicle_brand: str | None = None,
+                              ray_pedal_control: bool = False) -> dict:
   path = settings_cache["path"]
   data, groups, _by_name, groups_list = cache_parts or get_settings_cached()
-  brand = current_vehicle_brand() if vehicle_brand is None else vehicle_brand
+  if vehicle_brand is None:
+    vehicle_brand, ray_pedal_control = current_vehicle_settings_context()
   groups, groups_list, categories, _hidden_names = filter_settings_catalog_for_brand(
-    groups, groups_list, settings_cache.get("categories"), brand,
+    groups, groups_list, settings_cache.get("categories"), vehicle_brand, ray_pedal_control=ray_pedal_control,
   )
   return {
     "path": path,
@@ -41,8 +43,8 @@ def _settings_catalog_payload(cache_parts: tuple | None = None, vehicle_brand: s
 def _settings_snapshot_payload() -> dict:
   cache_parts = get_settings_cached()
   _data, _groups, by_name, _groups_list = cache_parts
-  vehicle_brand = current_vehicle_brand()
-  catalog = _settings_catalog_payload(cache_parts, vehicle_brand)
+  vehicle_brand, ray_pedal_control = current_vehicle_settings_context()
+  catalog = _settings_catalog_payload(cache_parts, vehicle_brand, ray_pedal_control)
   visible_names = {
     item.get("name")
     for items in catalog["items_by_group"].values()
