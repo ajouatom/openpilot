@@ -1092,6 +1092,17 @@ def _set_raw_bits(msg, bits, value):
 
 # Clusters that draw no line for the dashed codes (owner reports 10-28~30) keep the solid colour
 NO_DASHED_LANE_CARS = (CAR.HYUNDAI_IONIQ_9, CAR.KIA_EV9)
+# Every CAN-FD car shares one DBC, so a value its VAL_ table names goes to every CCNC cluster. The cluster-test values
+# it does not name (ALERTS_5 9, ALERTS_4 215, 0x162 bit 188) go only to clusters seen to draw them: Ioniq 5 PE (cluster
+# tests 10-29), GN7 / EV4 (owner report 11-12, no log). Older non-DBC values (lane 8/10/14, background 5/8) are unchanged.
+NON_DBC_CLUSTER_VALUE_CARS = (CAR.HYUNDAI_IONIQ_5_PE, CAR.HYUNDAI_AZERA_7TH_GEN, CAR.KIA_EV4)
+
+
+def _dbc_listed(field, value):
+  if not hasattr(_dbc_listed, "values"):
+    from opendbc.can import CANDefine  # here: opendbc.can imports back into opendbc.car at module load
+    _dbc_listed.values = CANDefine("hyundai_canfd_generated").dv["ADRV_0x161"]  # all CAN-FD platforms (values.py)
+  return value in _dbc_listed.values.get(field, {})
 
 
 def _dashed_lane_line(color, lane_line, car=None):
@@ -1452,16 +1463,18 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
         if values["ALERTS_5"] in [11] and CS.softHoldActive == 0:
           values["ALERTS_5"] = 0
 
-        # Ioniq 5 PE only: other clusters' ALERTS_5 table is unchecked (IONIQ 9 uses 6 for trailer mode)
+        # ALERTS_5 19/21 are DBC values: every CCNC cluster (IONIQ 9's 6 = trailer is the same DBC value, not another table)
         if cruise_enabled != getattr(create_ccnc_messages, '_was_enabled', cruise_enabled):
           create_ccnc_messages._engage_popup = (ENGAGE_POPUP if cruise_enabled else DISENGAGE_POPUP, frame + ENGAGE_POPUP_FRAMES)
         create_ccnc_messages._was_enabled = cruise_enabled
         popup, popup_until = getattr(create_ccnc_messages, '_engage_popup', (0, 0))
-        is_ioniq5pe = getattr(CP, "carFingerprint", None) == CAR.HYUNDAI_IONIQ_5_PE
-        if is_ioniq5pe and frame < popup_until and values["ALERTS_5"] == 0:
+        non_dbc_ok = getattr(CP, "carFingerprint", None) in NON_DBC_CLUSTER_VALUE_CARS
+        if frame < popup_until and values["ALERTS_5"] == 0:
           values["ALERTS_5"] = popup
         # the alert's own text beats the generic disengage popup; a stock text still wins
-        text = _cluster_alert_text(getattr(hud_control, "alertType", "") or "") if is_ioniq5pe else None
+        text = _cluster_alert_text(getattr(hud_control, "alertType", "") or "")
+        if text and not (non_dbc_ok or _dbc_listed(*text)):
+          text = None
         if text and (values[text[0]] == 0 or (text[0] == "ALERTS_5" and values["ALERTS_5"] == popup and frame < popup_until)):
           values[text[0]] = text[1]
         tunnel = getattr(CS.out, "naviTunnel", False)
@@ -1469,7 +1482,7 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
           create_ccnc_messages._tunnel_refusal_until = 0
         elif tunnel and lat_active and CS.out.leftBlinker != CS.out.rightBlinker:  # one side (not hazards)
           create_ccnc_messages._tunnel_refusal_until = frame + ENGAGE_POPUP_FRAMES
-        if is_ioniq5pe and frame < getattr(create_ccnc_messages, '_tunnel_refusal_until', 0) and values[TUNNEL_REFUSAL_TEXT[0]] == 0:
+        if non_dbc_ok and frame < getattr(create_ccnc_messages, '_tunnel_refusal_until', 0) and values[TUNNEL_REFUSAL_TEXT[0]] == 0:
           values[TUNNEL_REFUSAL_TEXT[0]] = TUNNEL_REFUSAL_TEXT[1]
 
         # curvature 표시(0x161쪽 기존 로직 유지)
@@ -1592,8 +1605,8 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
           values["FAULT_DAS"] = 0
 
         msg = _cluster_test_msg(packer, "CCNC_0x162", CAN.ECAN, values, rx_counter, test_field, test_value)
-        # HDP icon while cruise or steering is engaged; Ioniq 5 PE only - other clusters' bit 188 is unchecked
-        if (getattr(CP, "carFingerprint", None) == CAR.HYUNDAI_IONIQ_5_PE and (CC.enabled or lat_active) and
+        # HDP icon while cruise or steering is engaged; bit 188 has no DBC name: checked clusters only
+        if (getattr(CP, "carFingerprint", None) in NON_DBC_CLUSTER_VALUE_CARS and (CC.enabled or lat_active) and
             HDP_ICON_BIT not in CLUSTER_TEST_BITS.get(test_field, ())):
           msg = _set_raw_bits(msg, (HDP_ICON_BIT,), 1)
         ret.append(msg)

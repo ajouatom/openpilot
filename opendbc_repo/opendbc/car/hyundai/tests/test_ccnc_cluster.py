@@ -487,7 +487,9 @@ def test_target_ring_marks_the_target_gap(monkeypatch, enabled, desired, expecte
   ("HYUNDAI_IONIQ_5_PE", False, True, 0, 1),   # steering only
   ("HYUNDAI_IONIQ_5_PE", False, False, 0, 0),
   ("HYUNDAI_IONIQ_5_PE", True, True, 9, 0),    # cluster test on its bit group wins
-  ("KIA_EV9", True, True, 0, 0),               # other clusters unchecked
+  ("HYUNDAI_AZERA_7TH_GEN", True, True, 0, 1),  # GN7 / EV4: owner report 11-12
+  ("KIA_EV4", True, True, 0, 1),
+  ("KIA_EV9", True, True, 0, 0),               # bit 188 unchecked on EV9
 ))
 def test_hdp_icon_while_engaged(monkeypatch, car, enabled, lat_active, test_field, expected):
   monkeypatch.setattr(hyundaicanfd, "Params", lambda: SimpleNamespace(get_int=lambda key: {'ClusterLaneTest': test_field}.get(key, 0)))
@@ -507,7 +509,8 @@ def test_hdp_icon_while_engaged(monkeypatch, car, enabled, lat_active, test_fiel
   assert get_raw_value(data, definition.sigs['CHECKSUM']) == hyundaicanfd.hkg_can_fd_checksum(address, None, bytearray(data))
 
 
-def test_engage_and_disengage_popups(monkeypatch):
+@pytest.mark.parametrize("car", ("HYUNDAI_IONIQ_5_PE", "HYUNDAI_IONIQ_9", "KIA_EV9"))  # DBC values: every CCNC cluster
+def test_engage_and_disengage_popups(monkeypatch, car):
   from openpilot.cereal import log
   monkeypatch.setattr(hyundaicanfd, 'Params', lambda: SimpleNamespace(get_int=lambda key: 0, get=lambda key: '0'))
   for attr in ('_was_enabled', '_engage_popup'):
@@ -519,7 +522,7 @@ def test_engage_and_disengage_popups(monkeypatch):
     lfahda_cluster=None, cruise_buttons_msg=None, adrv_0x200=None, adrv_0x1ea=None, ccnc_0x162=None,
     is_metric=True, paddle_button_prev=0, softHoldActive=0, trailer_connected=False,
   )
-  cp = SimpleNamespace(flags=HyundaiFlags.CAMERA_SCC, carFingerprint=hyundaicanfd.CAR.HYUNDAI_IONIQ_5_PE)
+  cp = SimpleNamespace(flags=HyundaiFlags.CAMERA_SCC, carFingerprint=getattr(hyundaicanfd.CAR, car))
 
   def alerts_5(frame, enabled):
     control = structs.CarControl(latActive=enabled, enabled=enabled)
@@ -556,15 +559,18 @@ def test_hazard_test_sets_0x1ea_bit_104(monkeypatch, hazard, test_field, test_va
   assert get_raw_value(data, definition.sigs['CHECKSUM']) == hyundaicanfd.hkg_can_fd_checksum(address, None, bytearray(data))
 
 
-@pytest.mark.parametrize(("alert_type", "enabled", "field", "expected"), (
-  ("speedTooHigh/warning", True, "ALERTS_4", 83),
-  ("steerUnavailable/immediateDisable", False, "ALERTS_5", 9),   # beats the disengage popup (21)
-  ("canError/immediateDisable", False, "ALERTS_4", 147),
-  ("reverseGear/userDisable", False, "ALERTS_4", 129),
-  ("reverseGear/permanent", False, "ALERTS_4", 0),               # just parked in R
-  ("driverDistracted3/permanent", True, "ALERTS_4", 0),          # DM is left alone
+@pytest.mark.parametrize(("car", "alert_type", "enabled", "field", "expected"), (
+  ("HYUNDAI_IONIQ_5_PE", "speedTooHigh/warning", True, "ALERTS_4", 83),
+  ("HYUNDAI_IONIQ_5_PE", "steerUnavailable/immediateDisable", False, "ALERTS_5", 9),   # beats the disengage popup (21)
+  ("HYUNDAI_IONIQ_5_PE", "canError/immediateDisable", False, "ALERTS_4", 147),
+  ("HYUNDAI_IONIQ_5_PE", "reverseGear/userDisable", False, "ALERTS_4", 129),
+  ("HYUNDAI_IONIQ_5_PE", "reverseGear/permanent", False, "ALERTS_4", 0),               # just parked in R
+  ("HYUNDAI_IONIQ_5_PE", "driverDistracted3/permanent", True, "ALERTS_4", 0),          # DM is left alone
+  ("KIA_EV9", "canError/immediateDisable", False, "ALERTS_4", 147),                    # DBC value: every cluster
+  ("KIA_EV9", "steerUnavailable/immediateDisable", False, "ALERTS_5", 21),             # 9 is not in the DBC: popup stays
+  ("KIA_EV4", "steerUnavailable/immediateDisable", False, "ALERTS_5", 9),              # owner report 11-12
 ))
-def test_openpilot_alerts_map_to_cluster_texts(monkeypatch, alert_type, enabled, field, expected):
+def test_openpilot_alerts_map_to_cluster_texts(monkeypatch, car, alert_type, enabled, field, expected):
   from openpilot.cereal import log
   monkeypatch.setattr(hyundaicanfd, 'Params', lambda: SimpleNamespace(get_int=lambda key: 0, get=lambda key: '0'))
   for attr in ('_was_enabled', '_engage_popup'):
@@ -576,7 +582,7 @@ def test_openpilot_alerts_map_to_cluster_texts(monkeypatch, alert_type, enabled,
     lfahda_cluster=None, cruise_buttons_msg=None, adrv_0x200=None, adrv_0x1ea=None, ccnc_0x162=None,
     is_metric=True, paddle_button_prev=0, softHoldActive=0, trailer_connected=False,
   )
-  cp = SimpleNamespace(flags=HyundaiFlags.CAMERA_SCC, carFingerprint=hyundaicanfd.CAR.HYUNDAI_IONIQ_5_PE)
+  cp = SimpleNamespace(flags=HyundaiFlags.CAMERA_SCC, carFingerprint=getattr(hyundaicanfd.CAR, car))
   for frame, en, alert in ((0, True, ""), (100, enabled, alert_type)):  # second frame: disengaged here if not enabled
     control = structs.CarControl(latActive=en, enabled=en)
     control.hudControl.alertType = alert
@@ -585,14 +591,15 @@ def test_openpilot_alerts_map_to_cluster_texts(monkeypatch, alert_type, enabled,
   assert get_raw_value(msg[1], definition.sigs[field]) == expected
 
 
-def test_tunnel_lane_change_refusal_text(monkeypatch):
+@pytest.mark.parametrize(("car", "text"), (("HYUNDAI_IONIQ_5_PE", 215), ("KIA_EV4", 215), ("HYUNDAI_IONIQ_9", 0)))
+def test_tunnel_lane_change_refusal_text(monkeypatch, car, text):
   from openpilot.cereal import log
   monkeypatch.setattr(hyundaicanfd, 'Params', lambda: SimpleNamespace(get_int=lambda key: 0, get=lambda key: '0'))
   for attr in ('_was_enabled', '_engage_popup', '_tunnel_refusal_until'):
     monkeypatch.delattr(hyundaicanfd.create_ccnc_messages, attr, raising=False)
   packer = CANPacker('hyundai_canfd_generated')
   definition = packer.dbc.name_to_msg['ADRV_0x161']
-  cp = SimpleNamespace(flags=HyundaiFlags.CAMERA_SCC, carFingerprint=hyundaicanfd.CAR.HYUNDAI_IONIQ_5_PE)
+  cp = SimpleNamespace(flags=HyundaiFlags.CAMERA_SCC, carFingerprint=getattr(hyundaicanfd.CAR, car))
 
   def alerts_4(frame, blinker, tunnel=1, desire=0):
     md = log.ModelDataV2.new_message()
@@ -608,11 +615,11 @@ def test_tunnel_lane_change_refusal_text(monkeypatch):
     return get_raw_value(msg[1], definition.sigs['ALERTS_4'])
 
   assert alerts_4(0, False) == 0
-  assert alerts_4(100, True) == 215                 # lever in a tunnel: waiting, say why
-  assert alerts_4(295, False) == 215                # kept 2 s after the lamp stops
+  assert alerts_4(100, True) == text                # lever in a tunnel: waiting, say why (215 is not in the DBC)
+  assert alerts_4(295, False) == text               # kept 2 s after the lamp stops
   assert alerts_4(300, False) == 0
   assert alerts_4(400, True, tunnel=0) == 0         # outside a tunnel
-  assert alerts_4(500, True) == 215
+  assert alerts_4(500, True) == text
   assert alerts_4(505, True, desire=3) == 0         # driver torque started the change
 
 
@@ -669,3 +676,10 @@ def test_double_lane_change_shows_analyzing_lane_on_the_cluster(monkeypatch, dou
                                                             SimpleNamespace(ECAN=0, CAM=2), 0, control, state, hud,
                                                             0, False, False, 0, False, 0, 0)
   assert get_raw_value(data, definition.sigs["AUTOLANECHANGE_MSG"]) == (3 if double else 0)
+
+
+def test_dbc_listed_split_matches_the_gates():
+  # popups and DBC-named texts go to every CCNC cluster; cluster-test-only values stay gated by NON_DBC_CLUSTER_VALUE_CARS
+  assert hyundaicanfd._dbc_listed("ALERTS_5", hyundaicanfd.ENGAGE_POPUP) and hyundaicanfd._dbc_listed("ALERTS_5", hyundaicanfd.DISENGAGE_POPUP)
+  assert hyundaicanfd._dbc_listed("ALERTS_3", 18)  # CHECK_SURROUNDINGS
+  assert not hyundaicanfd._dbc_listed("ALERTS_5", 9) and not hyundaicanfd._dbc_listed(*hyundaicanfd.TUNNEL_REFUSAL_TEXT)
