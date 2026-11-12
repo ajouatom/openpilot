@@ -1,5 +1,39 @@
 # Repository memory
 
+- 2026-11-12: Owner requests SD-only automatic Super firmware provisioning.
+  Official NVIDIA capsule path is available. R2 excluded /opt/ota_package and
+  mounted EFI read-only; restore official36.4.7 Super capsule from pinned deb
+  b7600d3c65be858e8de2b46764221e128f472480fe801b411072d874326adfc2,
+  capsule50796752B SHA256fc07e537329561d520052d2e45a09c516ed430369078224971ed70f5bbe1ec2f.
+  Image-only bootstrap validates P3767-0005/P3768, bootable36.x<=36.4.7,
+  root-SD/EFI/DATA and NVIDIA spec. Stage via vendor capsule helper, temporarily
+  remount EFI rw, verify bytes/UEFI request, automatic reboot before GPU users.
+  Device-bound durable DATA transaction stops repeated failed updates. Next
+  boot verifies capsule status1, changed slot,36.4.7,Super DT and MAXN_SUPER GPU
+  ceiling before inference. Already-matching boards only verify power. Keep
+  vendor spec discovery/boot verification; serialize its automatic capsule work.
+  USB boot screen reports progress/failures. APP remains read-only. Existing
+  GitPull does not install image provisioning. Pre36 firmware unable to boot
+  this SD still requires NVIDIA's prerequisite path; no arbitrary downgrade.
+  Final review found fresh-image DATA admission still requiring last-loaded.json
+  after the builder removed reference engines. Withhold the initial0.6 package;
+  add an explicit preloaded-model marker and installed-helper chroot admission
+  check, preserving legacy completed-runtime checks. Final builder393b98d733
+  includes codea4a2c898d5 and EFI dirty-bit repair2b87210c09. ARM image43209977486,
+  integration43209977709/full-build43209977573/eGPU43209977711/docs43209977884 pass.
+  Native provisioning/storage34pass/1skip; Windows focused39pass/7skip. Actual
+  Windows ZIP CRC/bundled-Python preparation matches raw40GiB SHA256
+  b2645ce45a6e20a6932ae11338dd9cbf95af52309ebaf8e3a0131a962249886f.
+  Compressed8537584278B SHA25634312ff6d9ea216a947f725b80059cc140952992d0282391e50c6dea6796d36c;
+  ZIP8562284725B SHA256259fe2b1724256806b4254174c2906f0c6d1a5f863b2ec7dd0730a1d0f5e090c.
+  Independent image readback confirms installed sources/capsule/consumer ordering,
+  fresh DATA marker and clean EFI with66012160B free. Release
+  jetson-super-auto-sd-20261112/v0.6.0-super-auto-preview is a physical-boot
+  unverified preview; older v0.5 warns about its first DATA admission issue.
+  Physical QSPI update/boot/power interruption and reporter39ms improvement
+  unverified. No live device writes. Evidence and publication readbacks in
+  .analysis/scratch/2026-11-12-super-bootstrap/final.
+
 - 2026-11-12: Ioniq5 b4dcfe6ce00fe149 route0d/13..15 on d37a6d30 confirms
   host5a2784cc applied but174 samples all super_profile_missing,15W, GPU624.75MHz,
   EMC2133MHz. Device-tree p3767-0005 lacks Super suffix; NVIDIA nvpower.sh
@@ -18,7 +52,11 @@
   compressed8505195694B SHA25629617d9bb36c54768bd8b69685b587efc7520dbb6a57191555b6061048539940.
   Imports/model hashes/privacy/fsck/GPT/systemd graph pass. Physical boot and
   firmware repair remain unverified. No live-device or QSPI writes. Evidence
-  .analysis/scratch/2026-11-12-ioniq5-route0d. SD publication follows PC checks.
+  .analysis/scratch/2026-11-12-ioniq5-route0d. SD v0.5.0-super-preview published
+  on NAS; full NAS readback hashes and public HTTPS installer/image checks pass.
+  Windows ZIP8529895780B SHA2566c05b5c05e53922663d58529696ff31f683aec1602121873e2da3509e0a729c5.
+  Actual ZIP extraction/CRC and bundled Python preparation in Korean/space path
+  reproduce the raw image hash. Physical SD write/boot/performance unverified.
 
 - 2026-11-12: Ioniq5 b4dcfe6ce00fe149 route0b/12..14 on ffa5723e has174
   fresh host samples, all15W/GPU624.75MHz/EMC2133MHz,53..57C,no thermal throttle,

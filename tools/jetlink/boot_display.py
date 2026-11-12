@@ -27,6 +27,18 @@ def lines(status):
     ('콤마 USB 서비스', 'COMMA USB SERVICE', units.get('carrot-jetlink', {}).get('ActiveState', 'waiting')),
   ]
   detail = ', '.join(failed[:3]) or stage.get('error', '')
+  firmware = status.get('firmware', {})
+  if firmware:
+    state = firmware.get('state', 'checking')
+    rows[1] = ('Super 펌웨어', 'SUPER FIRMWARE', state)
+    if state in ('stage_capsule', 'staging', 'reboot_pending'):
+      title = ('Super 펌웨어 자동 설치 중', 'SUPER FIRMWARE UPDATE')
+      detail = '전원을 유지하세요. 펌웨어 설치 후 자동으로 재부팅합니다.'
+      error = False
+    elif state not in ('ready', 'firmware_ready'):
+      title = ('Super 설정 확인 필요', 'SUPER SETUP NEEDS ATTENTION')
+      detail = firmware.get('error') or firmware.get('power', {}).get('state') or state
+      error = True
   return title, rows, detail, error
 
 

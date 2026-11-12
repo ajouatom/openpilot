@@ -71,6 +71,28 @@ recipient's engine. The manual `Jetson SD image build` workflow produces the
 compressed image, hashes and offline validation metadata. Physical boot and
 firmware compatibility still require device evidence.
 
+The subsequent Super bootstrap image restores the NVIDIA 36.4.7 Super capsule
+from a hash-pinned official bootloader package. The original image excluded
+`/opt/ota_package` and mounted EFI read-only, which left its normal vendor update
+path incomplete. `super_bootstrap.py` runs before GPU consumers on the protected
+Orin Nano 8GB developer-kit SD. It validates the boot SD/EFI/DATA relationship,
+board identity and firmware version, uses NVIDIA's capsule helper with a
+temporarily writable EFI volume, verifies the staged hash and reboot indication,
+then reboots automatically. APP stays read-only. A device-bound DATA transaction
+prevents repeated staging after failures. The next boot checks capsule status,
+the changed slot, target version, Super identity and actual power setup before
+inference. Unsupported/newer firmware is reported without a downgrade.
+The vendor service retains board discovery and slot verification while capsule
+staging is serialized through this image service. This is an SD-image feature.
+Bootable JetPack 6.x firmware is a prerequisite. Physical firmware update and
+power-interruption recovery still require device testing.
+
+Fresh-image DATA admission accepts an explicit preloaded ONNX descriptor before
+the first TensorRT engine has been built. Legacy completed-runtime markers keep
+their existing last-loaded check. The image builder runs the installed storage
+helper inside the image against the mounted DATA tree to verify this first-boot
+path. The backend still validates the model and builds the recipient's engine.
+
 `nvpmodel -q` supplies the selected mode and ID every 30 seconds. Its query age
 is included. Root access allows reading BPMP debugfs through the observer.
 The observer writes a bounded snapshot under `/run`; the inference process
