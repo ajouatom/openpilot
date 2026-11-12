@@ -18,17 +18,21 @@
   Final review found fresh-image DATA admission still requiring last-loaded.json
   after the builder removed reference engines. Withhold the initial0.6 package;
   add an explicit preloaded-model marker and installed-helper chroot admission
-  check, preserving legacy completed-runtime checks. Rebuild pending.
-  Codea4a2c898d5 plus EFI dirty-bit repair2b87210c09. ARM image43202280805 and
-  integration43202279539/full-build43202279581/eGPU/docs CI pass. Local60/5skip;
-  native provisioning23 pass. Windows actual ZIP CRC/bundled-Python preparation
-  matches raw40GiB SHA2565e0da1b97485f3f06cfc809d6ddff446a868a8dfe0fd1c65e90a3ed386cc8c54.
-  Compressed8536959134B SHA2564cb5db4e006e41433adcc866f10252d9bb2fec68ad1f7f75229e217fb8c80620;
-  ZIP8561659547B SHA256a8369698a89ec045499e9dec64ab20619c0ae3eec06c7e418814648fd4a540a8.
-  These hashes identify the withheld initial0.6 candidate. Independent checks confirm helper/source/hash/consumer ordering
-  and clean EFI with capsule space. Physical QSPI update/boot/power interruption
-  and reporter39ms improvement unverified. No live device writes. Evidence
-  .analysis/scratch/2026-11-12-super-bootstrap; publication pending final readback.
+  check, preserving legacy completed-runtime checks. Final builder393b98d733
+  includes codea4a2c898d5 and EFI dirty-bit repair2b87210c09. ARM image43209977486,
+  integration43209977709/full-build43209977573/eGPU43209977711/docs43209977884 pass.
+  Native provisioning/storage34pass/1skip; Windows focused39pass/7skip. Actual
+  Windows ZIP CRC/bundled-Python preparation matches raw40GiB SHA256
+  b2645ce45a6e20a6932ae11338dd9cbf95af52309ebaf8e3a0131a962249886f.
+  Compressed8537584278B SHA25634312ff6d9ea216a947f725b80059cc140952992d0282391e50c6dea6796d36c;
+  ZIP8562284725B SHA256259fe2b1724256806b4254174c2906f0c6d1a5f863b2ec7dd0730a1d0f5e090c.
+  Independent image readback confirms installed sources/capsule/consumer ordering,
+  fresh DATA marker and clean EFI with66012160B free. Release
+  jetson-super-auto-sd-20261112/v0.6.0-super-auto-preview is a physical-boot
+  unverified preview; older v0.5 warns about its first DATA admission issue.
+  Physical QSPI update/boot/power interruption and reporter39ms improvement
+  unverified. No live device writes. Evidence and publication readbacks in
+  .analysis/scratch/2026-11-12-super-bootstrap/final.
 
 - 2026-11-12: Ioniq5 b4dcfe6ce00fe149 route0d/13..15 on d37a6d30 confirms
   host5a2784cc applied but174 samples all super_profile_missing,15W, GPU624.75MHz,
