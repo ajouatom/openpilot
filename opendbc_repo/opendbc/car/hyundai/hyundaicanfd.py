@@ -980,9 +980,15 @@ CLUSTER_ALERT_TEXTS = {
   "accFaulted": ("ALERTS_5", 4),                   # smart cruise control: not in operating conditions
   "cruiseDisabled": ("ALERTS_5", 3),               # smart cruise control released
   "reverseGear/userDisable": ("ALERTS_4", 129),    # gear shift detected
+  "steerSaturated": ("ALERTS_3", 18),              # check surroundings (sharp turn past the angle clip)
   **dict.fromkeys(("controlsMismatch", "canError", "canBusMissing", "vehicleSensorsInvalid", "relayMalfunction",
                    "locationdPermanentError", "paramsdPermanentError"), ("ALERTS_4", 147)),  # abnormal operation detected
 }
+
+
+# Stock pairs CHECK_SURROUNDINGS with SOUNDS_4 2 (DOUBLE CHIME) for ~1 s (BSM lane change refusal, 11-08 log): ours does too
+CHIME_TEXT = ("ALERTS_3", 18)
+CHIME_FRAMES = int(1.0 / DT_CTRL)
 
 
 def _cluster_alert_text(alert_type):
@@ -1449,14 +1455,6 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
           values["ALERTS_3"] = 0
           values["SOUNDS_3"] = 0
 
-        # carrot: with HDP on, a gap change shows the stock "distance N" popup (ALERTS_3 7~10) for 2 s
-        gap_bars = hud_control.leadDistanceBars
-        if hdp_active and gap_bars != getattr(create_ccnc_messages, '_gap_bars', gap_bars):
-          create_ccnc_messages._gap_popup_until = frame + 200
-        create_ccnc_messages._gap_bars = gap_bars
-        if frame < getattr(create_ccnc_messages, '_gap_popup_until', 0) and values["ALERTS_3"] == 0 and 1 <= gap_bars <= 4:
-          values["ALERTS_3"] = 6 + gap_bars
-
         if values["ALERTS_5"] in [1, 2, 3, 4, 5]:
           values["ALERTS_5"] = 0
 
@@ -1475,8 +1473,26 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
         text = _cluster_alert_text(getattr(hud_control, "alertType", "") or "")
         if text and not (non_dbc_ok or _dbc_listed(*text)):
           text = None
+        shown = None
         if text and (values[text[0]] == 0 or (text[0] == "ALERTS_5" and values["ALERTS_5"] == popup and frame < popup_until)):
           values[text[0]] = text[1]
+          shown = text
+        if shown == CHIME_TEXT and getattr(create_ccnc_messages, '_chime_shown', None) != shown:
+          create_ccnc_messages._chime_until = frame + CHIME_FRAMES
+        create_ccnc_messages._chime_shown = shown
+        # after the stock-sound filter; a stock sound or emergency (ALERTS_1) wins
+        if (shown == CHIME_TEXT and frame < getattr(create_ccnc_messages, '_chime_until', 0)
+            and values["SOUNDS_4"] == 0 and values["ALERTS_1"] == 0):
+          values["SOUNDS_4"] = 2  # DOUBLE CHIME
+
+        # carrot: with HDP on, a gap change shows the stock "distance N" popup (ALERTS_3 7~10) for 2 s; an alert text beats it
+        gap_bars = hud_control.leadDistanceBars
+        if hdp_active and gap_bars != getattr(create_ccnc_messages, '_gap_bars', gap_bars):
+          create_ccnc_messages._gap_popup_until = frame + 200
+        create_ccnc_messages._gap_bars = gap_bars
+        if frame < getattr(create_ccnc_messages, '_gap_popup_until', 0) and values["ALERTS_3"] == 0 and 1 <= gap_bars <= 4:
+          values["ALERTS_3"] = 6 + gap_bars
+
         tunnel = getattr(CS.out, "naviTunnel", False)
         if desire in (3, 4):  # the change started (driver torque): nothing refused any more
           create_ccnc_messages._tunnel_refusal_until = 0

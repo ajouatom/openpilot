@@ -569,6 +569,8 @@ def test_hazard_test_sets_0x1ea_bit_104(monkeypatch, hazard, test_field, test_va
   ("KIA_EV9", "canError/immediateDisable", False, "ALERTS_4", 147),                    # DBC value: every cluster
   ("KIA_EV9", "steerUnavailable/immediateDisable", False, "ALERTS_5", 21),             # 9 is not in the DBC: popup stays
   ("KIA_EV4", "steerUnavailable/immediateDisable", False, "ALERTS_5", 9),              # owner report 11-12
+  ("HYUNDAI_IONIQ_5_PE", "steerSaturated/permanent", False, "ALERTS_3", 18),           # sharp turn, lateral-only too
+  ("KIA_EV9", "steerSaturated/permanent", True, "ALERTS_3", 18),                       # DBC value: every cluster
 ))
 def test_openpilot_alerts_map_to_cluster_texts(monkeypatch, car, alert_type, enabled, field, expected):
   from openpilot.cereal import log
@@ -589,6 +591,42 @@ def test_openpilot_alerts_map_to_cluster_texts(monkeypatch, car, alert_type, ena
     msg = hyundaicanfd.create_ccnc_messages(cp, packer, SimpleNamespace(ECAN=0, CAM=2), frame, control, state,
                                             control.hudControl, 0, False, False, 0, False, 0, 0)[0]
   assert get_raw_value(msg[1], definition.sigs[field]) == expected
+
+
+def test_sharp_turn_text_beats_gap_popup_and_chimes_once(monkeypatch):
+  from openpilot.cereal import log
+  monkeypatch.setattr(hyundaicanfd, 'Params', lambda: SimpleNamespace(
+    get_int=lambda key: 0, get=lambda key: '2' if key == 'HDPuse' else '0'))
+  for attr in ('_was_enabled', '_engage_popup', '_gap_bars', '_gap_popup_until', '_chime_shown', '_chime_until'):
+    monkeypatch.delattr(hyundaicanfd.create_ccnc_messages, attr, raising=False)
+  packer = CANPacker('hyundai_canfd_generated')
+  definition = packer.dbc.name_to_msg['ADRV_0x161']
+  stock = {key: 0 for key in definition.sigs}
+  state = SimpleNamespace(
+    adrv_0x161=stock, out=structs.CarState(latEnabled=True), modelV2=log.ModelDataV2.new_message(),
+    lfahda_cluster=None, cruise_buttons_msg=None, adrv_0x200=None, adrv_0x1ea=None, ccnc_0x162=None,
+    is_metric=True, paddle_button_prev=0, softHoldActive=0, trailer_connected=False,
+  )
+  cp = SimpleNamespace(flags=HyundaiFlags.CAMERA_SCC, carFingerprint=hyundaicanfd.CAR.HYUNDAI_IONIQ_5_PE)
+
+  def send(frame, alert, bars=3, alerts_1=0):
+    stock['ALERTS_1'] = alerts_1
+    control = structs.CarControl(latActive=True, enabled=True)
+    control.hudControl.alertType = alert
+    control.hudControl.leadDistanceBars = bars
+    msg = hyundaicanfd.create_ccnc_messages(cp, packer, SimpleNamespace(ECAN=0, CAM=2), frame, control, state,
+                                            control.hudControl, 0, False, False, 0, False, 0, 0)[0]
+    return get_raw_value(msg[1], definition.sigs['ALERTS_3']), get_raw_value(msg[1], definition.sigs['SOUNDS_4'])
+
+  assert send(0, "", bars=2) == (0, 0)
+  assert send(5, "") == (9, 0)                                    # HDP gap popup (DISTANCE_3)
+  assert send(10, "steerSaturated/permanent") == (18, 2)          # the alert beats the popup; double chime
+  assert send(105, "steerSaturated/permanent") == (18, 2)
+  assert send(110, "steerSaturated/permanent") == (18, 0)         # chime ~1 s, text stays
+  assert send(115, "") == (9, 0)                                  # popup back once the alert ends
+  assert send(300, "steerSaturated/permanent", alerts_1=11) == (18, 0)  # stock emergency owns the sound
+  stock['ALERTS_3'] = 21                                          # a stock text wins
+  assert send(500, "steerSaturated/permanent") == (21, 0)
 
 
 @pytest.mark.parametrize(("car", "text"), (("HYUNDAI_IONIQ_5_PE", 215), ("KIA_EV4", 215), ("HYUNDAI_IONIQ_9", 0)))
