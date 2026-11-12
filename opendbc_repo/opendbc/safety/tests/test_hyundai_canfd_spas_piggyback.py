@@ -53,7 +53,7 @@ def test_held_and_sent_right_behind_the_next_stock_frame():
   d.advance(7_000)
   assert d.tx(SPAS2, 10) == (True, True)  # accepted, but held instead of queued
   d.advance(13_000)
-  assert d.stock(SPAS2, 2) == bytes(frame(SPAS2, 10, "left", 0).dat)
+  assert d.stock(SPAS2, 2) == bytes(frame(SPAS2, 3, "left", 0).dat)  # our payload, stock counter + 1
   assert d.stock(SPAS2, 3) is None  # sent once
   # newest frame wins while held; SPAS1 has its own slot
   d.tx(SPAS2, 11)
@@ -61,8 +61,8 @@ def test_held_and_sent_right_behind_the_next_stock_frame():
   assert d.tx(SPAS1, 5) == (True, False)  # no stock SPAS1 seen yet
   d.stock(SPAS1, 1)
   assert d.tx(SPAS1, 6) == (True, True)
-  assert d.stock(SPAS2, 4) == bytes(frame(SPAS2, 12, "left", 0).dat)
-  assert d.stock(SPAS1, 2) == bytes(frame(SPAS1, 6, "left", 0).dat)
+  assert d.stock(SPAS2, 4) == bytes(frame(SPAS2, 5, "left", 0).dat)
+  assert d.stock(SPAS1, 2) == bytes(frame(SPAS1, 6, "left", 0).dat)  # SPAS1 keeps the host counter
 
 
 def test_direct_flag_turns_the_piggyback_off():
@@ -89,3 +89,16 @@ def test_invalid_frames_are_neither_sent_nor_held():
   d.s.safety_tx_buffered_for_fwd = False
   assert not d.s.safety_tx_hook(pkt) and not d.s.safety_tx_buffered_for_fwd
   assert d.stock(SPAS2, 2) is None
+
+
+def test_spas2_continues_the_stock_counter():
+  # Tucson 11-12: with the host counter the receiver took our SPAS2 only when the two sequences met (every 5.12 s)
+  for param in (PARAM, 4 | 8 | 16 | 2048):  # Ioniq 5 PE; GV80 2022 (SPAS2 only, no stock SPAS1)
+    d = Device(param)
+    for stock_counter in (1, 254, 255):
+      d.stock(SPAS2, stock_counter)
+      d.advance(7_000)
+      assert d.tx(SPAS2, 10) == (True, True)
+      d.advance(13_000)
+      nxt = (stock_counter + 1) % 256
+      assert d.stock(SPAS2, nxt) == bytes(frame(SPAS2, (nxt + 1) % 256, "left", 0).dat)  # wraps 255 -> 0, CRC redone

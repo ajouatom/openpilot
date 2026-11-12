@@ -848,6 +848,12 @@ static bool hyundai_canfd_rx_tx_hook(const CANPacket_t *to_push, CANPacket_t *to
       pb->pending = false;
       if (get_ts_elapsed(now, pb->push_us) < HYUNDAI_SPAS_PB_HOLD_US) {
         canfd_copy_packet(to_send, &pb->pkt);
+        // SPAS2 carries BLINKER_CONTROL: continue the stock counter (stock + 1, CRC redone) so the receiver takes our
+        // frame as the next one and the following stock frame as a repeat. With the host's own counter the two
+        // sequences lined up only every 5.12 s (Tucson 11-12: one 0.4 s flash every ~5.1 s). SPAS1 (EPS) is left as is.
+        if (addr == 0x16A) {
+          canfd_apply_counter_and_update_checksum(to_send, (uint8_t)(GET_BYTE(to_push, 2) + 1U));
+        }
         send = true;
       }
     }
