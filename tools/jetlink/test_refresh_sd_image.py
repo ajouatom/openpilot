@@ -68,7 +68,7 @@ def test_refresh_selects_committed_release_and_repairs_hud(base, tmp_path, monke
     member.size = len(data)
     t.addfile(member, io.BytesIO(data))
     for name in ('update_host.py', 'finalize_sd_image.py', 'hud_protocol.py', 'release-signing-public.pem',
-                 'wifi_protocol.py', 'local_release.py', 'boot_update.py'):
+                 'wifi_protocol.py', 'local_release.py', 'boot_update.py', 'power_setup.py'):
       t.add(Path(__file__).with_name(name), arcname='tools/jetlink/' + name)
   import install_boot_display
   diagnostic_calls = []
@@ -76,6 +76,7 @@ def test_refresh_selects_committed_release_and_repairs_hud(base, tmp_path, monke
   marker = refresh(root, setup, bundle)
   assert diagnostic_calls == [(root, runtime/'releases'/commit/'tools/jetlink')]
   assert marker['state'] == 'CANDIDATE_PHYSICAL_BOOT_PENDING'
+  assert (root / 'usr/lib/carrot-jetlink-power/power_setup.py').is_file()
   assert marker['root_start'] == 3188736
   assert (runtime/'current/SOURCE_COMMIT').read_text().strip() == commit
   assert (runtime/'updater/boot_update.py').read_bytes() == Path(__file__).with_name('boot_update.py').read_bytes()
