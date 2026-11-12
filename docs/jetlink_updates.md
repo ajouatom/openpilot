@@ -51,6 +51,26 @@ The `/run/carrot-jetlink-power.json` result includes L4T, compatible strings,
 profile names/IDs and application status. It is copied into cached health and
 `jetsonPerformance` route events. A once-per-boot lock prevents repeated changes.
 
+The November 12 Ioniq 5 route `0000000d--430c0ed5a6` confirms that the updated
+runtime ran, with `super_profile_missing` in all 174 samples. The device tree
+identifies `p3767-0005` without the Super suffix. NVIDIA's R36.4.7 `nvpower.sh`
+relinks the image's Super configuration to the ordinary 15W/7W configuration
+for this identity. The public R2 image itself contains the Super profile and
+Super boot specification. The runtime now reports `super_firmware_required`
+for this combination. This establishes a non-Super boot configuration; the
+reporter's precise QSPI version and physical firmware repair remain unverified.
+The runtime leaves NVIDIA's board selection intact. The official firmware
+installation procedure is documented in the
+[NVIDIA Jetson setup guide](https://docs.nvidia.com/jetson/orin-nano-devkit/user-guide/update_firmware.html).
+
+`refresh_protected_image.py` rebuilds the hash-pinned public R2 image on an
+isolated ARM64 Linux builder. It installs the signed runtime into factory and
+DATA copies, preloads the matching ONNX, removes reference-device TensorRT
+caches and installs startup power ordering. First model preparation builds the
+recipient's engine. The manual `Jetson SD image build` workflow produces the
+compressed image, hashes and offline validation metadata. Physical boot and
+firmware compatibility still require device evidence.
+
 `nvpmodel -q` supplies the selected mode and ID every 30 seconds. Its query age
 is included. Root access allows reading BPMP debugfs through the observer.
 The observer writes a bounded snapshot under `/run`; the inference process

@@ -129,6 +129,9 @@ Jetson만 연결된 경우 eGPU 모델 컴파일 버튼은 사용하지 않습�
 상태 카드에 `MAXN_SUPER profile missing` 또는 `firmware_clock_limit` 관련 문구가 나오면
 설치 이미지·보드 부트 펌웨어의 호환 여부를 점검해야 합니다. 재부팅 필요 문구가 나오면
 정차 후 Jetson을 완전히 재부팅합니다. 적용 결과와 지원 모드 목록은 주행 로그에도 남습니다.
+`Non-Super boot firmware`가 표시되면 보드가 일반 모드용 부팅 구성으로 실행 중입니다.
+이 경우 NVIDIA의 해당 보드용 Super 부팅 펌웨어 설치가 필요합니다. SD 재기록이나 GitPull만으로
+보드 펌웨어가 갱신되지는 않습니다. 새 이미지의 첫 모델 준비에는 TensorRT 엔진 생성 시간이 필요합니다.
 
 처음 설치한다면 [한글 설치 안내](https://github.com/ajouatom/carrot-jetson/blob/main/docs/INSTALL-WINDOWS-KO.md)를
 따라 설치 ZIP을 풀고 01·02 배치 파일을 실행합니다. 이미지 준비와 USB-C 수정은 자동입니다. Wi-Fi는 연결된 콤마에서 전달받으며

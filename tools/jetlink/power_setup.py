@@ -64,6 +64,11 @@ def apply(root=Path('/')):
     candidates = [p for p in value['profiles'] if p['name'] == 'MAXN_SUPER']
     value['before'] = selected()
     if len(candidates) != 1:
+      if re.search(r'p3767-000[345](?:\s|$)', value['compatible']):
+        # nvpower.sh deliberately relinks Super profiles to the regular profile
+        # when the running device tree identifies a non-Super firmware variant.
+        value['firmware_action'] = 'Install matching NVIDIA Orin Nano Super boot firmware'
+        return {**value, 'state': 'super_firmware_required'}
       return {**value, 'state': 'super_profile_missing'}
     target, = candidates
     value['target'] = target

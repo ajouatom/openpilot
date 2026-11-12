@@ -17,6 +17,7 @@ def power_health(value):
   state = setup.get('state')
   messages = {
     'super_profile_missing': 'MAXN_SUPER profile missing: check Jetson image / QSPI firmware',
+    'super_firmware_required': 'Non-Super boot firmware detected: install matching Orin Nano Super firmware; SD/Git update alone cannot select MAXN_SUPER',
     'unsupported_board': 'Automatic MAXN_SUPER needs the supported Orin Nano board',
     'reboot_required': 'MAXN_SUPER pending: full Jetson reboot required',
     'mode_apply_failed': 'MAXN_SUPER selection failed: check boot power setup',

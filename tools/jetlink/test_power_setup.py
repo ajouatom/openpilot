@@ -72,6 +72,20 @@ def test_invalid_config_is_rejected(text):
     power.profiles(text)
 
 
+def test_reported_non_super_device_tree_requires_firmware(board):
+  root, calls, _ = board
+  (root / 'proc/device-tree/compatible').write_text(
+    'nvidia,p3768-0000+p3767-0005\0nvidia,p3767-0005\0nvidia,tegra234\0')
+  (root / 'etc/nvpmodel.conf').write_text('< POWER_MODEL ID=0 NAME=15W >\n< POWER_MODEL ID=1 NAME=7W >')
+  result = power.apply(root)
+  assert result['state'] == 'super_firmware_required'
+  assert calls == [('/usr/sbin/nvpmodel', '-q')]
+  health = {'performance': {'power_setup': result}}
+  power_health(health)
+  assert health['power_error']
+  assert 'boot firmware' in health['reason']
+
+
 @pytest.mark.parametrize('stdout,returncode,state', [
   ('NVPM WARN: Reboot required for changing to this power mode: 7', 0, 'reboot_required'),
   ('NVPM ERROR: failed', 0, 'mode_apply_failed'),
