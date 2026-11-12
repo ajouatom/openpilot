@@ -18,7 +18,11 @@
   compressed8505195694B SHA25629617d9bb36c54768bd8b69685b587efc7520dbb6a57191555b6061048539940.
   Imports/model hashes/privacy/fsck/GPT/systemd graph pass. Physical boot and
   firmware repair remain unverified. No live-device or QSPI writes. Evidence
-  .analysis/scratch/2026-11-12-ioniq5-route0d. SD publication follows PC checks.
+  .analysis/scratch/2026-11-12-ioniq5-route0d. SD v0.5.0-super-preview published
+  on NAS; full NAS readback hashes and public HTTPS installer/image checks pass.
+  Windows ZIP8529895780B SHA2566c05b5c05e53922663d58529696ff31f683aec1602121873e2da3509e0a729c5.
+  Actual ZIP extraction/CRC and bundled Python preparation in Korean/space path
+  reproduce the raw image hash. Physical SD write/boot/performance unverified.
 
 - 2026-11-12: Ioniq5 b4dcfe6ce00fe149 route0b/12..14 on ffa5723e has174
   fresh host samples, all15W/GPU624.75MHz/EMC2133MHz,53..57C,no thermal throttle,
