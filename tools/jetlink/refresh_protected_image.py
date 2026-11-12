@@ -99,6 +99,9 @@ def rebuild(work, manifest):
     run('chroot', root, '/opt/carrot-jetlink/venv/bin/python',
         '/opt/carrot-jetlink/current/tools/jetlink/hud.py', '--help')
     run('chroot', root, '/usr/sbin/visudo', '-cf', '/etc/sudoers')
+    run('systemd-analyze', '--root=' + str(root), 'verify',
+        'carrot-jetlink-performance.service', 'carrot-jetlink-update-apply.service',
+        'carrot-jetlink.service', 'carrot-jetlink-hud.service')
     run('sync', '-f', image)
     for path in reversed(mounted):
       run('umount', path)
@@ -113,12 +116,16 @@ def rebuild(work, manifest):
     for path in reversed(mounted):
       run('umount', path)
     run('losetup', '-d', loop)
-  run('sgdisk', '-v', image)
+  gpt = subprocess.check_output(['sgdisk', '-v', str(image)], text=True)
+  if 'No problems found.' not in gpt:
+    raise RuntimeError('GPT verification did not confirm a valid image')
   compressed = image.with_suffix('.img.zst')
   run('zstd', '-T2', '-3', image, '-o', compressed)
   marker.update(image_sha256=digest(image), compressed_bytes=compressed.stat().st_size,
                 compressed_sha256=digest(compressed), base_raw_sha256=RAW_SHA,
                 bundle_sha256=manifest['bundle']['sha256'],
+                offline_checks={'runtime_imports': True, 'model_hashes': True, 'privacy': True,
+                                'filesystems': True, 'gpt': True, 'systemd_units': True},
                 validation='Offline import, model hash, privacy and filesystem checks; physical boot pending')
   (work / 'candidate.json').write_text(json.dumps(marker, indent=2) + '\n')
   (work / 'SHA256SUMS').write_text(f'{marker["image_sha256"]}  {image.name}\n' +
