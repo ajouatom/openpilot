@@ -92,6 +92,39 @@ def test_updated_data_runtime_is_resolved_before_bind_mount(tmp_path, target):
 
 
 @pytest.mark.skipif(sys.platform == 'win32', reason='Linux symlink semantics')
+def test_fresh_preloaded_model_is_admitted_without_claiming_an_engine_was_loaded(tmp_path):
+  from protected_storage import valid_runtime
+  release = tmp_path / 'releases/factory'
+  for name in ('tools/jetlink/server.py', 'SOURCE_COMMIT'):
+    file = release / name
+    file.parent.mkdir(parents=True, exist_ok=True)
+    file.write_text('fixture')
+  python = tmp_path / 'venv/bin/python'
+  python.parent.mkdir(parents=True)
+  python.write_text('fixture')
+  (tmp_path / 'current').symlink_to('releases/factory')
+  marker = tmp_path / 'protected-runtime.json'
+  marker.write_text('{"format":1}')
+  assert not valid_runtime(tmp_path)
+  model = tmp_path / ('cache/models/' + 'a' * 16 + '.onnx')
+  model.parent.mkdir(parents=True)
+  model.write_bytes(b'model')
+  value = {'format': 1, 'preloaded_model': {'sha256': 'a' * 64, 'bytes': 5}}
+  marker.write_text(json.dumps(value))
+  assert valid_runtime(tmp_path)
+  assert not (tmp_path / 'cache/last-loaded.json').exists()
+  model.write_bytes(b'partial')
+  assert not valid_runtime(tmp_path)
+  model.unlink()
+  assert not valid_runtime(tmp_path)
+  (tmp_path / 'cache/last-loaded.json').write_text('subsequently loaded another model')
+  assert valid_runtime(tmp_path)
+  value['preloaded_model']['sha256'] = '../invalid'
+  marker.write_text(json.dumps(value))
+  assert not valid_runtime(tmp_path)
+
+
+@pytest.mark.skipif(sys.platform == 'win32', reason='Linux symlink semantics')
 def test_protected_image_wiring_is_offline_only_and_network_independent(tmp_path, monkeypatch):
   import initrd_readonly
   monkeypatch.setattr(initrd_readonly, 'configure', lambda root: None)

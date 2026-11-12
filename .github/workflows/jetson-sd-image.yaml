@@ -1,8 +1,14 @@
 name: Jetson SD image build
 on:
   workflow_dispatch:
+    inputs:
+      use_verified_cache:
+        description: Reuse the hash-pinned November 12 build artifact while retained
+        type: boolean
+        default: false
 permissions:
   contents: read
+  actions: read
 jobs:
   image:
     runs-on: ubuntu-24.04-arm
@@ -12,6 +18,13 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
+      - uses: actions/download-artifact@v4
+        if: inputs.use_verified_cache
+        with:
+          name: carrot-jetson-sd
+          run-id: 43202280805
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/verified-base
       - name: Install image tools
         run: |
           sudo apt-get update
@@ -19,13 +32,17 @@ jobs:
           python -m pip install zstandard pycryptodome pytest
           df -h .
       - name: Check firmware provisioning policy
-        run: python -m pytest -q -o addopts='' --confcutdir=tools/jetlink tools/jetlink/test_super_bootstrap.py
+        run: python -m pytest -q -o addopts='' --confcutdir=tools/jetlink tools/jetlink/test_super_bootstrap.py tools/jetlink/test_protected_storage.py
       - name: Rebuild and validate the signed N16 image
         run: |
+          args=()
+          if [[ '${{ inputs.use_verified_cache }}' == 'true' ]]; then
+            args+=(--cached-base "$RUNNER_TEMP/verified-base/carrot-jetson.img.zst")
+          fi
           sudo --preserve-env=PATH env PYTHONPATH=.:tools/jetlink:third_party/jetlink \
             "$(which python)" tools/jetlink/refresh_protected_image.py \
             --manifest openpilot/selfdrive/modeld/jetlink/host_release.json \
-            --output-dir "$RUNNER_TEMP/carrot-image"
+            --output-dir "$RUNNER_TEMP/carrot-image" "${args[@]}"
       - uses: actions/upload-artifact@v4
         with:
           name: carrot-jetson-sd

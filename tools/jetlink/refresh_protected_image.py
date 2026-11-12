@@ -14,13 +14,18 @@ from update_host import fetch, verify_signature
 BASE_URL = 'https://upload.shind0.synology.me/downloads/jetson/v0.4.0-boot-preview/carrot-jetson.img.zst'
 BASE_SHA = 'b277f3c6318d5b3210eee6e6aa4e74e492f73ffe2f9a669e108822a7ceb6c614'
 RAW_SHA = 'b11f5601d3a713ad0de23315ee90daddf5452f8e548f2c87c8eeec28d321e55f'
+CACHED_SHA = '4cb5db4e006e41433adcc866f10252d9bb2fec68ad1f7f75229e217fb8c80620'
+CACHED_RAW_SHA = '5e0da1b97485f3f06cfc809d6ddff446a868a8dfe0fd1c65e90a3ed386cc8c54'
 
 
-def unpack_base(work):
+def unpack_base(work, cached=None):
   import zstandard
   compressed = work / 'base.img.zst'
-  urllib.request.urlretrieve(BASE_URL, compressed)
-  if digest(compressed) != BASE_SHA:
+  if cached is None:
+    urllib.request.urlretrieve(BASE_URL, compressed)
+  else:
+    shutil.copyfile(cached, compressed)
+  if digest(compressed) != (BASE_SHA if cached is None else CACHED_SHA):
     raise ValueError('Public R2 compressed image hash mismatch')
   image = work / 'carrot-jetson.img'
   h = hashlib.sha256()
@@ -33,18 +38,18 @@ def unpack_base(work):
         else:
           target.write(block)
       target.truncate()
-  if image.stat().st_size != 40 * (1 << 30) or h.hexdigest() != RAW_SHA:
+  if image.stat().st_size != 40 * (1 << 30) or h.hexdigest() != (RAW_SHA if cached is None else CACHED_RAW_SHA):
     raise ValueError('Public R2 raw image hash mismatch')
   compressed.unlink()
   return image
 
 
-def rebuild(work, manifest):
+def rebuild(work, manifest, cached=None):
   if os.geteuid() != 0 or work.exists():
     raise ValueError('Use root and a new image workspace')
   verify_signature(manifest)
   work.mkdir(parents=True)
-  image = unpack_base(work)
+  image = unpack_base(work, cached)
   bundle = work / 'runtime.tar.gz'
   fetch(manifest['bundle']['url'], bundle, manifest['bundle']['sha256'], manifest['bundle']['size'], None)
   model = work / 'model.onnx'
@@ -68,12 +73,19 @@ def rebuild(work, manifest):
       mounted.append(path)
     if (data / 'identity').exists() or (setup / 'identity').exists():
       raise ValueError('Personal identity in base image')
-    marker = refresh(root, setup, bundle)
+    if cached is None:
+      marker = refresh(root, setup, bundle)
+    else:
+      audit_unprovisioned(root, setup)
+      marker = json.loads((root / 'etc/carrot-jetlink-image.json').read_text())
+      if marker['source_commit'] != manifest['source_commit']:
+        raise ValueError('Cached image runtime differs from the signed manifest')
     source = Path(__file__).resolve().parent
     from install_super_bootstrap import configure as configure_super
     configure_super(root, source, work)
     from install_boot_display import configure as configure_boot_display
     configure_boot_display(root, source)
+    shutil.copyfile(source / 'protected_storage.py', root / 'usr/lib/carrot-jetlink-storage/protected_storage.py')
     runtime = root / 'opt/carrot-jetlink'
     from model_pin import read_spec
     spec = read_spec(runtime / 'current')
@@ -88,7 +100,8 @@ def rebuild(work, manifest):
     run('chown', '-R', '1000:1000', cache)
     shutil.rmtree(data / 'runtime')
     run('cp', '-a', runtime, data / 'runtime')
-    (data / 'runtime/protected-runtime.json').write_text('{"format":1}\n')
+    (data / 'runtime/protected-runtime.json').write_text(json.dumps({
+      'format': 1, 'preloaded_model': {'sha256': spec['sha256'], 'bytes': spec['nbytes']}}) + '\n')
     marker.update(state='PROTECTED_CANDIDATE_NOT_BOOT_TESTED', storage_format=1,
                   builder_commit=subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip(),
                   data_partition=17, data_grow=False, image_bytes=image.stat().st_size,
@@ -102,6 +115,17 @@ def rebuild(work, manifest):
     for copy in (runtime, data / 'runtime'):
       assert (copy / 'current/SOURCE_COMMIT').read_text().strip() == manifest['source_commit']
       assert digest(copy / 'cache/models' / (spec['sha256'][:16] + '.onnx')) == spec['sha256']
+    # Exercise the actual pre-bind admission using the installed image helper.
+    # A fresh image has ONNX but no last-loaded record or TensorRT engine yet.
+    probe = root / 'run/carrot-data'
+    probe.mkdir(parents=True, exist_ok=True)
+    run('mount', '--bind', data, probe)
+    mounted.append(probe)
+    run('chroot', root, '/usr/bin/python3', '-B', '-c',
+        'import sys; from pathlib import Path; sys.path.insert(0,"/usr/lib/carrot-jetlink-storage"); ' +
+        'from protected_storage import valid_runtime; assert valid_runtime(Path("/run/carrot-data/runtime"))')
+    run('umount', probe)
+    mounted.pop()
     run('chroot', root, '/opt/carrot-jetlink/venv/bin/python',
         '/opt/carrot-jetlink/current/tools/jetlink/server.py', '--check-imports')
     run('chroot', root, '/opt/carrot-jetlink/venv/bin/python',
@@ -141,11 +165,11 @@ def rebuild(work, manifest):
   compressed = image.with_suffix('.img.zst')
   run('zstd', '-T2', '-3', image, '-o', compressed)
   marker.update(image_sha256=digest(image), compressed_bytes=compressed.stat().st_size,
-                compressed_sha256=digest(compressed), base_raw_sha256=RAW_SHA,
+                compressed_sha256=digest(compressed), base_raw_sha256=RAW_SHA if cached is None else CACHED_RAW_SHA,
                 bundle_sha256=manifest['bundle']['sha256'],
                 offline_checks={'runtime_imports': True, 'model_hashes': True, 'privacy': True,
                                 'filesystems': True, 'gpt': True, 'systemd_units': True,
-                                'firmware_capsule': True},
+                                'firmware_capsule': True, 'fresh_data_admission': True},
                 validation='Offline import, model hash, privacy and filesystem checks; physical boot pending')
   (work / 'candidate.json').write_text(json.dumps(marker, indent=2) + '\n')
   (work / 'SHA256SUMS').write_text(f'{marker["image_sha256"]}  {image.name}\n' +
@@ -157,5 +181,6 @@ if __name__ == '__main__':
   parser = argparse.ArgumentParser(description=__doc__)
   parser.add_argument('--manifest', type=Path, required=True)
   parser.add_argument('--output-dir', type=Path, required=True)
+  parser.add_argument('--cached-base', type=Path)
   args = parser.parse_args()
-  rebuild(args.output_dir.resolve(), json.loads(args.manifest.read_text()))
+  rebuild(args.output_dir.resolve(), json.loads(args.manifest.read_text()), args.cached_base)
