@@ -180,7 +180,7 @@ def test_image_ordering_and_installed_helper(tmp_path):
   assert 'After=nvpmodel.service' in body
   assert 'Before=carrot-jetlink.service carrot-jetlink-xorg.service carrot-jetlink-hud.service' in body
   assert (tmp_path / 'usr/lib/carrot-jetlink-power/power_setup.py').read_bytes() == Path(power.__file__).read_bytes()
-  for name in ('carrot-jetlink', 'carrot-jetlink-xorg', 'carrot-jetlink-hud'):
+  for name in ('carrot-jetlink', 'carrot-jetlink-xorg', 'carrot-jetlink-hud', 'carrot-jetlink-update-apply'):
     assert 'After=carrot-jetlink-performance.service' in (units / f'{name}.service.d/power.conf').read_text()
   power.configure(tmp_path, Path(__file__).parent)
   assert (units / 'multi-user.target.wants/carrot-jetlink-performance.service').is_symlink()

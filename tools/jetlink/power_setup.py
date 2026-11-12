@@ -128,7 +128,7 @@ def configure(root, source):
 Description=Select NVIDIA MAXN_SUPER and configure inference clocks
 After=nvpmodel.service
 Requires=nvpmodel.service
-Before=carrot-jetlink.service carrot-jetlink-xorg.service carrot-jetlink-hud.service
+Before=carrot-jetlink.service carrot-jetlink-xorg.service carrot-jetlink-hud.service carrot-jetlink-update-apply.service
 [Service]
 Type=oneshot
 ExecStart=/usr/bin/python3 /usr/lib/carrot-jetlink-power/power_setup.py
@@ -137,7 +137,7 @@ TimeoutStartSec=40
 [Install]
 WantedBy=multi-user.target
 ''')
-  for name in ('carrot-jetlink', 'carrot-jetlink-xorg', 'carrot-jetlink-hud'):
+  for name in ('carrot-jetlink', 'carrot-jetlink-xorg', 'carrot-jetlink-hud', 'carrot-jetlink-update-apply'):
     folder = unit.parent / (name + '.service.d')
     folder.mkdir(parents=True, exist_ok=True)
     (folder / 'power.conf').write_text('[Unit]\nRequires=carrot-jetlink-performance.service\nAfter=carrot-jetlink-performance.service\n')
