@@ -69,6 +69,11 @@ def rebuild(work, manifest):
     if (data / 'identity').exists() or (setup / 'identity').exists():
       raise ValueError('Personal identity in base image')
     marker = refresh(root, setup, bundle)
+    source = Path(__file__).resolve().parent
+    from install_super_bootstrap import configure as configure_super
+    configure_super(root, source, work)
+    from install_boot_display import configure as configure_boot_display
+    configure_boot_display(root, source)
     runtime = root / 'opt/carrot-jetlink'
     from model_pin import read_spec
     spec = read_spec(runtime / 'current')
@@ -85,9 +90,12 @@ def rebuild(work, manifest):
     run('cp', '-a', runtime, data / 'runtime')
     (data / 'runtime/protected-runtime.json').write_text('{"format":1}\n')
     marker.update(state='PROTECTED_CANDIDATE_NOT_BOOT_TESTED', storage_format=1,
+                  builder_commit=subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip(),
                   data_partition=17, data_grow=False, image_bytes=image.stat().st_size,
                   model_sha256=spec['sha256'], engine_prebuilt=False,
-                  power_setup='automatic MAXN_SUPER; matching Super boot firmware required')
+                  power_setup='automatic NVIDIA Super capsule provisioning and MAXN_SUPER verification',
+                  automatic_super_firmware=True,
+                  firmware_provisioning='Orin Nano 8GB developer kit; bootable JetPack 6.x SD required')
     for path in (root / 'etc/carrot-jetlink-image.json', setup / 'IMAGE.json'):
       path.write_text(json.dumps(marker, indent=2) + '\n')
     audit_unprovisioned(root, setup)
@@ -99,7 +107,12 @@ def rebuild(work, manifest):
     run('chroot', root, '/opt/carrot-jetlink/venv/bin/python',
         '/opt/carrot-jetlink/current/tools/jetlink/hud.py', '--help')
     run('chroot', root, '/usr/sbin/visudo', '-cf', '/etc/sudoers')
+    run('chroot', root, '/usr/bin/python3', '-B', '-c',
+        'import sys; sys.path.insert(0,"/usr/lib/carrot-jetlink-firmware"); ' +
+        'import super_bootstrap,hashlib; ' +
+        'assert hashlib.sha256(super_bootstrap.CAPSULE.read_bytes()).hexdigest()==super_bootstrap.CAPSULE_SHA')
     run('systemd-analyze', '--root=' + str(root), 'verify',
+        'carrot-super-firmware.service',
         'carrot-jetlink-performance.service', 'carrot-jetlink-update-apply.service',
         'carrot-jetlink.service', 'carrot-jetlink-hud.service')
     run('sync', '-f', image)
@@ -125,7 +138,8 @@ def rebuild(work, manifest):
                 compressed_sha256=digest(compressed), base_raw_sha256=RAW_SHA,
                 bundle_sha256=manifest['bundle']['sha256'],
                 offline_checks={'runtime_imports': True, 'model_hashes': True, 'privacy': True,
-                                'filesystems': True, 'gpt': True, 'systemd_units': True},
+                                'filesystems': True, 'gpt': True, 'systemd_units': True,
+                                'firmware_capsule': True},
                 validation='Offline import, model hash, privacy and filesystem checks; physical boot pending')
   (work / 'candidate.json').write_text(json.dumps(marker, indent=2) + '\n')
   (work / 'SHA256SUMS').write_text(f'{marker["image_sha256"]}  {image.name}\n' +

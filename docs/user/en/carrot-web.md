@@ -133,15 +133,23 @@ card calls for checking image and board boot-firmware compatibility. If the
 message requests a reboot, fully reboot Jetson while parked. Setup results and
 available profiles are also recorded in the route log.
 `Non-Super boot firmware` indicates that the board is running a regular-mode
-boot configuration. Install NVIDIA's matching Super boot firmware for that board.
-Rewriting the SD or pulling Git alone does not update board firmware. The new
-image also needs time to build its TensorRT engine during initial model preparation.
+boot configuration. Check the Super boot configuration. GitPull on existing
+images updates power-mode selection. Initial model preparation also takes time
+to build the recipient's TensorRT engine.
 
 The `v0.5.0-super-preview` SD installer includes automatic Super selection and
 N16 ONNX. ARM64 image checks and Windows installation preparation passed.
 Physical Jetson boot and driving performance remain unverified, and matching
 Super boot firmware is required.
 See the [download and validation scope](https://github.com/ajouatom/openpilot/releases/tag/jetson-super-sd-20261112).
+
+The subsequent `v0.6.0-super-auto-preview` checks the Orin Nano 8GB developer kit
+on SD startup. When needed, it stages the included NVIDIA 36.4.7 Super capsule
+and automatically reboots. The next boot verifies firmware status, Super identity
+and GPU clocks before model preparation. Keep power connected throughout the
+firmware update. Failures appear on the USB boot screen and in DATA diagnostics.
+Boards unable to boot a JetPack 6.x SD require NVIDIA's prerequisite firmware
+upgrade. Physical firmware installation and boot remain unverified for this preview.
 
 Use the [short Korean installation guide](https://github.com/ajouatom/carrot-jetson/blob/main/docs/INSTALL-WINDOWS-KO.md):
 extract the installer ZIP and run 01, then 02. Image preparation and the USB-C fix are automatic. Wi-Fi settings come from the connected

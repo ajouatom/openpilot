@@ -130,13 +130,20 @@ Jetson만 연결된 경우 eGPU 모델 컴파일 버튼은 사용하지 않습�
 설치 이미지·보드 부트 펌웨어의 호환 여부를 점검해야 합니다. 재부팅 필요 문구가 나오면
 정차 후 Jetson을 완전히 재부팅합니다. 적용 결과와 지원 모드 목록은 주행 로그에도 남습니다.
 `Non-Super boot firmware`가 표시되면 보드가 일반 모드용 부팅 구성으로 실행 중입니다.
-이 경우 NVIDIA의 해당 보드용 Super 부팅 펌웨어 설치가 필요합니다. SD 재기록이나 GitPull만으로
-보드 펌웨어가 갱신되지는 않습니다. 새 이미지의 첫 모델 준비에는 TensorRT 엔진 생성 시간이 필요합니다.
+이 경우 Super 부팅 구성 확인이 필요합니다. 기존 이미지의 GitPull은 전력 모드 선택을 갱신합니다.
+새 이미지의 첫 모델 준비에는 TensorRT 엔진 생성 시간이 필요합니다.
 
 Super 자동 설정과 N16 ONNX를 포함한 `v0.5.0-super-preview` SD 설치 시험판은
 ARM64 이미지 검사와 Windows 설치 준비 검증을 마쳤습니다. 실제 Jetson 부팅과 주행 성능은
 검증 전이며, 호환되는 Super 부팅 펌웨어가 필요합니다.
 [다운로드와 검증 범위](https://github.com/ajouatom/openpilot/releases/tag/jetson-super-sd-20261112)를 확인하세요.
+
+후속 `v0.6.0-super-auto-preview`는 Orin Nano 8GB 개발자 키트의 첫 SD 부팅에서 보드·펌웨어를
+검사하고, 필요한 경우 포함된 NVIDIA 36.4.7 Super 캡슐을 준비해 자동 재부팅합니다.
+재부팅 후 업데이트 결과·Super 구성·GPU 클럭을 확인한 뒤 모델 준비를 진행합니다.
+펌웨어 설치 중에는 전원을 유지하세요. 실패 원인은 USB 부팅 화면과 DATA의 진단 기록에 남습니다.
+JetPack 6.x SD 자체를 부팅할 수 없는 구형 펌웨어는 NVIDIA의 선행 갱신 절차가 필요합니다.
+이 버전의 실제 보드 펌웨어 갱신과 부팅은 검증 전입니다.
 
 처음 설치한다면 [한글 설치 안내](https://github.com/ajouatom/carrot-jetson/blob/main/docs/INSTALL-WINDOWS-KO.md)를
 따라 설치 ZIP을 풀고 01·02 배치 파일을 실행합니다. 이미지 준비와 USB-C 수정은 자동입니다. Wi-Fi는 연결된 콤마에서 전달받으며
