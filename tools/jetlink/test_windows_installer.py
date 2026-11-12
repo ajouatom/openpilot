@@ -171,3 +171,16 @@ def test_public_integrated_package_requires_checks_for_exact_image(tmp_path, mon
   assert preview['validation_basis'] == 'offline_checks'
   guide = publisher.candidate_guide(html, preview)
   assert 'Physical boot is unverified' in guide and 'Requires Super boot firmware' in guide
+  value['automatic_super_firmware'] = True
+  metadata.write_text(json.dumps(value))
+  with pytest.raises(ValueError, match='capsule verification'):
+    publisher.integrated_release(image, compressed, metadata, offline_preview=True)
+  value['offline_checks']['firmware_capsule'] = True
+  metadata.write_text(json.dumps(value))
+  preview = publisher.integrated_release(image, compressed, metadata, offline_preview=True)
+  assert preview['version'] == 'v0.6.0-super-auto-preview'
+  assert preview['automatic_super_firmware'] and not preview['matching_super_firmware_required']
+  guide = publisher.candidate_guide(html, preview)
+  assert 'automatically prepares Super firmware' in guide
+  assert 'is not updated by this SD installer' not in guide
+  assert 'physical firmware update and boot are unverified' in guide

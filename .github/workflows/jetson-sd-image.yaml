@@ -16,8 +16,10 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y zstd gdisk dosfstools zerofree
-          python -m pip install zstandard pycryptodome
+          python -m pip install zstandard pycryptodome pytest
           df -h .
+      - name: Check firmware provisioning policy
+        run: python -m pytest -q -o addopts='' --confcutdir=tools/jetlink tools/jetlink/test_super_bootstrap.py
       - name: Rebuild and validate the signed N16 image
         run: |
           sudo --preserve-env=PATH env PYTHONPATH=.:tools/jetlink:third_party/jetlink \

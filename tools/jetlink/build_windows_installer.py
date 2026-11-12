@@ -67,6 +67,14 @@ def integrated_release(image, compressed, metadata, validation=None, owner_boot=
                    validation='Offline image checks passed. Physical boot and Super firmware compatibility remain unverified.',
                    validation_checks={key: True for key in checks}, physical_boot=False,
                    engine_prebuilt=False, matching_super_firmware_required=True)
+    if value.get('automatic_super_firmware') is True:
+      if value.get('offline_checks', {}).get('firmware_capsule') is not True:
+        raise ValueError('Automatic firmware image requires capsule verification')
+      release.update(version='v0.6.0-super-auto-preview', automatic_super_firmware=True,
+                     matching_super_firmware_required=False, bootable_jetpack6_firmware_required=True,
+                     builder_commit=value.get('builder_commit'),
+                     validation='Offline image and capsule checks passed. Physical firmware update and boot remain unverified.')
+      release['validation_checks']['firmware_capsule'] = True
   elif owner_boot is not None:
     evidence = json.loads(owner_boot.read_text(encoding='utf-8'))
     if (evidence.get('image_sha256') != value['image_sha256']
@@ -96,10 +104,21 @@ def integrated_release(image, compressed, metadata, validation=None, owner_boot=
 
 def candidate_guide(text, release):
   """Keep the bilingual layout; never link a private candidate to the old download."""
-  if release['version'] in ('v0.4.0-protected-preview', 'v0.4.0-boot-preview', 'v0.5.0-super-preview'):
+  if release['version'] in ('v0.4.0-protected-preview', 'v0.4.0-boot-preview', 'v0.5.0-super-preview', 'v0.6.0-super-auto-preview'):
     button = (f'<a class="download" href="https://upload.shind0.synology.me/downloads/jetson/{release["version"]}/carrot-jetson-windows.zip">'
               f'설치파일 받기<span class="en" lang="en">Download installer · {release["compressed_bytes"] / 1e9:.1f} GB</span></a>')
-    if release['version'] == 'v0.5.0-super-preview':
+    if release['version'] == 'v0.6.0-super-auto-preview':
+      ko = '공개 시험판 · SD에서 Super 펌웨어를 자동 설치합니다. 파일 검증을 마쳤으며 실제 펌웨어 갱신과 부팅은 검증 전입니다.'
+      en = 'Public preview · automatic Super firmware installation from SD. File checks passed; physical firmware update and boot are unverified.'
+      text = text.replace('보드에 맞는 NVIDIA Super 부팅 펌웨어를 설치해야 합니다.',
+                          '이 버전은 지원되는 Orin Nano 8GB 개발자 키트의 Super 펌웨어를 자동으로 준비하고 재부팅합니다.')
+      text = text.replace('부팅 펌웨어는 보드에 저장되어 있으며 이 SD 설치 과정은 이를 갱신하지 않습니다.',
+                          '처음 시작할 때 전원을 유지하세요. 펌웨어 갱신 중 전원을 끄지 마세요. JetPack 6.x SD를 부팅할 수 있는 보드가 대상입니다.')
+      text = text.replace("install NVIDIA's matching Super boot firmware.",
+                          'this version automatically prepares Super firmware and reboots supported Orin Nano 8GB developer kits.')
+      text = text.replace('Boot firmware resides on the board and is not updated by this SD installer.',
+                          'Keep power connected throughout firmware installation. The board must already boot a JetPack 6.x SD card.')
+    elif release['version'] == 'v0.5.0-super-preview':
       ko = '공개 시험판: 파일·부팅 구성 검사 완료. 실물 부팅은 검증 전입니다. Super 부팅 펌웨어가 필요하며 첫 시작에 모델 엔진을 생성합니다.'
       en = 'Public preview: offline file and boot configuration checks passed. Physical boot is unverified. Requires Super boot firmware; first startup builds the model engine.'
     elif release['version'] == 'v0.4.0-boot-preview':
