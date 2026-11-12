@@ -1,5 +1,25 @@
 # Repository memory
 
+- 2026-11-12: Ioniq5 b4dcfe6ce00fe149 route0d/13..15 on d37a6d30 confirms
+  host5a2784cc applied but174 samples all super_profile_missing,15W, GPU624.75MHz,
+  EMC2133MHz. Device-tree p3767-0005 lacks Super suffix; NVIDIA nvpower.sh
+  relinks the public R2 image's existing Super profile to ordinary15W/7W.
+  Orin Nano8GB hardware supports Super; exact QSPI version is unrecorded.
+  Model56.722ms/all2873over50,727 frame gaps exactly match invalid odometry;
+  host execution/completion38.895ms, CPU core means4.9..22%,60..61C/no throttle,
+  no USB timeout/disconnect in these segments. CruiseMismatch also present;
+  do not infer it shares this cause. Add explicit super_firmware_required.
+  N16 host0cb67d46cc4ac448326cc9b272ebfebdc6fde797 signed/published67195643B,
+  SHA256 ed22268f318a9db35de78049b0bc88ebfb09df00c9c661c558bb32e23cf98ccd.
+  HTTPS/full hash/signature verified, Jetson43177120838 and full-build CI pass.
+  SD build43177492508 on ARM64 succeeds with signed N16 in factory/DATA,
+  matching ONNX preloaded and board-specific TensorRT engine built first boot.
+  Raw40GiB SHA256 8da67d9b1eff6d7843a26c825fac307be82201e08e55549b76332d77f8f0d196;
+  compressed8505195694B SHA25629617d9bb36c54768bd8b69685b587efc7520dbb6a57191555b6061048539940.
+  Imports/model hashes/privacy/fsck/GPT/systemd graph pass. Physical boot and
+  firmware repair remain unverified. No live-device or QSPI writes. Evidence
+  .analysis/scratch/2026-11-12-ioniq5-route0d. SD publication follows PC checks.
+
 - 2026-11-12: Ioniq5 b4dcfe6ce00fe149 route0b/12..14 on ffa5723e has174
   fresh host samples, all15W/GPU624.75MHz/EMC2133MHz,53..57C,no thermal throttle,
   CPU core means5..23%,5.2GiB available. Model56.864ms and724 frame gaps exactly
