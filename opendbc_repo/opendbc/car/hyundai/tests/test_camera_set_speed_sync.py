@@ -37,3 +37,23 @@ def test_target_is_clamped_to_the_stock_range():
   s = CameraSetSpeedSync()
   assert s.button(20, 30, PRESS) == 0
   assert s.button(250, 180, PRESS) == 0
+
+
+GAP_PRESS = 112  # inside the 10 < frame % 100 <= 16 window (one press per second)
+
+
+def test_gap_presses_until_the_camera_matches_openpilot():
+  from opendbc.car.hyundai.hyundaicanfd import CameraGapSync
+  s = CameraGapSync()
+  assert s.button(1, 4, GAP_PRESS) == 3  # GAP_DIST: 11-08/09 logs had openpilot 1 with the camera at 4
+  assert s.button(1, 4, GAP_PRESS + 50) == 0  # outside the window
+  assert s.button(1, 1, GAP_PRESS + 100) == 0
+  assert s.button(1, 0, GAP_PRESS) == 0  # camera gap unknown
+
+
+def test_gap_sync_gives_up_when_the_camera_does_not_follow():
+  from opendbc.car.hyundai.hyundaicanfd import CameraGapSync
+  s = CameraGapSync()
+  sent = sum(s.button(2, 4, GAP_PRESS + 100 * i) == 3 for i in range(20))
+  assert sent == CameraGapSync.MAX_PRESSES
+  assert s.button(3, 4, GAP_PRESS + 3000) == 3  # a new target tries again

@@ -1215,6 +1215,31 @@ class CameraSetSpeedSync:
     return 1 if direction > 0 else 2  # Buttons.RES_ACCEL (+) / Buttons.SET_DECEL (-)
 
 
+class CameraGapSync:
+  """The camera's stock SCC keeps its own gap (SCC_CONTROL DISTANCE_SETTING). Driver gap presses reach both, yet the two
+  drifted one step apart (11-08/09 logs: camera = openpilot bars - 1, openpilot 1 <-> camera 4), so a device drop-out
+  handed stock SCC another gap. Press GAP on the camera bus until it equals openpilot's bars (the gap cycles 1..4)."""
+  MAX_PRESSES = 8  # two full cycles; beyond that the camera is not following, so stop for this target
+
+  def __init__(self):
+    self.target = None
+    self.presses = 0
+    self.window = None
+
+  def button(self, target_bars, camera_gap, frame):
+    target, camera = int(target_bars), int(camera_gap)
+    if target != self.target or camera == target:
+      self.target, self.presses = target, 0
+    if camera == target or not (1 <= target <= 4 and 1 <= camera <= 4) or self.presses >= self.MAX_PRESSES:
+      return 0
+    if not 10 < frame % 100 <= 16:  # one short press per second, so the camera's gap updates before the next one
+      return 0
+    if frame // 100 != self.window:
+      self.window = frame // 100
+      self.presses += 1
+    return 3  # Buttons.GAP_DIST
+
+
 def create_alt2_adas_button_request(packer, CAN, frame, CC, CS, stopping, *, keep_stock_scc_main=False):
   # This is a button request for Panda, not a replacement vehicle frame.
   # Panda overlays it on fresh 0x10B input, retaining all unknown fields,
@@ -1262,6 +1287,7 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
     create_ccnc_messages._set_speed_sync_on = Params().get_int("CameraSetSpeedSync") > 0
   if not hasattr(create_ccnc_messages, '_set_speed_sync'):
     create_ccnc_messages._set_speed_sync = CameraSetSpeedSync()
+    create_ccnc_messages._gap_sync = CameraGapSync()
   lane_line_check = create_ccnc_messages._lane_line_check
   desire, _ = _get_desire_and_lane_changing(md)
 
@@ -1317,6 +1343,10 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
                 (sync_button := create_ccnc_messages._set_speed_sync.button(
                   hud_control.setSpeed * (CV.MS_TO_KPH if CS.is_metric else CV.MS_TO_MPH), CS.scc_control["VSetDis"], frame))):
             values["CRUISE_BUTTONS"] = sync_button
+          elif (create_ccnc_messages._set_speed_sync_on and not driver_pressed and CS.scc_control is not None and
+                (gap_button := create_ccnc_messages._gap_sync.button(
+                  hud_control.leadDistanceBars, CS.scc_control["DISTANCE_SETTING"], frame))):
+            values["CRUISE_BUTTONS"] = gap_button
           else:
             if CS.adrv_0x1ea is not None and CS.adrv_0x1ea["HDA_MODE2"] == 0: # if corner radar is disabled, send main btn
               if 10 < frame % 1000 <= 16 and CS.out.vEgo > 3:
