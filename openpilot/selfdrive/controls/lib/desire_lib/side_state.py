@@ -35,6 +35,7 @@ SIDE_BSD_REAR_MAX_DIST = 24.8  # display saturates ~24.8-25.5: an approaching ca
 SIDE_BSD_REAR_WINDOW_SEC = 0.5
 SIDE_BSD_REAR_MIN_RATE = 1.0   # m/s, distance growing = receding
 SIDE_BSD_REAR_MAX_STEP = 2.0   # m per frame; a larger jump is a different object
+SIDE_BSD_REAR_JUMP_HOLD_SEC = 2.0  # after a jump up from a near object (< MIN_DIST) that object may still be beside us
 
 
 @dataclass
@@ -88,6 +89,8 @@ class SideState:
   bsd_receding_last_d_rel: float = 0.0
   bsd_rear_dist_history: deque = field(default_factory=lambda: deque(maxlen=1 + round(SIDE_BSD_REAR_WINDOW_SEC / DT_MDL)))
   bsd_rear_receding: bool = False
+  bsd_rear_jump_frames: int = 0
+  bsd_rear_last_valid: float = 0.0
 
   # computed lane change availability (includes BSD+object)
   lane_change_available_geom: bool = False
@@ -194,8 +197,19 @@ class SideState:
   def _bsd_rear_receding(self, rear_dist: float) -> bool:
     h = self.bsd_rear_dist_history
     h.append(float(rear_dist))
+    # 1109 seg100 (11-12 replay): 3.8 m -> 18.8 m in one frame, then 0.5 s continuous -> released while the near car
+    # (now hidden behind the farther one on the single-object display) may still be there
+    # compare with the last reported distance, so a 0 frame between the near and the far object does not hide the jump
+    last = self.bsd_rear_last_valid
+    if h[-1] > 0.0:
+      self.bsd_rear_last_valid = h[-1]
+    if 0.0 < last < SIDE_BSD_REAR_MIN_DIST and h[-1] - last >= SIDE_BSD_REAR_MAX_STEP:
+      self.bsd_rear_jump_frames = round(SIDE_BSD_REAR_JUMP_HOLD_SEC / DT_MDL)
+    else:
+      self.bsd_rear_jump_frames = max(0, self.bsd_rear_jump_frames - 1)
     return (
-      len(h) == h.maxlen
+      self.bsd_rear_jump_frames == 0
+      and len(h) == h.maxlen
       and h[-1] >= SIDE_BSD_REAR_MIN_DIST
       and all(0.0 < d < SIDE_BSD_REAR_MAX_DIST for d in h)
       and all(abs(b - a) < SIDE_BSD_REAR_MAX_STEP for a, b in pairwise(h))

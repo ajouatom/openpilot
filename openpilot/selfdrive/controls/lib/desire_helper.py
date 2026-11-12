@@ -496,7 +496,8 @@ class DesireHelper:
       }
       for side_name, side_value in (('left', self.left), ('right', self.right)):
         assistant_state[side_name] = {'available': side_value.lane_change_available and side_value.lane_change_available_geom,
-                                     'blindspot': bool(getattr(carstate, side_name + 'Blindspot', True) or side_value.bsd_hold_counter or
+                                     'blindspot': bool((getattr(carstate, side_name + 'Blindspot', True) and not side_value.bsd_rear_receding) or
+                                                      side_value.bsd_hold_counter or
                                                       side_value.side_object_detected)}
       assistant_direction, cancel_voice = self.assistant_lane.before(assistant_state)
       if cancel_voice:

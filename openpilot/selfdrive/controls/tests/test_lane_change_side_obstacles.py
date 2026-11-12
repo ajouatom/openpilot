@@ -153,10 +153,28 @@ class TestBsdRearDistanceRelease:
       assert rear_step(side, rear_dist) > 0
     assert not side.lane_change_available
 
-  def test_target_jump_waits_for_a_continuous_window(self):
+  def test_jump_up_from_a_near_car_waits_two_seconds(self):
     side = rear_side()
     for _ in range(20):
       rear_step(side, 2.0)
+    holds = [rear_step(side, 16.0 + 0.08 * i) for i in range(50)]
+
+    # the near car may now be hidden behind the farther one on the single-object display (1109 seg100, 11-12)
+    assert all(h > 0 for h in holds[:40])
+    assert holds[40] == 0
+
+  def test_jump_through_a_missing_frame_still_waits_two_seconds(self):
+    side = rear_side()
+    for _ in range(20):
+      rear_step(side, 2.0)
+    rear_step(side, 0.0)  # e.g. masked for one frame by the front-corner guard
+    holds = [rear_step(side, 16.0 + 0.08 * i) for i in range(50)]
+    assert all(h > 0 for h in holds[:39])
+
+  def test_jump_between_far_objects_waits_for_a_continuous_window(self):
+    side = rear_side()
+    for _ in range(20):
+      rear_step(side, 9.0)
     holds = [rear_step(side, 16.0 + 0.08 * i) for i in range(30)]
 
     assert all(h > 0 for h in holds[:10])
@@ -226,3 +244,32 @@ class TestLaneChangeAvailabilityRelease:
 ])
 def test_rear_release_distance_ignores_cars_beside(front, vision, rear, expected):
   assert SideState.rear_release_distance(front, rear, vision) == expected
+
+
+def test_desire_helper_passes_each_side_its_own_rear_distance():
+  from openpilot.selfdrive.controls.lib.desire_helper import DesireHelper
+  helper = DesireHelper()
+  seen = {}
+  for name in ("left", "right"):
+    side = getattr(helper, name)
+    side.update_lane_geometry = lambda *a, **k: None
+    side.update_lane_line_info = lambda *a, **k: None
+    side.update_obstacles = (lambda n: lambda *a, **k: seen.__setitem__(n, (a[2], k["rear_dist"])))(name)
+  car = SimpleNamespace(vEgo=20.0, leftLaneLine=0, rightLaneLine=0, leftBlindspot=False, rightBlindspot=True,
+                        leftLongDist=0.0, rightLongDist=0.0, leftRearLongDist=3.0, rightRearLongDist=12.0,
+                        leftBlindspotOnnx=False, rightBlindspotOnnx=False)
+  model = SimpleNamespace(laneLines=[None] * 4, laneLineProbs=[0.0] * 4, roadEdges=[None] * 2)
+  radar = SimpleNamespace(leadLeft=None, leadRight=None, leadsLeft=[], leadsRight=[])
+  try:
+    helper._process_sides(car, model, radar)
+  except (AttributeError, TypeError):
+    pass  # only the obstacle wiring is under test; later steps need a full model
+  assert seen == {"left": (False, 3.0), "right": (True, 12.0)}
+
+  car.rightLongDist = 5.0  # a car beside on the right: only the right side loses the rear release
+  seen.clear()
+  try:
+    helper._process_sides(car, model, radar)
+  except (AttributeError, TypeError):
+    pass
+  assert seen == {"left": (False, 3.0), "right": (True, 0.0)}
