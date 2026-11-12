@@ -1,0 +1,134 @@
+"""Rebuild the public R2 SD image in an isolated Linux image-building job."""
+import argparse
+import hashlib
+import json
+import os
+from pathlib import Path
+import shutil
+import subprocess
+import urllib.request
+
+from refresh_sd_image import audit_unprovisioned, digest, refresh, run
+from update_host import fetch, verify_signature
+
+BASE_URL = 'https://upload.shind0.synology.me/downloads/jetson/v0.4.0-boot-preview/carrot-jetson.img.zst'
+BASE_SHA = 'b277f3c6318d5b3210eee6e6aa4e74e492f73ffe2f9a669e108822a7ceb6c614'
+RAW_SHA = 'b11f5601d3a713ad0de23315ee90daddf5452f8e548f2c87c8eeec28d321e55f'
+
+
+def unpack_base(work):
+  import zstandard
+  compressed = work / 'base.img.zst'
+  urllib.request.urlretrieve(BASE_URL, compressed)
+  if digest(compressed) != BASE_SHA:
+    raise ValueError('Public R2 compressed image hash mismatch')
+  image = work / 'carrot-jetson.img'
+  h = hashlib.sha256()
+  with compressed.open('rb') as source, image.open('xb') as target:
+    with zstandard.ZstdDecompressor().stream_reader(source) as reader:
+      while block := reader.read(4 << 20):
+        h.update(block)
+        if block == bytes(len(block)):
+          target.seek(len(block), 1)
+        else:
+          target.write(block)
+      target.truncate()
+  if image.stat().st_size != 40 * (1 << 30) or h.hexdigest() != RAW_SHA:
+    raise ValueError('Public R2 raw image hash mismatch')
+  compressed.unlink()
+  return image
+
+
+def rebuild(work, manifest):
+  if os.geteuid() != 0 or work.exists():
+    raise ValueError('Use root and a new image workspace')
+  verify_signature(manifest)
+  work.mkdir(parents=True)
+  image = unpack_base(work)
+  bundle = work / 'runtime.tar.gz'
+  fetch(manifest['bundle']['url'], bundle, manifest['bundle']['sha256'], manifest['bundle']['size'], None)
+  model = work / 'model.onnx'
+  fetch(manifest['model']['url'], model, manifest['model']['sha256'], manifest['model']['size'], None)
+  layout = json.loads(subprocess.check_output(['sfdisk', '--json', str(image)]))['partitiontable']
+  parts = layout['partitions']
+  if (layout['label'] != 'gpt' or len(parts) != 17 or parts[0]['start'] != 3188736
+      or parts[16]['start'] != 24 * (1 << 30) // 512):
+    raise ValueError('Unexpected R2 partition layout')
+  loop = subprocess.check_output(['losetup', '--find', '--show', '--partscan', str(image)], text=True).strip()
+  mounted = []
+  try:
+    backing = subprocess.check_output(['losetup', '-n', '-O', 'BACK-FILE', loop], text=True).strip()
+    if not loop.startswith('/dev/loop') or Path(backing).resolve() != image.resolve():
+      raise ValueError('Unexpected output loop backing file')
+    run('udevadm', 'settle', '--timeout=10')
+    root, setup, data = [work / name for name in ('rootfs', 'setup', 'data')]
+    for number, path in ((1, root), (16, setup), (17, data)):
+      path.mkdir()
+      run('mount', loop + f'p{number}', path)
+      mounted.append(path)
+    if (data / 'identity').exists() or (setup / 'identity').exists():
+      raise ValueError('Personal identity in base image')
+    marker = refresh(root, setup, bundle)
+    runtime = root / 'opt/carrot-jetlink'
+    from model_pin import read_spec
+    spec = read_spec(runtime / 'current')
+    if spec['sha256'] != manifest['model']['sha256'] or spec['nbytes'] != model.stat().st_size:
+      raise ValueError('Image runtime and model contract differ')
+    # Only the new, mounted output image is changed. Discard reference-board
+    # TensorRT caches so the recipient builds for its own GPU at first startup.
+    cache = runtime / 'cache'
+    shutil.rmtree(cache)
+    (cache / 'models').mkdir(parents=True)
+    shutil.copyfile(model, cache / 'models' / (spec['sha256'][:16] + '.onnx'))
+    run('chown', '-R', '1000:1000', cache)
+    shutil.rmtree(data / 'runtime')
+    run('cp', '-a', runtime, data / 'runtime')
+    (data / 'runtime/protected-runtime.json').write_text('{"format":1}\n')
+    marker.update(state='PROTECTED_CANDIDATE_NOT_BOOT_TESTED', storage_format=1,
+                  data_partition=17, data_grow=False, image_bytes=image.stat().st_size,
+                  model_sha256=spec['sha256'], engine_prebuilt=False,
+                  power_setup='automatic MAXN_SUPER; matching Super boot firmware required')
+    for path in (root / 'etc/carrot-jetlink-image.json', setup / 'IMAGE.json'):
+      path.write_text(json.dumps(marker, indent=2) + '\n')
+    audit_unprovisioned(root, setup)
+    for copy in (runtime, data / 'runtime'):
+      assert (copy / 'current/SOURCE_COMMIT').read_text().strip() == manifest['source_commit']
+      assert digest(copy / 'cache/models' / (spec['sha256'][:16] + '.onnx')) == spec['sha256']
+    run('chroot', root, '/opt/carrot-jetlink/venv/bin/python',
+        '/opt/carrot-jetlink/current/tools/jetlink/server.py', '--check-imports')
+    run('chroot', root, '/opt/carrot-jetlink/venv/bin/python',
+        '/opt/carrot-jetlink/current/tools/jetlink/hud.py', '--help')
+    run('chroot', root, '/usr/sbin/visudo', '-cf', '/etc/sudoers')
+    run('sync', '-f', image)
+    for path in reversed(mounted):
+      run('umount', path)
+    mounted.clear()
+    for number in (1, 17):
+      result = subprocess.run(['e2fsck', '-f', '-p', loop + f'p{number}'])
+      if result.returncode not in (0, 1):
+        raise RuntimeError('Image filesystem validation failed')
+      run('zerofree', loop + f'p{number}')
+    run('fsck.vfat', '-n', loop + 'p16')
+  finally:
+    for path in reversed(mounted):
+      run('umount', path)
+    run('losetup', '-d', loop)
+  run('sgdisk', '-v', image)
+  compressed = image.with_suffix('.img.zst')
+  run('zstd', '-T2', '-3', image, '-o', compressed)
+  marker.update(image_sha256=digest(image), compressed_bytes=compressed.stat().st_size,
+                compressed_sha256=digest(compressed), base_raw_sha256=RAW_SHA,
+                bundle_sha256=manifest['bundle']['sha256'],
+                validation='Offline import, model hash, privacy and filesystem checks; physical boot pending')
+  (work / 'candidate.json').write_text(json.dumps(marker, indent=2) + '\n')
+  (work / 'SHA256SUMS').write_text(f'{marker["image_sha256"]}  {image.name}\n' +
+                                f'{marker["compressed_sha256"]}  {compressed.name}\n')
+  print(json.dumps(marker), flush=True)
+
+
+if __name__ == '__main__':
+  parser = argparse.ArgumentParser(description=__doc__)
+  parser.add_argument('--manifest', type=Path, required=True)
+  parser.add_argument('--output-dir', type=Path, required=True)
+  args = parser.parse_args()
+  rebuild(args.output_dir.resolve(), json.loads(args.manifest.read_text()))
