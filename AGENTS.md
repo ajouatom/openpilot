@@ -1,5 +1,24 @@
 # Repository memory
 
+- 2026-11-12: Ioniq5 b4dcfe6ce00fe149 route0b/12..14 on ffa5723e has174
+  fresh host samples, all15W/GPU624.75MHz/EMC2133MHz,53..57C,no thermal throttle,
+  CPU core means5..23%,5.2GiB available. Model56.864ms and724 frame gaps exactly
+  match invalid odometry; no USB disconnect/timeout evidence in these segments.
+  Add named NVIDIA MAXN_SUPER startup selection, once-per-boot locking, mode/
+  GPU-ceiling verification and explicit missing-profile/reboot/firmware failures
+  through host health and route logs. New image units precede Xorg/HUD/inference;
+  existing runtime attempts setup before backend imports. NVIDIA reboot prompts
+  are declined. Never infer full Super operation from the name alone or flash
+  QSPI blindly. N16 host8ca67794ca481a686a932185f6c1456435c8f864 signed/published,
+  67193367B/SHA256 ef782a0bed1a8f6e94c9715e2dba5da020df634d5a961a8ccd85deff9b0c26ec.
+  HTTPS/signature verified; Linux CI43166283666 main2502pass56skip plus other
+  groups and Windows installer pass. Other model host pins unchanged. Public SD
+  image binary not rebuilt; image-generation code includes the new service.
+  Reporter firmware/profile inventory, physical boot and latency cure await new
+  device evidence. An old protected image can still require an early-boot patch
+  if NVIDIA rejects its late mode switch. Private scratch2026-11-12-ioniq5-jetson
+  and2026-11-12-jetson-auto-super preserve evidence. Normal GitPull/full reboot.
+
 - 2026-11-11: Restore Long Kp/Ki/Kf for identified Ray EV CommaPedal with
   CC_ONLY_CAR/PEDAL_INTERCEPTOR and OP longitudinal. Shared capability gates
   catalog/snapshot and actual speed-PID tuning, startup plus ~1s refresh.
