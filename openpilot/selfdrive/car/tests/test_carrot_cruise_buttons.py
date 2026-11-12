@@ -42,6 +42,7 @@ def make_cruise_helper(button_kph, cruise_button_mode, carrot_cruise_active, cru
   helper.carrot_cruise_active = carrot_cruise_active
   helper.autoRoadSpeedOnEngage = False
   helper.nRoadLimitSpeed = 0
+  helper._road_limit_live = True
   helper._last_engaged_kph = 0
   helper._paddle_highway = False
 
@@ -902,3 +903,24 @@ def test_road_speed_adjust_lowers_cruise_without_auto_speed_up(upto):
 def test_road_speed_follow_mode_stays_off_without_auto_speed_up():
   helper = make_auto_speed_helper(0., -1, 60, 100)
   assert helper._auto_speed_up(60) == 60
+
+
+@pytest.mark.parametrize("live, car_limit, expected", [
+  (True, 0, 60),    # navigation app / KISA live: its limit
+  (False, 60, 60),  # the car reports a limit this cycle
+  (False, 0, 100),  # every source quiet: the kept 60 is stale, so the current speed (was 60 from 100 km/h)
+])
+def test_set_engage_ignores_a_stale_road_limit(live, car_limit, expected):
+  helper, CS, CC = make_cruise_helper(81, 0, carrot_cruise_active=False, cruise_enabled=False)
+  helper._prepare_buttons = lambda CS, v_cruise_kph, remote=None: (v_cruise_kph, ButtonType.decelCruise, False)
+  helper.v_ego_kph_set, helper.nRoadLimitSpeed, helper._road_limit_live = 100, 60, live
+  CS.speedLimit = car_limit
+  assert helper._update_cruise_buttons(CS, CC, 64) == expected
+
+
+@pytest.mark.parametrize("live, expected", [(True, 50), (False, 5)])
+def test_resume_engage_ignores_a_stale_road_limit(live, expected):
+  helper, CS, CC = make_cruise_helper(81, 0, carrot_cruise_active=False, cruise_enabled=False, cruise_speed_initialized=False)
+  helper.v_ego_kph_set = 0
+  helper.autoRoadSpeedOnEngage, helper.nRoadLimitSpeed, helper._road_limit_live = True, 50, live
+  assert helper._update_cruise_buttons(CS, CC, 80) == expected
