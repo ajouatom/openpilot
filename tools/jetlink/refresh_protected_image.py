@@ -124,6 +124,12 @@ def rebuild(work, manifest):
       if result.returncode not in (0, 1):
         raise RuntimeError('Image filesystem validation failed')
       run('zerofree', loop + f'p{number}')
+    # The public base's ESP retains a FAT dirty flag. Firmware staging needs a
+    # checked writable ESP, so repair only this new file-backed image offline.
+    result = subprocess.run(['fsck.vfat', '-a', loop + 'p10'])
+    if result.returncode not in (0, 1):
+      raise RuntimeError('EFI filesystem repair failed')
+    run('fsck.vfat', '-n', loop + 'p10')
     run('fsck.vfat', '-n', loop + 'p16')
   finally:
     for path in reversed(mounted):
