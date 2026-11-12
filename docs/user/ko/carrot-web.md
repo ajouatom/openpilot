@@ -133,6 +133,11 @@ Jetson만 연결된 경우 eGPU 모델 컴파일 버튼은 사용하지 않습�
 이 경우 NVIDIA의 해당 보드용 Super 부팅 펌웨어 설치가 필요합니다. SD 재기록이나 GitPull만으로
 보드 펌웨어가 갱신되지는 않습니다. 새 이미지의 첫 모델 준비에는 TensorRT 엔진 생성 시간이 필요합니다.
 
+Super 자동 설정과 N16 ONNX를 포함한 `v0.5.0-super-preview` SD 설치 시험판은
+ARM64 이미지 검사와 Windows 설치 준비 검증을 마쳤습니다. 실제 Jetson 부팅과 주행 성능은
+검증 전이며, 호환되는 Super 부팅 펌웨어가 필요합니다.
+[다운로드와 검증 범위](https://github.com/ajouatom/openpilot/releases/tag/jetson-super-sd-20261112)를 확인하세요.
+
 처음 설치한다면 [한글 설치 안내](https://github.com/ajouatom/carrot-jetson/blob/main/docs/INSTALL-WINDOWS-KO.md)를
 따라 설치 ZIP을 풀고 01·02 배치 파일을 실행합니다. 이미지 준비와 USB-C 수정은 자동입니다. Wi-Fi는 연결된 콤마에서 전달받으며
 SSID·비밀번호 변경 때문에 SD카드를 꺼낼 필요는 없습니다. P단에서 지도 대신 주행 요약을
