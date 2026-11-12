@@ -356,10 +356,12 @@ class DesireHelper:
 
     # obstacles
     v_ego = carstate.vEgo
+    left_rear = SideState.rear_release_distance(carstate.leftLongDist, carstate.leftRearLongDist, carstate.leftBlindspotOnnx)
+    right_rear = SideState.rear_release_distance(carstate.rightLongDist, carstate.rightRearLongDist, carstate.rightBlindspotOnnx)
     self.left.update_obstacles(v_ego, radarState.leadLeft, carstate.leftBlindspot, ignore_bsd,
-                               bsd_hold_sec=2.0, radar_objects=radarState.leadsLeft)
+                               bsd_hold_sec=2.0, radar_objects=radarState.leadsLeft, rear_dist=left_rear)
     self.right.update_obstacles(v_ego, radarState.leadRight, carstate.rightBlindspot, ignore_bsd,
-                                bsd_hold_sec=2.0, radar_objects=radarState.leadsRight)
+                                bsd_hold_sec=2.0, radar_objects=radarState.leadsRight, rear_dist=right_rear)
 
     # compute available (include BSD+object)
     if self.laneLineCheck >= 1:

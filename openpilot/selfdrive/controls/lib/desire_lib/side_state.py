@@ -1,5 +1,6 @@
 from dataclasses import dataclass, field
 from collections import deque
+from itertools import pairwise
 
 import numpy as np
 from openpilot.common.realtime import DT_MDL
@@ -26,6 +27,14 @@ SIDE_BSD_RECEDING_CLEAR_MIN_DREL = 5.0
 SIDE_BSD_RECEDING_MIN_DREL_GAIN = 1.0
 SIDE_BSD_RECEDING_CONFIRM_SEC = 0.25
 SIDE_BSD_RECEDING_MAX_DREL_STEP_BACK = 0.25
+
+# The OEM indicator stays on until the car we just passed is ~17 m behind. The rear-corner
+# distance (carState.left/rightRearLongDist, one object at a time) shows it falling back.
+SIDE_BSD_REAR_MIN_DIST = 8.0
+SIDE_BSD_REAR_MAX_DIST = 24.8  # display saturates ~24.8-25.5: an approaching car beyond it is unseen
+SIDE_BSD_REAR_WINDOW_SEC = 0.5
+SIDE_BSD_REAR_MIN_RATE = 1.0   # m/s, distance growing = receding
+SIDE_BSD_REAR_MAX_STEP = 2.0   # m per frame; a larger jump is a different object
 
 
 @dataclass
@@ -77,6 +86,8 @@ class SideState:
   bsd_receding_frames: int = 0
   bsd_receding_start_d_rel: float = 0.0
   bsd_receding_last_d_rel: float = 0.0
+  bsd_rear_dist_history: deque = field(default_factory=lambda: deque(maxlen=1 + round(SIDE_BSD_REAR_WINDOW_SEC / DT_MDL)))
+  bsd_rear_receding: bool = False
 
   # computed lane change availability (includes BSD+object)
   lane_change_available_geom: bool = False
@@ -133,7 +144,8 @@ class SideState:
                        blindspot: bool,      # carstate.leftBlindspot/rightBlindspot
                        ignore_bsd: bool,
                        bsd_hold_sec: float = 2.0,
-                       radar_objects=()):
+                       radar_objects=(),
+                       rear_dist: float = 0.0):  # carstate.left/rightRearLongDist, 0 = nothing reported
     radar_objects = tuple(radar_objects)
     corner_objects = tuple(obj for obj in radar_objects if self._is_corner_radar_object(obj))
     primary_object_detected = self._side_lead_is_unsafe(v_ego, radar_obj)
@@ -149,7 +161,11 @@ class SideState:
 
     # Hold BSD detection for a short period after it is observed.
     self.bsd_detected_now = bool(blindspot)
-    if self.bsd_detected_now and not ignore_bsd:
+    self.bsd_rear_receding = self._bsd_rear_receding(rear_dist)
+    if self.bsd_rear_receding and not ignore_bsd:
+      # The indicator is showing the car we just passed: no hold while it keeps falling back.
+      self.bsd_hold_counter = 0
+    elif self.bsd_detected_now and not ignore_bsd:
       self.bsd_hold_counter = int(bsd_hold_sec / DT_MDL)
       self._reset_bsd_receding_track()
     elif not ignore_bsd:
@@ -168,6 +184,23 @@ class SideState:
     else:
       self.bsd_hold_counter = 0
       self._reset_bsd_receding_track()
+
+  @staticmethod
+  def rear_release_distance(front_dist: float, rear_dist: float, vision_blindspot: bool) -> float:
+    # carstate.*Blindspot also carries the front-corner block (0..7 m, a car beside us) and the vision BSD; the
+    # rear-distance release only answers for a car behind, so it stays off while either of those is set
+    return 0.0 if (0.0 < front_dist < 7.0 or vision_blindspot) else rear_dist
+
+  def _bsd_rear_receding(self, rear_dist: float) -> bool:
+    h = self.bsd_rear_dist_history
+    h.append(float(rear_dist))
+    return (
+      len(h) == h.maxlen
+      and h[-1] >= SIDE_BSD_REAR_MIN_DIST
+      and all(0.0 < d < SIDE_BSD_REAR_MAX_DIST for d in h)
+      and all(abs(b - a) < SIDE_BSD_REAR_MAX_STEP for a, b in pairwise(h))
+      and (h[-1] - h[0]) / ((len(h) - 1) * DT_MDL) > SIDE_BSD_REAR_MIN_RATE
+    )
 
   def _reset_bsd_receding_track(self):
     self.bsd_receding_track_id = -1

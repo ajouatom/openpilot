@@ -1,5 +1,8 @@
 from types import SimpleNamespace
 
+import pytest
+
+from openpilot.common.realtime import DT_MDL
 from openpilot.selfdrive.controls.lib.desire_lib.side_state import SideState
 
 
@@ -115,6 +118,82 @@ class TestLaneChangeSideObstacles:
     assert side.side_object_detected
 
 
+def rear_step(side: SideState, rear_dist: float, blindspot: bool = True):
+  side.update_obstacles(25.0, SimpleNamespace(status=False), blindspot, False, rear_dist=rear_dist)
+  side.compute_lane_change_available(True, False)
+  return side.bsd_hold_counter
+
+
+def rear_side():
+  side = SideState("left")
+  side.lane_available = True
+  return side
+
+
+class TestBsdRearDistanceRelease:
+  # Model rate 20 Hz: 0.08 m/frame = 1.6 m/s.
+  def test_receding_passed_car_releases_bsd(self):
+    side = rear_side()
+    holds = [rear_step(side, 8.0 + 0.08 * i) for i in range(50)]
+
+    assert all(h > 0 for h in holds[:10])  # 0.5 s of history first
+    assert holds[10] == 0
+    assert side.lane_change_available
+
+  def test_approaching_car_keeps_blocking(self):
+    side = rear_side()
+    for i in range(50):
+      assert rear_step(side, 12.0 - 0.08 * i) > 0
+    assert not side.lane_change_available
+
+  @pytest.mark.parametrize("rear_dist", [25.0, 0.0])
+  def test_saturated_or_missing_distance_keeps_blocking(self, rear_dist):
+    side = rear_side()
+    for _ in range(50):
+      assert rear_step(side, rear_dist) > 0
+    assert not side.lane_change_available
+
+  def test_target_jump_waits_for_a_continuous_window(self):
+    side = rear_side()
+    for _ in range(20):
+      rear_step(side, 2.0)
+    holds = [rear_step(side, 16.0 + 0.08 * i) for i in range(30)]
+
+    assert all(h > 0 for h in holds[:10])
+    assert holds[10] == 0
+
+  def test_hold_rearms_when_the_car_closes_again(self):
+    side = rear_side()
+    d = 8.0
+    for _ in range(20):
+      d += 0.08
+      rear_step(side, d)
+    assert side.bsd_hold_counter == 0
+
+    released = []
+    for _ in range(10):
+      d -= 0.08
+      released.append(rear_step(side, d) == 0)
+
+    assert released.index(False) == 1  # window rate drops under 1 m/s on the 2nd closing frame
+    assert side.bsd_hold_counter == int(2.0 / DT_MDL)
+    assert not side.lane_change_available
+
+  def test_receding_under_min_distance_keeps_hold(self):
+    side = rear_side()
+    holds = [rear_step(side, 5.0 + 0.08 * i) for i in range(45)]
+
+    assert holds[37] > 0   # 7.96 m
+    assert holds[38] == 0  # 8.04 m
+
+  def test_default_rear_distance_keeps_old_behaviour(self):
+    side = SideState("left")
+    side.update_obstacles(25.0, SimpleNamespace(status=False), True, False)
+    for _ in range(10):
+      side.update_obstacles(25.0, SimpleNamespace(status=False), False, False)
+    assert side.bsd_hold_counter == int(2.0 / DT_MDL) - 10
+
+
 class TestLaneChangeAvailabilityRelease:
   def test_legal_lane_color_releases_available_side(self):
     side = SideState("left")
@@ -137,3 +216,13 @@ class TestLaneChangeAvailabilityRelease:
 
     assert side.lane_change_available
     assert side.lane_change_available_released
+
+
+@pytest.mark.parametrize("front, vision, rear, expected", [
+  (0.0, False, 12.0, 12.0),   # only a car behind: the release may use it
+  (5.0, False, 12.0, 0.0),    # a car beside (front corner 0..7 m) also sets the blindspot: no release
+  (9.0, False, 12.0, 12.0),   # front object beyond 7 m does not set the blindspot
+  (0.0, True, 12.0, 0.0),     # vision BSD also feeds the blindspot: no release
+])
+def test_rear_release_distance_ignores_cars_beside(front, vision, rear, expected):
+  assert SideState.rear_release_distance(front, rear, vision) == expected
