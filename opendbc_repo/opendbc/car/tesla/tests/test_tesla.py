@@ -1,6 +1,7 @@
 import re
 import time
 import unittest
+from unittest.mock import patch
 
 from opendbc.can import CANPacker
 from opendbc.car import Bus, gen_empty_fingerprint, structs
@@ -219,7 +220,9 @@ class TestTeslaFingerprint(unittest.TestCase):
     fingerprint = gen_empty_fingerprint()
     fingerprint[CANBUS.vehicle][0x3DF] = 8
 
-    CP = CarInterface.get_params(CAR.TESLA_MODEL_3, fingerprint, [], True, False, False)
+    with patch("opendbc.car.tesla.interface.Params") as store:
+      store.return_value.get_bool.side_effect = lambda key: key == "TeslaAutoSpeedLimit"
+      CP = CarInterface.get_params(CAR.TESLA_MODEL_3, fingerprint, [], True, False, False)
     assert CP.flags & TeslaFlags.HAS_VEHICLE_BUS
     assert CP.flags & TeslaFlags.AUTO_SPEED_LIMIT
     assert CP.safetyConfigs[0].safetyParam & TeslaSafetyFlags.AUTO_SPEED_LIMIT
