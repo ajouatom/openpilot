@@ -6,12 +6,13 @@
   match invalid odometry; no USB disconnect/timeout evidence in these segments.
   Add named NVIDIA MAXN_SUPER startup selection, once-per-boot locking, mode/
   GPU-ceiling verification and explicit missing-profile/reboot/firmware failures
-  through host health and route logs. New image units precede Xorg/HUD/inference;
+  through host health and route logs. New image units precede Xorg/HUD/inference
+  and update-apply candidate GPU validation;
   existing runtime attempts setup before backend imports. NVIDIA reboot prompts
   are declined. Never infer full Super operation from the name alone or flash
-  QSPI blindly. N16 host8ca67794ca481a686a932185f6c1456435c8f864 signed/published,
-  67193367B/SHA256 ef782a0bed1a8f6e94c9715e2dba5da020df634d5a961a8ccd85deff9b0c26ec.
-  HTTPS/signature verified; Linux CI43166283666 main2502pass56skip plus other
+  QSPI blindly. N16 host5a2784cc2dc920cf54d2e40e7e4d9dad1c56b955 signed/published,
+  67193439B/SHA256 4b48fd829c6aa1aa12422404090eb7e5f87370e8187e3ce99636be2a30166c94.
+  HTTPS/signature verified; Linux CI43166733955 main2502pass56skip plus other
   groups and Windows installer pass. Other model host pins unchanged. Public SD
   image binary not rebuilt; image-generation code includes the new service.
   Reporter firmware/profile inventory, physical boot and latency cure await new
