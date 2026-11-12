@@ -124,6 +124,12 @@ Carrot Web 접속 주소는 콤마 IP이며, 카드 안의 Jetson IP는 Jetson �
 실제 오류·고온이 발생한 경우를 구분합니다. 표시를 없애려고 실제 오류를 무시하거나 설정을 바꾸지 마세요.
 Jetson만 연결된 경우 eGPU 모델 컴파일 버튼은 사용하지 않습니다.
 
+자동 전력 설정을 포함한 Jetson 런타임은 시작할 때 보드의 NVIDIA 설정에서
+`MAXN_SUPER`를 찾아 선택하고 클럭을 설정합니다. 별도로 전력모드를 선택할 필요가 없습니다.
+상태 카드에 `MAXN_SUPER profile missing` 또는 `firmware_clock_limit` 관련 문구가 나오면
+설치 이미지·보드 부트 펌웨어의 호환 여부를 점검해야 합니다. 재부팅 필요 문구가 나오면
+정차 후 Jetson을 완전히 재부팅합니다. 적용 결과와 지원 모드 목록은 주행 로그에도 남습니다.
+
 처음 설치한다면 [한글 설치 안내](https://github.com/ajouatom/carrot-jetson/blob/main/docs/INSTALL-WINDOWS-KO.md)를
 따라 설치 ZIP을 풀고 01·02 배치 파일을 실행합니다. 이미지 준비와 USB-C 수정은 자동입니다. Wi-Fi는 연결된 콤마에서 전달받으며
 SSID·비밀번호 변경 때문에 SD카드를 꺼낼 필요는 없습니다. P단에서 지도 대신 주행 요약을

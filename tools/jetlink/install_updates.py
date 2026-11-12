@@ -11,13 +11,14 @@ def migrate_running_release(runtime=Path('/opt/carrot-jetlink')):
   """A signed runtime can migrate its own updater without per-car SSH setup.
 
   Published images already grant the jetlink service account passwordless sudo.
-  Enable only next boot so installing never interrupts the current session.
+  Updater migration takes effect next boot. The power check runs at the server
+  entry point before backend imports and inference, once per boot.
   """
   try:
     subprocess.run(['sudo', '-n', sys.executable, str(runtime / 'current/tools/jetlink/install_updates.py'),
-                    '--performance-runtime'], check=True, timeout=15)
+                    '--performance-runtime'], check=True, timeout=45)
   except (OSError, subprocess.SubprocessError) as exc:
-    logging.getLogger('jetlink').warning('Jetson performance observer unavailable: %s', type(exc).__name__)
+    logging.getLogger('jetlink').warning('Jetson startup power setup or performance observer unavailable: %s', type(exc).__name__)
   if Path('/etc/systemd/system/carrot-jetlink-boot-display.service').is_file():
     migrate_boot_display(runtime)
   if not (runtime / 'current/tools/jetlink/boot_update.py').is_file():
@@ -116,6 +117,10 @@ def bootstrap(root, source, defer_this_boot=False):
 def configure(root, source):
   root = Path(root)
   bootstrap(root, source)
+  # Optional only for older offline payloads that predate automatic power setup.
+  if (Path(source) / 'power_setup.py').is_file():
+    from power_setup import configure as configure_power
+    configure_power(root, source)
   systemd = root / 'etc/systemd/system'
   command = '/opt/carrot-jetlink/venv/bin/python /opt/carrot-jetlink/updater/update_host.py'
   units = {
@@ -166,9 +171,11 @@ if __name__ == '__main__':
   parser = argparse.ArgumentParser(description=__doc__)
   parser.add_argument('--boot-display-runtime', action='store_true', help='Use the signed display runtime for this boot only')
   parser.add_argument('--bootstrap-only', action='store_true', help='Migrate an installed runtime; enable from its next boot without OS writes')
-  parser.add_argument('--performance-runtime', action='store_true', help='Start read-only performance sampling for this boot')
+  parser.add_argument('--performance-runtime', action='store_true', help='Apply startup Super mode and start performance sampling')
   args = parser.parse_args()
   if args.performance_runtime:
+    from power_setup import run_once
+    run_once()
     configure_runtime_performance()
   elif args.boot_display_runtime:
     configure_runtime_boot_display()

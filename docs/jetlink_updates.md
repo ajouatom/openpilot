@@ -41,6 +41,16 @@ uses one core as 100 percent. The first sample has no utilization delta.
 Server threads include CPU time and runnable scheduler wait over the sampling
 interval, plus the kernel's schedstats enablement flag. These measurements help
 distinguish GPU completion waits from CPU scheduling contention.
+Automatic startup power setup selects the installed NVIDIA `MAXN_SUPER` profile
+by name and verifies the resulting mode and GPU ceiling. New-image performance
+units run this before inference, Xorg and HUD. Existing signed runtimes run the
+same check at server startup. NVIDIA reboot prompts are declined, with an explicit
+pending-reboot result. Firmware with no Super profile or a restricted GPU ceiling
+is reported for image/QSPI repair. The runtime does not flash board firmware.
+The `/run/carrot-jetlink-power.json` result includes L4T, compatible strings,
+profile names/IDs and application status. It is copied into cached health and
+`jetsonPerformance` route events. A once-per-boot lock prevents repeated changes.
+
 `nvpmodel -q` supplies the selected mode and ID every 30 seconds. Its query age
 is included. Root access allows reading BPMP debugfs through the observer.
 The observer writes a bounded snapshot under `/run`; the inference process
