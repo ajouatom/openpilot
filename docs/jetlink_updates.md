@@ -87,6 +87,12 @@ staging is serialized through this image service. This is an SD-image feature.
 Bootable JetPack 6.x firmware is a prerequisite. Physical firmware update and
 power-interruption recovery still require device testing.
 
+Fresh-image DATA admission accepts an explicit preloaded ONNX descriptor before
+the first TensorRT engine has been built. Legacy completed-runtime markers keep
+their existing last-loaded check. The image builder runs the installed storage
+helper inside the image against the mounted DATA tree to verify this first-boot
+path. The backend still validates the model and builds the recipient's engine.
+
 `nvpmodel -q` supplies the selected mode and ID every 30 seconds. Its query age
 is included. Root access allows reading BPMP debugfs through the observer.
 The observer writes a bounded snapshot under `/run`; the inference process

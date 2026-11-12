@@ -176,6 +176,7 @@ def test_public_integrated_package_requires_checks_for_exact_image(tmp_path, mon
   with pytest.raises(ValueError, match='capsule verification'):
     publisher.integrated_release(image, compressed, metadata, offline_preview=True)
   value['offline_checks']['firmware_capsule'] = True
+  value['offline_checks']['fresh_data_admission'] = True
   metadata.write_text(json.dumps(value))
   preview = publisher.integrated_release(image, compressed, metadata, offline_preview=True)
   assert preview['version'] == 'v0.6.0-super-auto-preview'

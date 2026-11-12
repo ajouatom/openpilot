@@ -68,13 +68,14 @@ def integrated_release(image, compressed, metadata, validation=None, owner_boot=
                    validation_checks={key: True for key in checks}, physical_boot=False,
                    engine_prebuilt=False, matching_super_firmware_required=True)
     if value.get('automatic_super_firmware') is True:
-      if value.get('offline_checks', {}).get('firmware_capsule') is not True:
+      if any(value.get('offline_checks', {}).get(key) is not True for key in ('firmware_capsule', 'fresh_data_admission')):
         raise ValueError('Automatic firmware image requires capsule verification')
       release.update(version='v0.6.0-super-auto-preview', automatic_super_firmware=True,
                      matching_super_firmware_required=False, bootable_jetpack6_firmware_required=True,
                      builder_commit=value.get('builder_commit'),
                      validation='Offline image and capsule checks passed. Physical firmware update and boot remain unverified.')
       release['validation_checks']['firmware_capsule'] = True
+      release['validation_checks']['fresh_data_admission'] = True
   elif owner_boot is not None:
     evidence = json.loads(owner_boot.read_text(encoding='utf-8'))
     if (evidence.get('image_sha256') != value['image_sha256']
