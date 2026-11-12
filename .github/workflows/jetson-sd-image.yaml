@@ -1,0 +1,35 @@
+name: Jetson SD image build
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  image:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Install image tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y zstd gdisk dosfstools zerofree
+          python -m pip install zstandard pycryptodome
+          df -h .
+      - name: Rebuild and validate the signed N16 image
+        run: |
+          sudo --preserve-env=PATH env PYTHONPATH=.:tools/jetlink:third_party/jetlink \
+            "$(which python)" tools/jetlink/refresh_protected_image.py \
+            --manifest openpilot/selfdrive/modeld/jetlink/host_release.json \
+            --output-dir "$RUNNER_TEMP/carrot-image"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: carrot-jetson-sd
+          compression-level: 0
+          retention-days: 3
+          path: |
+            ${{ runner.temp }}/carrot-image/carrot-jetson.img.zst
+            ${{ runner.temp }}/carrot-image/candidate.json
+            ${{ runner.temp }}/carrot-image/SHA256SUMS

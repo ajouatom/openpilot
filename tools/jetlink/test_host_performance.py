@@ -121,6 +121,10 @@ def test_cached_sample_reaches_route_event_and_expires(sample_env, monkeypatch):
   import openpilot.selfdrive.modeld.jetlink.performance_log as recorder
   monkeypatch.setattr(recorder.time, 'monotonic', lambda: clock[0])
   status = root / 'status.json'
+  power_status = root / 'run/carrot-jetlink-power.json'
+  power_status.parent.mkdir(parents=True, exist_ok=True)
+  power_status.write_text(json.dumps({'version': 1, 'state': 'super_profile_missing',
+                                    'profiles': [{'name': '15W', 'id': 0}]}))
   status.write_text(json.dumps(performance.Sampler(root).sample()))
   events = []
   logger = PerformanceLog(lambda name, **data: events.append((name, data)),
@@ -132,6 +136,7 @@ def test_cached_sample_reaches_route_event_and_expires(sample_env, monkeypatch):
   assert name == 'jetsonPerformance' and event['status'] == 'ok'
   assert event['frame_id'] == 200 and event['usb_seq'] == 42 and event['server_execution_us'] == 39000
   assert event['sample']['emc']['clock_mhz'] == 2133
+  assert event['sample']['power_setup']['state'] == 'super_profile_missing'
   assert 'private' not in json.dumps(event)
   logger.record(state, 10, 201, 43, [39000, 800, 40000])
   assert len(events) == 1

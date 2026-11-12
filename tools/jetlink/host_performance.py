@@ -153,6 +153,8 @@ class Sampler:
     emc = '/sys/kernel/debug/bpmp/debug/clk/emc/'
     result['emc'] = {key: self.number(emc + filename, scale) for key, filename, scale in (
       ('clock_mhz', 'rate', 1e6), ('max_mhz', 'max_rate', 1e6), ('rate_locked', 'mrq_rate_locked', 1))}
+    from power_setup import read_status
+    result['power_setup'] = read_status(self.root / 'run/carrot-jetlink-power.json')
     result['cooling'] = []
     for path in sorted((self.root / 'sys/class/thermal').glob('cooling_device*'))[:32]:
       relative = '/' + path.relative_to(self.root).as_posix()

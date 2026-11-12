@@ -12,6 +12,25 @@ STATUS = Path('/dev/shm/carrot-jetlink-health.json')
 THERMAL = Path('/sys/class/thermal')
 
 
+def power_health(value):
+  setup = (value.get('performance') or {}).get('power_setup') or {}
+  state = setup.get('state')
+  messages = {
+    'super_profile_missing': 'MAXN_SUPER profile missing: check Jetson image / QSPI firmware',
+    'super_firmware_required': 'Non-Super boot firmware detected: install matching Orin Nano Super firmware; SD/Git update alone cannot select MAXN_SUPER',
+    'unsupported_board': 'Automatic MAXN_SUPER needs the supported Orin Nano board',
+    'reboot_required': 'MAXN_SUPER pending: full Jetson reboot required',
+    'mode_apply_failed': 'MAXN_SUPER selection failed: check boot power setup',
+    'mode_verify_failed': 'MAXN_SUPER selection could not be verified',
+    'clock_apply_failed': 'MAXN_SUPER clock setup failed',
+    'firmware_clock_limit': 'MAXN_SUPER GPU ceiling below 1000MHz: check image / QSPI firmware',
+    'setup_failed': 'Jetson power setup failed: see jetsonPerformance log',
+  }
+  if state in messages:
+    value['reason'] = '; '.join(filter(None, [value.get('reason'), messages[state]]))[:240]
+    value.update(severity='error', power_error=True)
+
+
 def storage_health(value, status=Path('/run/carrot-storage.json'), marker=Path('/etc/carrot-jetlink-protected.json')):
   if not marker.exists():
     value['storage_mode'] = 'legacy-writable'
@@ -117,6 +136,7 @@ class HostHealth:
       try:
         value = thermal_health()
         value['performance'] = read_snapshot()
+        power_health(value)
         storage_health(value)
         try:
           value['addresses'] = network_addresses()

@@ -28,7 +28,7 @@ class PerformanceLog:
         if all(math.isfinite(v) and v >= 0 for v in (receipt_age, host_age, sample_age)) and age < 3:
           # Bound older/third-party peers too. No addresses, credentials or argv.
           sample = {key: performance[key] for key in (
-            'version', 'sample_mono', 'board', 'power_mode', 'cpu', 'gpu', 'emc', 'cooling',
+            'version', 'sample_mono', 'board', 'power_mode', 'power_setup', 'cpu', 'gpu', 'emc', 'cooling',
             'power_rails', 'memory', 'top_processes', 'server_threads', 'schedstats_enabled',
             'unavailable', 'sample_duration_ms', 'status', 'error') if key in performance}
           if len(json.dumps(sample)) > 16384:

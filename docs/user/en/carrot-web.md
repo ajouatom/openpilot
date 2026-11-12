@@ -123,6 +123,17 @@ from active inference losing its connection, a real error or excessive heat.
 Do not suppress real faults to clear a warning. The eGPU model compilation button
 is unavailable for a Jetson-only installation.
 
+Jetson runtimes with automatic power setup select the board's installed NVIDIA
+`MAXN_SUPER` profile at startup and configure its clocks. Power-mode selection
+is automatic. A missing-profile or firmware-clock-limit message on the status
+card calls for checking image and board boot-firmware compatibility. If the
+message requests a reboot, fully reboot Jetson while parked. Setup results and
+available profiles are also recorded in the route log.
+`Non-Super boot firmware` indicates that the board is running a regular-mode
+boot configuration. Install NVIDIA's matching Super boot firmware for that board.
+Rewriting the SD or pulling Git alone does not update board firmware. The new
+image also needs time to build its TensorRT engine during initial model preparation.
+
 Use the [short Korean installation guide](https://github.com/ajouatom/carrot-jetson/blob/main/docs/INSTALL-WINDOWS-KO.md):
 extract the installer ZIP and run 01, then 02. Image preparation and the USB-C fix are automatic. Wi-Fi settings come from the connected
 comma, so changing its SSID/password does not require removing the SD card.
