@@ -1,3 +1,4 @@
+import time
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -464,3 +465,123 @@ class TestAtcPhysicalIndicator:
     for _ in range(24):
       self.update(left_blinker=False,lane_change_prob=0.)
     assert self.helper.auto_turn_signal == LCD.none
+
+
+class TestKickModelOwnership:
+  """CanfdBlinkerKickModel: a lane change the driver's lamp did not start owns its lamp side on the Starting frame
+  (indicatorIsolationMask), so carcontroller.kick_pulse may light it without the lamp reading back as driver input."""
+  def setup_method(self):
+    TestDesireHelperStalkRequest.setup_method(self)
+    self.cc = self.md = None
+    self.seen = []  # (cc frame, laneChangeState the carcontroller saw)
+
+  def step(self, cmd=None, left=False, right=False, prob=0.5, lateral=True):
+    car = SimpleNamespace(canValid=True, leftBlinker=left, rightBlinker=right, vEgo=25., aEgo=0., trailerConnected=False,
+                          steeringTorque=0., steeringPressed=False, blinkerLever=0, naviTunnel=False, naviRoundabout=False)
+    self.helper.bluetooth_commands = SimpleNamespace(read=lambda allowed: cmd if allowed else None)
+    self.helper.update(car, SimpleNamespace(), lateral, prob, self.carrot_man, SimpleNamespace())
+    return self.helper.lane_change_state
+
+  def test_remote_start_owns_its_side(self):
+    for cmd, bit in (('laneLeft', 1), ('laneRight', 2)):
+      self.setup_method()
+      self.helper.kick_model = True
+      assert self.step(cmd) == LCS.preLaneChange and self.helper.boundary_indicator.blocked == 0
+      assert self.step() == LCS.laneChangeStarting and self.helper.boundary_indicator.blocked == bit
+
+  def test_driver_lamp_start_does_not_own(self):
+    self.helper.kick_model = True
+    self.step()
+    assert self.step(left=True) == LCS.preLaneChange
+    assert self.step(left=True) == LCS.laneChangeStarting and self.helper.boundary_indicator.blocked == 0
+
+  def test_lamp_already_on_owns_nothing(self):
+    # kick_pulse never kicks over a lit lamp: owning it would only block the same-side lever for nothing
+    for lamp, refreshed in ((True, False), (False, True)):
+      self.setup_method()
+      self.helper.kick_model = True
+      bi = self.helper.boundary_indicator
+      bi.own(time.monotonic() - 5., 1)  # an earlier change still owns a lit left lamp: not driver input
+      until = bi.isolate_until
+      assert self.step('laneLeft', left=lamp) == LCS.preLaneChange
+      assert self.step(left=lamp) == LCS.laneChangeStarting and (bi.isolate_until > until) == refreshed
+
+  def test_key_off_owns_nothing(self):
+    self.step('laneLeft')
+    assert self.step() == LCS.laneChangeStarting and self.helper.boundary_indicator.blocked == 0
+
+  def test_needs_both_keys(self):
+    for on, want in (((), False), (('CanfdBlinkerKick',), False), (('CanfdBlinkerKickModel',), False),
+                     (('CanfdBlinkerKick', 'CanfdBlinkerKickModel'), True)):
+      self.helper.params = SimpleNamespace(get_bool=lambda key, on=on: key in on, get_int=lambda key: 0, get_float=lambda key: 0.)
+      self.helper.frame = 100
+      DesireHelper._update_params_periodic(self.helper)
+      assert self.helper.kick_model == want
+
+  def run(self, frames, lamp=lambda j: False, dh=lambda k: {}, cc_model=lambda j: True):
+    """DesireHelper at 20 Hz feeding its modelV2 meta (seen by the next 100 Hz frame) into CarController.kick_pulse.
+    Every kick must carry its side's ownership bit in that same modelV2. -> [(cc frame, side)]"""
+    from opendbc.car import structs
+    from opendbc.car.hyundai.carcontroller import CarController, BLINKER_PULSE_FRAMES
+    from opendbc.car.hyundai.lane_crossing import LaneCrossing
+    cc = self.cc = self.cc or SimpleNamespace(
+      blinker_control=True, blinker_kick_model=True, lane_crossing=LaneCrossing(), blinker_side=0, blinker_pulse_end=0,
+      frame=0, yellow_until=[0, 0], lane_change_prev='off', model_pulse=False, params=SimpleNamespace(STEER_THRESHOLD=250))
+    md, kicks, start = self.md, [], cc.frame
+    for j in range(start, start + frames):
+      new = None
+      if j % 5 == 0:
+        opts = dh(j // 5)
+        self.helper.kick_model = opts.pop('kick_model', self.helper.kick_model)
+        self.step(left=lamp(j), **opts)
+        new = log.ModelDataV2.new_message()
+        new.meta.laneChangeState = self.helper.lane_change_state
+        new.meta.laneChangeDirection = self.helper.lane_change_direction
+        new.meta.indicatorIsolationMask = self.helper.boundary_indicator.blocked
+        new = new.as_reader()
+      cc.blinker_kick_model = cc_model(j)
+      before = cc.blinker_pulse_end
+      self.seen.append((j, md and md.meta.laneChangeState))
+      CarController.kick_pulse(cc, SimpleNamespace(modelV2=md, out=SimpleNamespace(
+        gearShifter=structs.CarState.GearShifter.drive, leftBlinker=lamp(j), rightBlinker=False, steeringTorque=0.,
+        naviTunnel=False, naviRoundabout=False, leftLaneLine=10, rightLaneLine=10, cruiseCancelState=False)))
+      if cc.blinker_pulse_end != before and cc.blinker_pulse_end == j + BLINKER_PULSE_FRAMES:
+        assert md.meta.indicatorIsolationMask & (cc.blinker_side - 2), (j, cc.blinker_side)
+        kicks.append((j, cc.blinker_side))
+      md = new or md
+      cc.frame += 1
+    self.md = md
+    return kicks
+
+  def test_combined_kick_implies_ownership(self):
+    # 1) the driver's one-touch lamp ends within +-100 ms of the Starting edge: never owned, never kicked
+    self.helper.kick_model = True
+    self.run(100, lambda j: j >= 10)
+    edge = next(j for j, state in self.seen if state == 'laneChangeStarting')  # first CC frame that sees it
+    for offset in range(-10, 11):
+      self.setup_method()
+      self.helper.kick_model = True
+      assert self.run(300, lambda j, off=edge + offset: 10 <= j < off) == [], offset
+      assert self.helper.boundary_indicator.blocked == 0
+
+    # 2) the key just turned on: carcontroller has it, DesireHelper reads it mid-change -> no kick for this change;
+    #    the next remote change is owned and kicked once; carcontroller turning it on after an edge does not kick late
+    self.setup_method()
+    remote = lambda k, cmd: {'cmd': cmd} if k == 2 else {'prob': 0.} if k > 10 else {}
+    assert self.run(60, dh=lambda k: dict(remote(k, 'laneLeft'), **({'kick_model': True} if k == 6 else {}))) == []
+    assert self.run(200, dh=lambda k: {'prob': 0.}) == [] and self.helper.lane_change_state == LCS.off
+    kicks = self.run(300, dh=lambda k: remote(k - 52, 'laneRight'))
+    assert [side for _, side in kicks] == [4] and self.helper.boundary_indicator.blocked == 2
+    self.setup_method()
+    self.helper.kick_model = True
+    assert self.run(300, dh=lambda k: remote(k, 'laneLeft'), cc_model=lambda j: j >= 30) == []
+
+    # 3) a remote change cancelled (disengaged) right after its kick, then the lamp rising: the kick stops with the
+    #    change and the lamp is the owned side, so no new change starts from it
+    self.setup_method()
+    self.helper.kick_model = True
+    kicks = self.run(40, dh=lambda k: {'cmd': 'laneLeft'} if k == 2 else {})
+    assert [side for _, side in kicks] == [3] and self.helper.lane_change_state == LCS.laneChangeStarting
+    assert self.run(10, dh=lambda k: {'lateral': False}) == [] and self.helper.lane_change_state == LCS.off
+    assert self.cc.blinker_pulse_end <= self.cc.frame  # cut
+    assert self.run(200, lamp=lambda j: True) == [] and self.helper.lane_change_state == LCS.off

@@ -279,6 +279,7 @@ class CarController(CarControllerBase):
     self.depart_jerk = False
     self.blinker_control = False
     self.blinker_kick_mode = 1  # CanfdBlinkerKickMode: 0 only after an ack, 1 panda piggyback, 2 direct 25 Hz, 3 direct 100 Hz
+    self.blinker_kick_model = False  # CanfdBlinkerKickModel: also kick on a model lane change start (kick_pulse)
     self.blinker_test = 0  # CanfdBlinkerMenuTest: 1 left, 2 right (menu test, any speed/gear)
     self.blinker_stalk = 0  # CanfdBlinkerStalk: 1 left, 2 right (0x3C1 replay)
     # CanfdBvmView: 0 off, 1 left, 2 right, 3 both. Spoofs the cluster camera view status (0x400 byte4) so the
@@ -295,6 +296,7 @@ class CarController(CarControllerBase):
     self.stalk_press_frame = 0
     self.aprk_state, self.aprk_frame, self.aprk_nanos, self.aprk_acked = APRK_IDLE, 0, 0, False
     self.lane_crossing, self.blinker_side, self.blinker_pulse_end = LaneCrossing(), 0, 0
+    self.lane_change_prev, self.model_pulse = "off", False  # last modelV2 laneChangeState; pulse from the model trigger
     self.yellow_until = [0, 0]  # left, right
     self.standstill_frame = -1e6
 
@@ -392,24 +394,44 @@ class CarController(CarControllerBase):
     return [CanData(0x400, bytes([0, 0, 0, 0, val, 0, 0, 0]), self.CAN.ECAN)]
 
   def kick_pulse(self, CS):
-    """CanfdBlinkerKick trigger, any CAN: the driver crossing a lane line with the lamp off starts a BLINKER_PULSE_FRAMES
-    pulse toward blinker_side (3 left, 4 right). True while a pulse runs."""
+    """CanfdBlinkerKick trigger, any CAN: starts a BLINKER_PULSE_FRAMES pulse toward blinker_side (3 left, 4 right) with
+    the lamp off, in D, outside a tunnel / roundabout. True while a pulse runs.
+    - the driver crossing a lane line (lane_crossing), not across a yellow line and not during a model lane change:
+      nothing owns that lamp, so it must not light up a change DesireHelper is running.
+    - CanfdBlinkerKickModel: modelV2 laneChangeState rising to laneChangeStarting (remote, app, voice, navigation), only
+      when that side's indicatorIsolationMask bit rides in the same modelV2: DesireHelper owned the lamp on that frame, so
+      the kicked lamp cannot read back as the driver's blinker (EV4 10-26: a lamp held through the change never went off,
+      measurements 31: a kick lamp started a change). Not in a cruise CANCEL latch; cut when the change is cancelled."""
     drive = CS.out.gearShifter == structs.CarState.GearShifter.drive
-    # The driver crossing a line with the lamp off, engaged or not (modelV2 runs either way). Not the model's own lane
-    # change: holding SPAS2 through it read back as the driver's blinker and the lamp never went off (EV4 10-26).
     lamp = CS.out.leftBlinker or CS.out.rightBlinker
     # lane changes are banned in a tunnel announced as no-lane-change, and for 20 s after a roundabout sign (carstate)
     tunnel = getattr(CS.out, "naviTunnel", False) or getattr(CS.out, "naviRoundabout", False)
-    side = self.lane_crossing.update(getattr(CS, "modelV2", None), self.frame * DT_CTRL,
-                                     self.blinker_control and drive and not lamp and not tunnel, CS.out.steeringTorque,
-                                     torque_min=self.params.STEER_THRESHOLD)  # 250 CAN-FD, 150 classic
+    md = getattr(CS, "modelV2", None)
+    meta = md.meta if md is not None else None
+    state = str(meta.laneChangeState) if meta is not None else None  # None: no fresh modelV2, not a transition
+    changing = state in ("laneChangeStarting", "laneChangeFinishing")
+    side = self.lane_crossing.update(md, self.frame * DT_CTRL,
+                                     self.blinker_control and drive and not lamp and not tunnel and not changing,
+                                     CS.out.steeringTorque, torque_min=self.params.STEER_THRESHOLD)  # 250 CAN-FD, 150 classic
     for i, line in enumerate((CS.out.leftLaneLine, CS.out.rightLaneLine)):
       if line // 10 == 2:  # camera color: 0 none, 1 white, 2 yellow, 3 blue
         self.yellow_until[i] = self.frame + YELLOW_HOLD_FRAMES
     if side and self.frame < self.yellow_until[side - 3]:
       side = 0
+    model = False
+    if state is not None:
+      bit = {"left": 1, "right": 2}.get(str(meta.laneChangeDirection), 0)  # boundary_indicator.own() bits
+      # no yellow-line guard: the model FSM already decided to change lanes there
+      model = (state == "laneChangeStarting" and self.lane_change_prev != state and bit and self.blinker_control and
+               self.blinker_kick_model and drive and not lamp and not tunnel and
+               not getattr(CS.out, "cruiseCancelState", False) and bool(meta.indicatorIsolationMask & bit))
+      self.lane_change_prev = state
+      if model:
+        side = bit + 2
+      elif state == "off" and self.model_pulse and self.frame < self.blinker_pulse_end:
+        self.blinker_pulse_end = self.frame  # the change was cancelled: so is its lamp
     if side:
-      self.blinker_side, self.blinker_pulse_end = side, self.frame + BLINKER_PULSE_FRAMES
+      self.blinker_side, self.blinker_pulse_end, self.model_pulse = side, self.frame + BLINKER_PULSE_FRAMES, model
     return self.frame < self.blinker_pulse_end
 
   def cgw_blinkers(self, CS):
@@ -546,6 +568,7 @@ class CarController(CarControllerBase):
       self.depart_jerk = params.get_int("StopGoAssist") >= 2
       self.blinker_control = params.get_bool("CanfdBlinkerKick")
       self.blinker_kick_mode = params.get_int("CanfdBlinkerKickMode")
+      self.blinker_kick_model = params.get_bool("CanfdBlinkerKickModel")
       self.blinker_test = params.get_int("CanfdBlinkerMenuTest")
       self.blinker_stalk = params.get_int("CanfdBlinkerStalk")
       self.bvm_view = params.get_int("CanfdBvmView")

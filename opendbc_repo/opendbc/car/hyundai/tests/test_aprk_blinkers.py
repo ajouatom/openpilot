@@ -41,9 +41,10 @@ class Ecu:
       self.stock = now
 
 
-def make_cc(control=True, test=0, spas=0, ecu=None, mode=1):
+def make_cc(control=True, test=0, spas=0, ecu=None, mode=1, model=True):
   cc = SimpleNamespace(blinker_control=control, blinker_test=test, blinker_kick_mode=mode, aprk_state=0, aprk_frame=0, aprk_nanos=0, aprk_acked=False,
                          lane_crossing=Crossing(), blinker_side=0, blinker_pulse_end=0, frame=0, yellow_until=[0, 0],
+                         blinker_kick_model=model, lane_change_prev="off", model_pulse=False,
                          CAN=SimpleNamespace(ECAN=0, ACAN=1), packer=CANPacker('hyundai_canfd_generated'), params=SimpleNamespace(STEER_THRESHOLD=250),
                          spas_steer_test=spas, spas_angle=0., aprk_buses=(), ecu=ecu or Ecu())
   cc.kick_pulse = lambda CS: CarController.kick_pulse(cc, CS)
@@ -133,12 +134,12 @@ def test_kick_mode_picks_the_send_pattern_without_an_ack():
 STOCK_CGW1 = bytes([0x01, 0x00, 0x00, 0x80, 0x00, 0x00, 0x00, 0x00])  # ignition on, nothing else
 
 
-def cgw_step(cc, frames, gear=D, cross=0, raw=STOCK_CGW1, lamp=False):
+def cgw_step(cc, frames, gear=D, cross=0, raw=STOCK_CGW1, lamp=False, md=None):
   """-> [(frame, addr, dat, bus)] sent"""
   cc.lane_crossing.side = cross or cc.lane_crossing.side
   sent = []
   for _ in range(frames):
-    CS = SimpleNamespace(cgw_test_raw=raw, out=SimpleNamespace(
+    CS = SimpleNamespace(cgw_test_raw=raw, modelV2=md, out=SimpleNamespace(
       gearShifter=gear, vEgo=15., leftBlinker=lamp, rightBlinker=False, steeringTorque=0, naviTunnel=False,
       naviRoundabout=False, leftLaneLine=0, rightLaneLine=0))
     sent += [(cc.frame, *m) for m in CarController.cgw_blinkers(cc, CS)]
@@ -289,3 +290,102 @@ def test_carstate_sees_stock_frames_and_replies_without_touching_can_validity():
   assert cs.aprk_ack_nanos == 4 * TICK
   feed(5 * TICK, [(0x7B9, bytes([0x03, 0x7F, 0x10, 0x22, 0, 0, 0, 0]), 0)])  # a refusal is not an answer
   assert cs.aprk_ack_nanos == 4 * TICK
+
+
+# CanfdBlinkerKickModel: a model lane change (remote, app, voice, navigation) kicks on its laneChangeStarting edge, only
+# with DesireHelper's lamp ownership (indicatorIsolationMask, 1 left 2 right) in the same modelV2
+def lc(state="off", direction="none", mask=0):
+  return SimpleNamespace(meta=SimpleNamespace(laneChangeState=state, laneChangeDirection=direction, indicatorIsolationMask=mask))
+
+
+OFF, LEFT, RIGHT = lc(), lc("laneChangeStarting", "left", 1), lc("laneChangeStarting", "right", 2)
+
+
+def model_step(cc, frames, md, gear=D, lamp=False, cancel=False, tunnel=False, cross=0, left_line=10):
+  cc.lane_crossing.side = cross or cc.lane_crossing.side
+  return run(cc, frames, lambda: SimpleNamespace(modelV2=md, out=SimpleNamespace(
+    gearShifter=gear, vEgo=20., leftBlinker=lamp, rightBlinker=False, steeringTorque=0, naviTunnel=tunnel,
+    naviRoundabout=False, leftLaneLine=left_line, rightLaneLine=10, cruiseCancelState=cancel)))
+
+
+def test_model_lane_change_start_kicks_with_the_mask():
+  for md, side in ((LEFT, 3), (RIGHT, 4)):
+    cc = make_cc()
+    assert model_step(cc, 50, OFF) == []
+    # the model decided: no yellow-line guard (that one is for the driver's own crossing)
+    sent = model_step(cc, 30, md, left_line=20)
+    assert set(spas2(cc, sent)) == {side} and cc.aprk_state == carcontroller.APRK_ACTIVE
+    # one 1 s pulse for the edge, however long Starting lasts
+    sent = model_step(cc, carcontroller.BLINKER_PULSE_FRAMES + 100, md)
+    assert uds(sent)[-2:] == [(DEFAULT, 0), (DEFAULT, 1)] and cc.aprk_state == carcontroller.APRK_IDLE
+    assert model_step(cc, 100, md) == []
+
+
+def test_palisade_model_lane_change_kick_on_cgw1():
+  cc = make_cc()
+  assert cgw_step(cc, 20, md=OFF) == []
+  sent = cgw_step(cc, carcontroller.BLINKER_PULSE_FRAMES + 20, md=RIGHT)
+  assert sent and all(addr == 0x541 and (dat[5] >> 1) & 3 == 1 for _, addr, dat, _ in sent)  # right lever
+  assert sent[-1][0] < carcontroller.BLINKER_PULSE_FRAMES + 20
+
+
+def test_no_model_kick_without_ownership_or_outside_the_rules():
+  cases = {
+    "mask of the other side": dict(md=lc("laneChangeStarting", "left", 2)),
+    "no mask": dict(md=lc("laneChangeStarting", "right", 0)),
+    "no direction": dict(md=lc("laneChangeStarting", "none", 3)),
+    "lamp on": dict(lamp=True),
+    "cruise CANCEL latch": dict(cancel=True),
+    "in P": dict(gear=P),
+    "tunnel": dict(tunnel=True),
+    "KickModel 0": dict(model=False),
+    "Kick 0": dict(control=False),
+  }
+  for name, case in cases.items():
+    cc = make_cc(control=case.pop("control", True), model=case.pop("model", True))
+    model_step(cc, 10, OFF)
+    assert model_step(cc, 50, case.pop("md", LEFT), **case) == [] and cc.blinker_pulse_end == 0, name
+
+
+def test_model_kick_only_on_the_edge():
+  cc = make_cc()
+  assert set(spas2(cc, model_step(cc, 30, LEFT))) == {3} and cc.model_pulse  # Starting when first seen: one kick
+  model_step(cc, carcontroller.BLINKER_PULSE_FRAMES + 50, LEFT)
+  assert model_step(cc, 50, LEFT) == []  # repeated Starting frames: no second kick
+  # modelV2 None (not alive / invalid) is no transition: Starting -> None -> Starting does not kick again
+  assert model_step(cc, 20, None) == [] and cc.lane_change_prev == "laneChangeStarting"
+  assert model_step(cc, 50, LEFT) == []
+  # off -> None -> Starting still kicks once
+  cc = make_cc()
+  model_step(cc, 10, OFF)
+  model_step(cc, 10, None)
+  assert set(spas2(cc, model_step(cc, 30, LEFT))) == {3}
+
+
+def test_model_kick_cut_when_the_change_is_cancelled():
+  cc = make_cc()
+  model_step(cc, 10, OFF)
+  assert set(spas2(cc, model_step(cc, 30, LEFT))) == {3}
+  sent = model_step(cc, 1, OFF)  # cancelled: the lamp stops with it
+  assert spas2(cc, sent) == [] and uds(sent) == [(DEFAULT, 0), (DEFAULT, 1)]
+  assert model_step(cc, 50, OFF) == []
+  # Palisade: same cut
+  cc = make_cc()
+  cgw_step(cc, 10, md=OFF)
+  assert cgw_step(cc, 10, md=LEFT)
+  assert cgw_step(cc, 50, md=OFF) == []
+  # a cut never ends the driver's own crossing kick
+  cc = make_cc()
+  model_step(cc, 10, OFF, cross=4)
+  assert not cc.model_pulse and set(spas2(cc, model_step(cc, 30, OFF))) == {4}
+
+
+def test_crossing_kick_waits_out_a_model_lane_change():
+  # no ownership for the driver-crossing kick: it must not light up a change DesireHelper is running
+  cc = make_cc(model=False)
+  for state in ("laneChangeStarting", "laneChangeFinishing"):
+    assert model_step(cc, 50, lc(state, "left", 0), cross=3) == []
+  assert cc.lane_crossing.side == 3  # still pending in the stand-in
+  assert set(spas2(cc, model_step(cc, 30, lc("preLaneChange", "left")))) == {3}
+  cc = make_cc()
+  assert set(spas2(cc, model_step(cc, 30, None, cross=4))) == {4}  # no modelV2: as before
