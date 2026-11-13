@@ -563,7 +563,7 @@ def test_hazard_test_sets_0x1ea_bit_104(monkeypatch, hazard, test_field, test_va
   ("HYUNDAI_IONIQ_5_PE", "speedTooHigh/warning", True, "ALERTS_4", 83),
   ("HYUNDAI_IONIQ_5_PE", "steerUnavailable/immediateDisable", False, "ALERTS_5", 9),   # beats the disengage popup (21)
   ("HYUNDAI_IONIQ_5_PE", "canError/immediateDisable", False, "ALERTS_4", 147),
-  ("HYUNDAI_IONIQ_5_PE", "reverseGear/userDisable", False, "ALERTS_4", 129),
+  ("HYUNDAI_IONIQ_5_PE", "reverseGear/userDisable", False, "ALERTS_4", 0),             # not mirrored (user 11-13)
   ("HYUNDAI_IONIQ_5_PE", "reverseGear/permanent", False, "ALERTS_4", 0),               # just parked in R
   ("HYUNDAI_IONIQ_5_PE", "driverDistracted3/permanent", True, "ALERTS_4", 0),          # DM is left alone
   ("KIA_EV9", "canError/immediateDisable", False, "ALERTS_4", 147),                    # DBC value: every cluster

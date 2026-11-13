@@ -972,14 +972,12 @@ ENGAGE_POPUP, DISENGAGE_POPUP = 19, 21
 ENGAGE_POPUP_FRAMES = int(2.0 / DT_CTRL)
 # A lane change asked for in a tunnel waits for driver torque (desire_helper): say why on the cluster, at least 2 s
 TUNNEL_REFUSAL_TEXT = ("ALERTS_4", 215)  # "this tunnel is not operable" (cluster test 21, 10-29)
-# openpilot alert -> cluster text (0x161 ALERTS_4 = cluster test 21, ALERTS_5 = 22; 10-29 videos). Keyed by event name, or by
-# "name/type" when only one alert type fits (reverse: only when it disengages, not while parked in R).
+# openpilot alert -> cluster text (0x161 ALERTS_4 = cluster test 21, ALERTS_5 = 22; 10-29 videos), keyed by event name.
+# Not mirrored on purpose (user 11-13): cruise released and the R-gear disengage.
 CLUSTER_ALERT_TEXTS = {
   "speedTooHigh": ("ALERTS_4", 83),                # driving speed is high
   "steerUnavailable": ("ALERTS_5", 9),             # lane keeping assist: not in operating conditions
   "accFaulted": ("ALERTS_5", 4),                   # smart cruise control: not in operating conditions
-  "cruiseDisabled": ("ALERTS_5", 3),               # smart cruise control released
-  "reverseGear/userDisable": ("ALERTS_4", 129),    # gear shift detected
   "steerSaturated": ("ALERTS_3", 18),              # check surroundings, with the comma "take control" alert
   **dict.fromkeys(("controlsMismatch", "canError", "canBusMissing", "vehicleSensorsInvalid", "relayMalfunction",
                    "locationdPermanentError", "paramsdPermanentError"), ("ALERTS_4", 147)),  # abnormal operation detected
@@ -993,7 +991,7 @@ CHIME_FRAMES = int(1.0 / DT_CTRL)
 
 def _cluster_alert_text(alert_type):
   name = alert_type.split("/")[0]
-  return CLUSTER_ALERT_TEXTS.get(alert_type if name == "reverseGear" else name)
+  return CLUSTER_ALERT_TEXTS.get(name)
 
 # ClusterLaneTestValue -1..-4: step the field every 1 / 0.5 / 0.25 / 0.1 s (frames) and show the step in the set speed number
 CLUSTER_TEST_SWEEP_FRAMES = {-1: 100, -2: 50, -3: 25, -4: 10}
