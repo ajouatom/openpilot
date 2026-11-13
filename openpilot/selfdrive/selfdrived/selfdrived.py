@@ -56,9 +56,6 @@ MonitoringPolicy = log.DriverMonitoringState.MonitoringPolicy
 
 IGNORED_SAFETY_MODES = (SafetyModel.silent, SafetyModel.noOutput)
 
-SHARP_TURN_ANGLE_DEG = 175.  # Hyundai ANGLE_LIMITS.STEER_ANGLE_MAX: requests past it are clipped on the car
-SHARP_TURN_FRAMES = round(0.1 / DT_CTRL)
-
 
 class SelfdriveD:
   def __init__(self, CP=None):
@@ -138,7 +135,6 @@ class SelfdriveD:
     self.vehicle_fault_monitor = VehicleFaultMonitor()
     self.cruise_mismatch_counter = 0
     self.last_steering_pressed_frame = 0
-    self.sharp_turn_frames = 0
     self.distance_traveled = 0
     self.last_functional_fan_frame = 0
     self.events_prev = []
@@ -546,17 +542,8 @@ class SelfdriveD:
       undershooting = abs(desired_lateral_accel) / abs(1e-3 + actual_lateral_accel) > 1.2
       turning = abs(desired_lateral_accel) > 1.0
       # TODO: lac.saturated includes speed and other checks, should be pulled out
-      # self.active keeps this trigger's old reach: the alert is PERMANENT now (for the sharp turn below)
-      if undershooting and turning and lac.saturated and self.active:
+      if undershooting and turning and lac.saturated:
         self.events.add(EventName.steerSaturated)
-    # Sharp turn: the angle request reached the car's clip. No recent_steer_pressed gate: the driver is usually
-    # steering already, and the alert means "do not let go". Hyundai only: other brands clip elsewhere (Tesla 360).
-    sharp_turn = (lac.active and self.CP.brand == "hyundai" and
-                  self.CP.steerControlType == car.CarParams.SteerControlType.angle and
-                  abs(self.sm['carControl'].actuators.steeringAngleDeg) >= SHARP_TURN_ANGLE_DEG)
-    self.sharp_turn_frames = self.sharp_turn_frames + 1 if sharp_turn else 0
-    if self.sharp_turn_frames >= SHARP_TURN_FRAMES and EventName.steerSaturated not in self.events.names:
-      self.events.add(EventName.steerSaturated)
 
     # Check for FCW
     stock_long_is_braking = self.enabled and not self.CP.openpilotLongitudinalControl and CS.aEgo < -1.25

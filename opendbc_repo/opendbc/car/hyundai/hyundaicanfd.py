@@ -980,7 +980,7 @@ CLUSTER_ALERT_TEXTS = {
   "accFaulted": ("ALERTS_5", 4),                   # smart cruise control: not in operating conditions
   "cruiseDisabled": ("ALERTS_5", 3),               # smart cruise control released
   "reverseGear/userDisable": ("ALERTS_4", 129),    # gear shift detected
-  "steerSaturated": ("ALERTS_3", 18),              # check surroundings (sharp turn past the angle clip)
+  "steerSaturated": ("ALERTS_3", 18),              # check surroundings, with the comma "take control" alert
   **dict.fromkeys(("controlsMismatch", "canError", "canBusMissing", "vehicleSensorsInvalid", "relayMalfunction",
                    "locationdPermanentError", "paramsdPermanentError"), ("ALERTS_4", 147)),  # abnormal operation detected
 }

@@ -569,8 +569,8 @@ def test_hazard_test_sets_0x1ea_bit_104(monkeypatch, hazard, test_field, test_va
   ("KIA_EV9", "canError/immediateDisable", False, "ALERTS_4", 147),                    # DBC value: every cluster
   ("KIA_EV9", "steerUnavailable/immediateDisable", False, "ALERTS_5", 21),             # 9 is not in the DBC: popup stays
   ("KIA_EV4", "steerUnavailable/immediateDisable", False, "ALERTS_5", 9),              # owner report 11-12
-  ("HYUNDAI_IONIQ_5_PE", "steerSaturated/permanent", False, "ALERTS_3", 18),           # sharp turn, lateral-only too
-  ("KIA_EV9", "steerSaturated/permanent", True, "ALERTS_3", 18),                       # DBC value: every cluster
+  ("HYUNDAI_IONIQ_5_PE", "steerSaturated/warning", True, "ALERTS_3", 18),              # comma "take control" synced
+  ("KIA_EV9", "steerSaturated/warning", True, "ALERTS_3", 18),                       # DBC value: every cluster
 ))
 def test_openpilot_alerts_map_to_cluster_texts(monkeypatch, car, alert_type, enabled, field, expected):
   from openpilot.cereal import log
@@ -620,13 +620,13 @@ def test_sharp_turn_text_beats_gap_popup_and_chimes_once(monkeypatch):
 
   assert send(0, "", bars=2) == (0, 0)
   assert send(5, "") == (9, 0)                                    # HDP gap popup (DISTANCE_3)
-  assert send(10, "steerSaturated/permanent") == (18, 2)          # the alert beats the popup; double chime
-  assert send(105, "steerSaturated/permanent") == (18, 2)
-  assert send(110, "steerSaturated/permanent") == (18, 0)         # chime ~1 s, text stays
+  assert send(10, "steerSaturated/warning") == (18, 2)          # the alert beats the popup; double chime
+  assert send(105, "steerSaturated/warning") == (18, 2)
+  assert send(110, "steerSaturated/warning") == (18, 0)         # chime ~1 s, text stays
   assert send(115, "") == (9, 0)                                  # popup back once the alert ends
-  assert send(300, "steerSaturated/permanent", alerts_1=11) == (18, 0)  # stock emergency owns the sound
+  assert send(300, "steerSaturated/warning", alerts_1=11) == (18, 0)  # stock emergency owns the sound
   stock['ALERTS_3'] = 21                                          # a stock text wins
-  assert send(500, "steerSaturated/permanent") == (21, 0)
+  assert send(500, "steerSaturated/warning") == (21, 0)
 
 
 @pytest.mark.parametrize(("car", "text"), (("HYUNDAI_IONIQ_5_PE", 215), ("KIA_EV4", 215), ("HYUNDAI_IONIQ_9", 0)))

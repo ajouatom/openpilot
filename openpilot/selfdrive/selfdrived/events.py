@@ -699,13 +699,12 @@ EVENTS: dict[int, dict[str, Alert | AlertCallbackType]] = {
       Priority.LOW, VisualAlert.none, AudibleAlert.none, .1),
   },
 
-  # PERMANENT, not WARNING: WARNING shows only while engaged, and most sharp turns are lateral-only (AlwaysLateral)
   EventName.steerSaturated: {
-    ET.PERMANENT: Alert(
+    ET.WARNING: Alert(
       "Take Control",
       "Turn Exceeds Steering Limit",
-      AlertStatus.userPrompt, AlertSize.mid,
-      Priority.LOW, VisualAlert.steerRequired, AudibleAlert.promptRepeat, 1.),
+      AlertStatus.normal, AlertSize.small,
+      Priority.LOW, VisualAlert.none, AudibleAlert.none, 1.),
   },
 
   # Thrown when the fan is driven at >50% but is not rotating
@@ -1302,7 +1301,7 @@ if HARDWARE.get_device_type() == 'mici':
         Priority.LOW, VisualAlert.none, AudibleAlert.prompt, .1),
     },
     EventName.steerSaturated: {
-      ET.PERMANENT: Alert(
+      ET.WARNING: Alert(
         "take control",
         "turn exceeds limit",
         AlertStatus.userPrompt, AlertSize.mid,
