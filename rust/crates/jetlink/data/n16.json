@@ -1,0 +1,165 @@
+{
+  "sha256": "01effc679eb46d6036ce0302673a87fe2dcfcc95a679daeeb929679e53c3647a",
+  "nbytes": 814591107,
+  "frame_skip": 4,
+  "checkpoint": "2931d3d9-7c90-4988-a6af-654ed71e0af5/56320/96244b1f-6c4e-4adc-848d-eccd0b44b182",
+  "input_shapes": {
+    "new_img": [
+      2,
+      6,
+      128,
+      256
+    ],
+    "desire": [
+      8
+    ],
+    "traffic_convention": [
+      1,
+      2
+    ],
+    "action_t": [
+      1,
+      2
+    ],
+    "nav_map": [
+      1,
+      1,
+      256,
+      256
+    ],
+    "navigation": [
+      1,
+      47
+    ],
+    "state_img_q": [
+      2,
+      5,
+      6,
+      128,
+      256
+    ],
+    "state_desire_q": [
+      132,
+      1,
+      8
+    ],
+    "state_feat_q": [
+      128,
+      1,
+      16384
+    ],
+    "state_map_features_q": [
+      128,
+      1,
+      64
+    ],
+    "state_navigation_features_q": [
+      128,
+      1,
+      64
+    ]
+  },
+  "output_shapes": {
+    "outputs": [
+      1,
+      18580
+    ],
+    "next_state_img_q": [
+      2,
+      5,
+      6,
+      128,
+      256
+    ],
+    "next_state_desire_q": [
+      132,
+      1,
+      8
+    ],
+    "next_state_feat_q": [
+      128,
+      1,
+      16384
+    ],
+    "next_state_map_features_q": [
+      128,
+      1,
+      64
+    ],
+    "next_state_navigation_features_q": [
+      128,
+      1,
+      64
+    ]
+  },
+  "output_slices": {
+    "lane_lines": [
+      0,
+      528
+    ],
+    "lane_lines_prob": [
+      528,
+      536
+    ],
+    "road_edges": [
+      536,
+      800
+    ],
+    "meta": [
+      800,
+      855
+    ],
+    "desire_pred": [
+      855,
+      887
+    ],
+    "pose": [
+      887,
+      899
+    ],
+    "wide_from_device_euler": [
+      899,
+      905
+    ],
+    "road_transform": [
+      905,
+      917
+    ],
+    "plan": [
+      917,
+      1907
+    ],
+    "lead": [
+      1907,
+      2051
+    ],
+    "lead_prob": [
+      2051,
+      2054
+    ],
+    "desire_state": [
+      2054,
+      2062
+    ],
+    "action": [
+      2062,
+      2066
+    ],
+    "hidden_state": [
+      2066,
+      18450
+    ],
+    "map_features": [
+      18450,
+      18514
+    ],
+    "navigation_features": [
+      18514,
+      18578
+    ],
+    "pad": [
+      18578,
+      18580
+    ]
+  }
+}

@@ -4,6 +4,11 @@ use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 
 pub const LEGACY_JSON: &str = include_str!("../data/cinque_v2.json");
+/// `navigation` floats a navigation graph takes after the 12 scalars.
+pub const NAVIGATION_FLOATS: usize = 47;
+/// `nav_map` bytes (uint8 256x256) sent after the packed floats when a frame
+/// carries a new map (wire flag NAV_MAP).
+pub const NAV_MAP_BYTES: usize = 256 * 256;
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 pub struct ModelSpec {
     pub sha256: String,
@@ -40,6 +45,11 @@ impl ModelSpec {
     }
     pub fn stateful(&self) -> bool {
         self.input_shapes.contains_key("new_img")
+    }
+    /// A navigation (NOO) graph such as carrot's N16: a 256x256 route map
+    /// and the 47-float maneuver input beside the camera.
+    pub fn navigation(&self) -> bool {
+        self.input_shapes.contains_key("nav_map") || self.input_shapes.contains_key("navigation")
     }
     pub fn output_count(&self) -> Result<usize, Error> {
         count(
@@ -82,7 +92,7 @@ impl ModelSpec {
             return Err(Error::Contract("stateful graph requires protocol 3"));
         }
         if version == Version::V3 {
-            return Ok(12);
+            return Ok(12 + if self.navigation() { NAVIGATION_FLOATS } else { 0 });
         }
         let shape = self
             .input_shapes
@@ -124,11 +134,24 @@ impl ModelSpec {
             {
                 return Err(Error::Contract("stateful camera/desire"));
             }
+            if self.navigation()
+                && (!shape("nav_map", &[1, 1, 256, 256]) || !shape("navigation", &[1, 47]))
+            {
+                return Err(Error::Contract("navigation inputs"));
+            }
             let states = self
                 .input_shapes
                 .keys()
                 .filter(|k| {
-                    !["new_img", "desire", "traffic_convention", "action_t"].contains(&k.as_str())
+                    ![
+                        "new_img",
+                        "desire",
+                        "traffic_convention",
+                        "action_t",
+                        "nav_map",
+                        "navigation",
+                    ]
+                    .contains(&k.as_str())
                 })
                 .collect::<Vec<_>>();
             if states.is_empty()
@@ -232,5 +255,26 @@ impl ModelSpec {
             }
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod navigation_tests {
+    use super::*;
+
+    #[test]
+    fn carrot_n16_is_a_valid_navigation_graph_with_59_packed_floats() {
+        let spec = ModelSpec::parse(include_bytes!("../data/n16.json")).unwrap();
+        assert!(spec.stateful() && spec.navigation());
+        assert_eq!(spec.packed_count(Version::V3).unwrap(), 12 + NAVIGATION_FLOATS);
+        // Half a navigation contract, or the wrong map shape, is refused.
+        let mut half = spec.clone();
+        half.input_shapes.remove("nav_map");
+        assert!(half.validate().is_err());
+        let mut wrong = spec.clone();
+        wrong.input_shapes.insert("nav_map".into(), vec![1, 1, 128, 128]);
+        assert!(wrong.validate().is_err());
+        let legacy = ModelSpec::parse(LEGACY_JSON.as_bytes()).unwrap();
+        assert!(!legacy.navigation());
     }
 }

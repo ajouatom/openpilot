@@ -7,6 +7,7 @@ pub mod driver_wire;
 pub mod geometry;
 pub mod inputs;
 pub mod model_wire;
+pub mod navigation;
 mod numpy_exp;
 mod numpy_trig;
 pub mod parse;
