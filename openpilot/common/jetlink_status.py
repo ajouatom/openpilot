@@ -56,12 +56,13 @@ def host_label(peer, mode='usb'):
   return 'Jetlink'
 
 
-def _fresh(path, *, handshake=False):
+def _fresh(path, now=None, *, handshake=False):
   try:
     value = _read(path)
     # Sample after the read: a concurrent atomic replacement can carry a
     # timestamp newer than the time at which this reader started.
-    now = time.monotonic()
+    if now is None:
+      now = time.monotonic()
     # HELLO blocks for 3s in auto probing, or 5s in the normal path. A 3s
     # display lease falsely declares a dead daemon during that bounded wait.
     # Cover HELLO + the 2s reconnect pause; all other reports still expire at 3s.
