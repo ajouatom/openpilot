@@ -132,7 +132,7 @@ pub struct CarrotPlanner {
 
 impl CarrotPlanner {
     pub fn new(parameters: &mut impl Parameters) -> Result<Self, Error> {
-        let driving_mode = DrivingMode::try_from(parameters.integer("MyDrivingMode")?)?;
+        let driving_mode = DrivingMode::from_setting(parameters.integer("MyDrivingMode")?);
         let config = Config {
             automatic_mode: parameters.integer("MyDrivingModeAuto")?,
             ..Config::default()

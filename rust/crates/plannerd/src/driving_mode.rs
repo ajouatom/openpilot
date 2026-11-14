@@ -35,6 +35,12 @@ impl From<DrivingMode> for i32 {
 }
 
 impl DrivingMode {
+    /// `MyDrivingMode` as stored: outside 1..=4 (a missing or corrupt setting)
+    /// reads as the settings default, Normal. carrot's `DrivingMode(...)`
+    /// raised there and plannerd failed every cycle.
+    pub fn from_setting(value: i32) -> Self {
+        Self::try_from(value).unwrap_or(Self::Normal)
+    }
     pub fn lead_response(self, requested: i32) -> i32 {
         let ceiling = match self {
             Self::Eco => 2,
@@ -173,6 +179,20 @@ impl DrivingModeDetector {
             DrivingMode::Eco
         } else {
             DrivingMode::Normal
+        }
+    }
+}
+
+#[cfg(test)]
+mod setting_tests {
+    use super::DrivingMode;
+
+    #[test]
+    fn an_out_of_range_driving_mode_reads_as_normal() {
+        assert_eq!(DrivingMode::from_setting(1), DrivingMode::Eco);
+        assert_eq!(DrivingMode::from_setting(4), DrivingMode::High);
+        for value in [0, 5, -1] {
+            assert_eq!(DrivingMode::from_setting(value), DrivingMode::Normal);
         }
     }
 }

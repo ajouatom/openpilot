@@ -45,7 +45,7 @@ impl CarrotPlanner {
         self.frame += 1;
         self.params_count += 1;
         if self.params_count.is_multiple_of(10) {
-            let selected = DrivingMode::try_from(parameters.integer("MyDrivingMode")?)?;
+            let selected = DrivingMode::from_setting(parameters.integer("MyDrivingMode")?);
             if selected != self.driving_mode_last {
                 self.disable_auto = true;
             }
