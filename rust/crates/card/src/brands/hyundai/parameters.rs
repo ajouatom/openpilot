@@ -36,7 +36,12 @@ pub fn setting_int(settings: &Params, key: &str) -> Result<i32, Error> {
                 .skip(sign)
                 .take_while(|byte| byte.is_ascii_digit())
                 .count();
-            Ok(std::str::from_utf8(raw.get(..sign + digits).ok_or(Error::Numeric)?)?.parse()?)
+            // Not a number (or out of range) reads as 0 like a missing value;
+            // see settings_float::read for why this must not fail card.
+            Ok(std::str::from_utf8(raw.get(..sign + digits).unwrap_or_default())
+                .ok()
+                .and_then(|text| text.parse().ok())
+                .unwrap_or(0))
         }
         Some(_) | None => Ok(0),
     }

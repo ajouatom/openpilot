@@ -41,11 +41,13 @@ impl Parameters for RuntimeParameters {
         }
         Ok(value.meters_per_second)
     }
+    // A stored value that is not a number reads as 0, like a missing one:
+    // a single corrupt setting must not fail every planning cycle.
     fn integer(&mut self, key: &'static str) -> Result<i32, Error> {
-        integer(&self.raw(key)?)
+        Ok(integer(&self.raw(key)?).unwrap_or(0))
     }
     fn float(&mut self, key: &'static str) -> Result<f64, Error> {
-        float(&self.raw(key)?)
+        Ok(float(&self.raw(key)?).unwrap_or(0.))
     }
 }
 

@@ -1,14 +1,21 @@
 use super::Error;
 use openpilot_params::Params;
 
+/// A stored value that is not a number reads as 0, like a missing one.
+/// carrot raised here, and card re-reads its settings every 10 frames, so a
+/// single corrupt setting file restarted card (and vehicle control) forever.
 pub fn read(params: &Params, key: &str) -> Result<f64, Error> {
     let Some(bytes) = params.get(key)? else {
         return Ok(0.);
     };
+    Ok(parse(&bytes, key).unwrap_or(0.))
+}
+
+fn parse(bytes: &[u8], key: &str) -> Result<f64, Error> {
     if bytes.is_empty() {
         return Ok(0.);
     }
-    let value = std::str::from_utf8(&bytes)?.trim_start_matches(|c: char| c.is_ascii_whitespace());
+    let value = std::str::from_utf8(bytes)?.trim_start_matches(|c: char| c.is_ascii_whitespace());
     let mut end = 0;
     let bytes = value.as_bytes();
     if matches!(bytes.first(), Some(b'+' | b'-')) {
@@ -66,4 +73,19 @@ pub fn read(params: &Params, key: &str) -> Result<f64, Error> {
     let result = value[..end].parse::<f32>()?;
     super::float_number::decimal_range(&value[..end], result, key)?;
     Ok(f64::from(result))
+}
+
+#[cfg(test)]
+mod corrupt_tests {
+    #[test]
+    fn a_corrupt_setting_reads_as_zero_instead_of_failing_card() {
+        let root = std::env::temp_dir().join(format!("card-settings-{}", std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        let params = openpilot_params::Params::open(&root, "d").unwrap();
+        for (raw, int, float) in [("12", 12, 12.), ("1.5", 1, 1.5), ("True", 0, 0.), ("\u{ff}x", 0, 0.), ("", 0, 0.)] {
+            params.put("CruiseSpeed2", raw.as_bytes()).unwrap();
+            assert_eq!(super::super::parameters::setting_int(&params, "CruiseSpeed2").unwrap(), int, "{raw:?}");
+            assert_eq!(super::read(&params, "CruiseSpeed2").unwrap(), float, "{raw:?}");
+        }
+    }
 }

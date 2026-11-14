@@ -18,13 +18,13 @@ pub fn raw(params: &Params, key: &str) -> Result<Vec<u8>, Error> {
 }
 #[cfg(feature = "native")]
 impl Parameters for Params {
+    // A stored value that is not a number reads as 0, like a missing one:
+    // a single corrupt setting must not fail every control frame.
     fn integer(&mut self, key: &'static str) -> Result<i32, Error> {
-        Ok(openpilot_beepd::integer(&raw(self, key)?)?)
+        Ok(openpilot_beepd::integer(&raw(self, key)?).unwrap_or(0))
     }
     fn float(&mut self, key: &'static str) -> Result<f64, Error> {
-        Ok(openpilot_calibrationd::parameters::parse_float(&raw(
-            self, key,
-        )?)?)
+        Ok(openpilot_calibrationd::parameters::parse_float(&raw(self, key)?).unwrap_or(0.))
     }
     fn boolean(&mut self, key: &'static str) -> Result<bool, Error> {
         Ok(raw(self, key)? == b"1")
