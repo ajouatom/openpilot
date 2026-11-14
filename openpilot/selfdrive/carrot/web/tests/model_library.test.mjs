@@ -11,7 +11,7 @@ class Element {
 }
 const data = { effective: 'n16', selected: 'flip-flop', reboot_required: true, models: [
   { id: 'n16', name: 'N16 Nav', noo: true, hidden: false, protected: true, egpu_bytes: 100, jetson_bytes: null },
-  { id: 'flip-flop', name: 'Flip Flop', noo: false, hidden: false, protected: true, egpu_bytes: 200, jetson_bytes: 300 },
+  { id: 'flip-flop', name: 'Flip Flop', noo: false, hidden: false, protected: true, egpu_bytes: 200, jetson_bytes: 300, jetson_sha256: 'f'.repeat(64) },
 ] };
 test('model choice distinguishes current/pending/NOO and preserves in-flight choice across polls', t => {
   const old = globalThis.document;
@@ -24,7 +24,7 @@ test('model choice distinguishes current/pending/NOO and preserves in-flight cho
   assert.deepEqual(select.children.map(x => x.value), ['n16', 'flip-flop']);
   assert.match(select.children[0].textContent, /NOO supported/);
   assert.match(select.children[1].textContent, /NOO not supported/);
-  assert.match(root.children.find(x => x.textContent?.startsWith('This boot')).textContent, /N16/);
+  assert.match(root.children.find(x => x.textContent?.startsWith('eGPU this boot')).textContent, /N16/);
   assert.equal(root.querySelector('button'), undefined);
   assert.equal(root.children.some(x => x.className === 'model-library__row'), false);
   select.value = 'n16';
@@ -63,4 +63,17 @@ test('failed selection restores the saved choice', async t => {
   await select.events.change();
   assert.equal(root.querySelector('select').value, 'flip-flop');
   assert.ok(!root.querySelector('select').disabled);
+});
+
+test('shows the model a Jetlink host runs or prepares and the pick sent to it', t => {
+  const old = globalThis.document;
+  t.after(() => { globalThis.document = old; });
+  const root = new Element('section');
+  globalThis.document = { getElementById: () => root, createElement: tag => new Element(tag) };
+  renderLibrary({ ...data, app_pick: { model: 'n16' } }, true, { sha256: 'f'.repeat(64), preparation: null });
+  const lines = root.children.map(x => x.textContent || '');
+  assert.ok(lines.some(x => x === 'Jetlink host running: Flip Flop · NOO not supported'));
+  assert.ok(lines.some(x => x === 'Sent to Jetlink host: N16 Nav'));
+  renderLibrary(data, true, { sha256: 'f'.repeat(64), preparation: { stage: 'upload', fraction: 0.5, message: 'Uploading' } });
+  assert.ok(root.children.some(x => x.textContent === 'Jetlink host preparing: Flip Flop · NOO not supported · Uploading · 50%'));
 });

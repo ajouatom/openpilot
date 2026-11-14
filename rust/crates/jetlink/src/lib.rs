@@ -1,5 +1,6 @@
 //! Native Jetlink contract, source policy and deadline-bounded local transport.
 pub mod adapter;
+pub mod app_pick;
 pub mod client;
 pub mod contract;
 pub mod fault;

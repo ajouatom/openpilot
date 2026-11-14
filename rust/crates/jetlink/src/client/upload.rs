@@ -49,6 +49,66 @@ impl<T: Transport> Client<T> {
         }
         self.upload_model(&path, spec, &state)
     }
+    /// The App answered need_upload for the model picked on the comma:
+    /// download its ONNX (verified against the catalog's sha256 and size) and
+    /// upload it. The local copy goes once the App has it, since the App keeps
+    /// its own and an 800 MB file per past pick would fill /data.
+    pub(super) fn upload_picked_model(
+        &mut self,
+        pick: &crate::app_pick::AppPick,
+    ) -> Result<Value, Error> {
+        self.require_setup()?;
+        let app = self
+            .app
+            .as_ref()
+            .ok_or(Error::Contract("App setup missing"))?;
+        let (cache, connected) = (app.cache.clone(), app.connected.clone());
+        let status = self.status.clone();
+        let mut last_progress = 0u64;
+        let message = format!("Downloading {} for Jetlink", pick.name);
+        let path = super::model_cache::model_file_from(
+            &cache,
+            &pick.spec,
+            &pick.url,
+            move || {
+                if !(connected)() {
+                    return Err(Error::Closed);
+                }
+                Ok(())
+            },
+            move |stage, fraction| {
+                let now = crate::now_ns();
+                if now.saturating_sub(last_progress) < 1_000_000_000 {
+                    return;
+                }
+                last_progress = now;
+                if let Ok(mut value) = status.lock() {
+                    value["state"] = json!("loading");
+                    value["preparation"] =
+                        json!({"stage":stage,"fraction":fraction,"message":message});
+                }
+            },
+        )?;
+        // The download can take minutes: ask again, the App may have the
+        // model meanwhile (its owner imported it) or be building it.
+        self.require_setup()?;
+        let deadline = Deadline::after(Duration::from_secs(60))?;
+        let sequence = self.send(
+            3,
+            &serde_json::to_vec(&json!({"sha256":pick.spec.sha256,"nbytes":pick.spec.nbytes,"frame_skip":pick.spec.frame_skip}))?,
+            deadline,
+        )?;
+        let state: Value =
+            serde_json::from_slice(&self.expect_setup(4, sequence, deadline)?.payload)?;
+        if state["state"] != "need_upload" {
+            return Ok(state);
+        }
+        let state = self.upload_model(&path, &pick.spec, &state)?;
+        if state["state"] != "failed" {
+            let _ = std::fs::remove_file(&path);
+        }
+        Ok(state)
+    }
     fn upload_model(
         &mut self,
         path: &Path,

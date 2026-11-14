@@ -211,6 +211,24 @@ impl Library {
         )?)?)
     }
 
+    /// The ONNX a Jetlink host runs for `key`: `big_driving_supercombo.onnx`
+    /// beside the eGPU export of the model whose spec it shares (Flip Flop
+    /// runs MD v3's graph on a host).
+    pub fn onnx_url(&self, key: &str) -> Result<String, Error> {
+        let catalog = self.catalog()?;
+        let entry = catalog.get(key).ok_or(Error::Invalid("unknown model"))?;
+        let spec = entry["jetson_spec"]
+            .as_str()
+            .ok_or(Error::Invalid("unknown model"))?;
+        let owner = catalog.get(spec.trim_end_matches(".json")).unwrap_or(entry);
+        let url = owner["egpu"]["url"]
+            .as_str()
+            .filter(|url| url.starts_with("https://"))
+            .ok_or(Error::Invalid("model url"))?;
+        let base = url.rsplit_once('/').ok_or(Error::Invalid("model url"))?.0;
+        Ok(format!("{base}/big_driving_supercombo.onnx"))
+    }
+
     /// The model takes the navigation map and route inputs.
     pub fn noo(&self, key: &str) -> Result<bool, Error> {
         let inputs = &self.model_spec(key)?["input_shapes"];
@@ -487,5 +505,18 @@ mod tests {
         let status = lib.status(0.).unwrap();
         assert_eq!(status["effective"], "light-speed");
         assert_eq!(status["reboot_required"], false);
+    }
+
+    #[test]
+    fn host_onnx_lives_beside_the_export_whose_graph_it_shares() {
+        let lib = library();
+        assert_eq!(
+            lib.onnx_url("n16").unwrap(),
+            "https://upload.shind0.synology.me/models/comma4-big-nav-n16-96244b1f/big_driving_supercombo.onnx"
+        );
+        assert_eq!(
+            lib.onnx_url("flip-flop").unwrap(),
+            "https://upload.shind0.synology.me/models/comma4-big-md-v3-1365126a/big_driving_supercombo.onnx"
+        );
     }
 }

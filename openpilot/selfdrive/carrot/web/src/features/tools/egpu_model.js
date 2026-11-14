@@ -152,7 +152,7 @@ function render(status = lastStatus) {
   const card = document.getElementById("egpuModelCard");
   if (!card) return;
   lastStatus = status;
-  renderLibrary(status?.library);
+  renderLibrary(status?.library, false, status?.jetlink);
   if (!status?.available && !status?.jetlink) {
     card.hidden = true;
     return;

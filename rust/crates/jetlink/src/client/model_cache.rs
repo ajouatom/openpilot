@@ -36,9 +36,20 @@ pub(super) fn model_file(
     check: impl FnMut() -> Result<(), Error>,
     progress: impl FnMut(&str, f64),
 ) -> Result<PathBuf, Error> {
+    model_file_from(cache, spec, MODEL_URL, check, progress)
+}
+
+/// The ONNX `spec` names, from `url` unless a verified copy is cached.
+pub(super) fn model_file_from(
+    cache: &Path,
+    spec: &ModelSpec,
+    url: &str,
+    check: impl FnMut() -> Result<(), Error>,
+    progress: impl FnMut(&str, f64),
+) -> Result<PathBuf, Error> {
     ensure(cache, spec, check, progress, || {
         let response = agent()
-            .get(MODEL_URL)
+            .get(url)
             .call()
             .map_err(|error| Error::Native(error.to_string()))?;
         if response.status() != 200 {

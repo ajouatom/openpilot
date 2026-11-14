@@ -84,6 +84,9 @@ struct AppSelection {
     /// Our engine request was given back to the App and must be made again
     /// before the next modeld session.
     released: bool,
+    /// `at` of the comma's pick named in the last hello; a new pick made
+    /// while parked reconnects so the App hears it.
+    pick_at: Option<f64>,
 }
 fn parked() -> bool {
     let read = |name: &str| std::fs::read_to_string(format!("/data/params/d/{name}"));
@@ -103,10 +106,33 @@ impl<T: Transport> Client<T> {
             .flatten()
     }
 
+    /// HELLO: our identity, and on protocol 3 the model picked on the comma.
+    fn hello_payload(
+        &mut self,
+        nonce: &str,
+    ) -> Result<(Vec<u8>, Option<crate::app_pick::AppPick>), Error> {
+        let mut hello = json!({"client":{"name":"jetlinkd-rs","nonce":nonce}});
+        let pick = self
+            .app
+            .as_ref()
+            // Only while parked: a link that drops and rejoins on the road
+            // keeps the model the App runs; the pick goes at the next park.
+            .filter(|app| self.transport.version() == wire::Version::V3 && (app.parked)())
+            .and_then(|app| crate::app_pick::current(&app.cache));
+        if let Some(pick) = &pick {
+            hello["pick"] = pick.hello(crate::now_ns() as f64 / 1e9);
+        }
+        if let Some(app) = &mut self.app {
+            app.pick_at = pick.as_ref().map(|pick| pick.at);
+        }
+        Ok((serde_json::to_vec(&hello)?, pick))
+    }
+
     fn next_map(&mut self) -> Option<Vec<u8>> {
         let now = crate::now_ns();
-        let map = openpilot_mapsd::output::read(std::path::Path::new(openpilot_mapsd::output::PATH))
-            .filter(|m| m.valid && m.rendered_ns <= now && now - m.rendered_ns < MAP_FRESH_NS);
+        let map =
+            openpilot_mapsd::output::read(std::path::Path::new(openpilot_mapsd::output::PATH))
+                .filter(|m| m.valid && m.rendered_ns <= now && now - m.rendered_ns < MAP_FRESH_NS);
         match map {
             Some(map) if self.map_sent != Some(map.rendered_ns) => {
                 self.map_sent = Some(map.rendered_ns);
@@ -152,6 +178,7 @@ impl<T: Transport> Client<T> {
             connected: std::sync::Arc::new(|| true),
             parked: std::sync::Arc::new(parked),
             released: false,
+            pick_at: None,
         });
         client
     }
@@ -229,6 +256,16 @@ impl<T: Transport> Client<T> {
         // the request must stay: without it the phone answers NOT_READY to the
         // first real frame, which made the link drop and reconnect in a loop.
         if self.app.as_ref().is_some_and(|app| (app.parked)()) {
+            if let Some(app) = &self.app {
+                let picked = crate::app_pick::current(&app.cache).map(|pick| pick.at);
+                if self.transport.version() == wire::Version::V3
+                    && picked.is_some()
+                    && picked != app.pick_at
+                {
+                    // Rejoin: the next hello carries the new pick.
+                    return Err(Error::Contract("model picked on the comma"));
+                }
+            }
             self.release_app_request()?;
         }
         self.idle_at = crate::now_ns().saturating_add(2_000_000_000);
@@ -282,7 +319,9 @@ impl<T: Transport> Client<T> {
         }
         self.require_setup()?;
         let deadline = Deadline::after(Duration::from_secs(2))?;
-        let sequence = self.send(1, &serde_json::to_vec(&json!({"client":{"name":"jetlinkd-rs","nonce":self.client_nonce.as_deref().unwrap_or("")}}))?, deadline)?;
+        let nonce = self.client_nonce.clone().unwrap_or_default();
+        let payload = self.hello_payload(&nonce)?.0;
+        let sequence = self.send(1, &payload, deadline)?;
         let hello: Value =
             serde_json::from_slice(&self.expect_setup(2, sequence, deadline)?.payload)?;
         if hello["protocol"].as_u64() != Some(self.transport.version() as u64) {
@@ -455,11 +494,8 @@ impl<T: Transport> Client<T> {
         File::open("/dev/urandom")?.read_exact(&mut nonce)?;
         let nonce: String = nonce.iter().map(|v| format!("{v:02x}")).collect();
         self.client_nonce = Some(nonce.clone());
-        let seq = self.send(
-            1,
-            &serde_json::to_vec(&json!({"client":{"name":"jetlinkd-rs","nonce":nonce}}))?,
-            deadline,
-        )?;
+        let (payload, pick) = self.hello_payload(&nonce)?;
+        let seq = self.send(1, &payload, deadline)?;
         let mut hello: Value = serde_json::from_slice(&self.expect(2, seq, deadline)?.payload)?;
         if hello["protocol"].as_u64() != Some(self.transport.version() as u64) {
             return Err(Error::Contract(
@@ -493,7 +529,11 @@ impl<T: Transport> Client<T> {
                 "select and prepare a driving model in the App",
             ));
         }
-        if follows_app {
+        // The App answers with the newer of its pick and ours; when that is
+        // ours, ask for it whatever the App has loaded (hot swap), else
+        // follow the App's own choice.
+        let ours = pick.filter(|pick| follows_app && pick.won(&hello));
+        if follows_app && ours.is_none() {
             let until = Deadline::after(Duration::from_secs(300))?;
             while hello["loaded"].is_null() {
                 self.report("loading", "app-selection", None, None);
@@ -520,7 +560,9 @@ impl<T: Transport> Client<T> {
         crate::selection::approved(&app.cache)?;
         let fallback =
             crate::model_spec::ModelSpec::parse(crate::model_spec::LEGACY_JSON.as_bytes())?;
-        let selected = if follows_app {
+        let selected = if let Some(pick) = &ours {
+            pick.spec.sha256.clone()
+        } else if follows_app {
             hello["loaded"]
                 .as_str()
                 .ok_or(Error::Contract("App loaded model identity"))?
@@ -535,7 +577,7 @@ impl<T: Transport> Client<T> {
         if !preloaded {
             self.require_setup()?;
         }
-        if follows_app {
+        if follows_app && ours.is_none() {
             let deadline = Deadline::after(Duration::from_secs(2))?;
             let sequence = self.send(12, b"{}", deadline)?;
             let current: Value =
@@ -544,7 +586,9 @@ impl<T: Transport> Client<T> {
                 return Err(Error::Contract("App engine changed before approval"));
             }
         }
-        let bytes = if selected == fallback.sha256 {
+        let bytes = if let Some(pick) = &ours {
+            pick.spec.nbytes
+        } else if selected == fallback.sha256 {
             fallback.nbytes
         } else {
             0
@@ -557,15 +601,32 @@ impl<T: Transport> Client<T> {
         )?;
         let mut state: Value =
             serde_json::from_slice(&self.expect_setup(4, seq, deadline)?.payload)?;
-        if state["state"] == "need_upload" && !follows_app {
-            state = self.prepare_legacy_model(&fallback)?;
+        if state["state"] == "need_upload" {
+            if let Some(pick) = &ours {
+                state = match self.upload_picked_model(pick) {
+                    // A cable pulled mid-way is not the pick's fault.
+                    Err(Error::Closed) => return Err(Error::Closed),
+                    Err(error) => {
+                        if let Some(app) = &self.app {
+                            crate::app_pick::failed(&app.cache, pick);
+                        }
+                        return Err(error);
+                    }
+                    Ok(state) => state,
+                };
+            } else if !follows_app {
+                state = self.prepare_legacy_model(&fallback)?;
+            }
         }
         let deadline = Deadline::after(Duration::from_secs(900))?;
         loop {
             match state["state"].as_str() {
                 Some("ready") => break,
                 Some("failed" | "need_upload") => {
-                    return Err(Error::Contract("App engine unavailable"))
+                    if let (Some(pick), Some(app)) = (&ours, &self.app) {
+                        crate::app_pick::failed(&app.cache, pick);
+                    }
+                    return Err(Error::Contract("App engine unavailable"));
                 }
                 _ => {}
             }
@@ -591,6 +652,10 @@ impl<T: Transport> Client<T> {
         }
         if selected == fallback.sha256 && session.spec != fallback {
             return Err(Error::Contract("source Cinque v2 model contract changed"));
+        }
+        if ours.is_some() {
+            // Loaded now at our request; the hello still names the old one.
+            hello["loaded"] = json!(selected);
         }
         if follows_app {
             crate::selection::check_loaded(&session.spec, &hello)?;
@@ -1305,6 +1370,101 @@ mod tests {
         assert!(client.connect().is_err());
         assert_eq!(client.transport.sent.len(), 3);
         assert!(crate::selection::approved(cache.path()).unwrap().is_none());
+    }
+    #[test]
+    fn comma_pick_that_wins_is_requested_downloaded_and_uploaded() {
+        let cache = tempfile::tempdir().unwrap();
+        let data = b"carrot-n16-onnx-fixture";
+        let mut spec =
+            crate::model_spec::ModelSpec::parse(include_bytes!("../data/n16.json")).unwrap();
+        {
+            use sha2::Digest;
+            spec.sha256 = format!("{:x}", sha2::Sha256::digest(data));
+        }
+        spec.nbytes = data.len() as u64;
+        // A verified copy is cached already, so no network is touched.
+        std::fs::write(cache.path().join(format!("{}.onnx", spec.sha256)), data).unwrap();
+        let pick = crate::app_pick::AppPick {
+            model: "n16".into(),
+            name: "N16 Nav".into(),
+            url: "https://invalid.example/big_driving_supercombo.onnx".into(),
+            at: 1_700_000_000.,
+            spec: spec.clone(),
+        };
+        crate::app_pick::write(cache.path(), &pick).unwrap();
+        let legacy: Value = serde_json::from_str(crate::model_spec::LEGACY_JSON).unwrap();
+        // The App runs Cinque v2 and answers with our pick as the newer one.
+        let hello = json!({"protocol":3,"backend":"ort","device":"coreml-Apple M4","runtime_version":"1.22.0","loaded":legacy["sha256"],"pick":{"sha256":spec.sha256,"by":"comma"},"telemetry":{"device_model":"Mac","android_api":"none","backend_requested":"coreml","app_version":"test"}});
+        let wire_spec = serde_json::to_value(&spec).unwrap();
+        let mut replies: VecDeque<Message> = vec![
+            json_reply(2, 1, hello),
+            json_reply(4, 2, json!({"state":"need_upload","sha256":spec.sha256})),
+            json_reply(
+                4,
+                3,
+                json!({"state":"need_upload","sha256":spec.sha256,"chunk":8}),
+            ),
+            // chunks go out as 4, 5, 6 with no answer; UPLOAD_DONE is 7
+            json_reply(
+                4,
+                7,
+                json!({"state":"ready","sha256":spec.sha256,"spec":wire_spec}),
+            ),
+        ]
+        .into();
+        let mut count = spec.output_count().unwrap();
+        if spec.stateful() {
+            let [start, end] = spec.range("hidden_state").unwrap();
+            count -= end - start;
+        }
+        for frame in 0..10 {
+            replies.push_back(reply(8 + frame, frame, 0, &vec![0.; count]));
+        }
+        let mut client = Client::app(
+            AppWire {
+                replies,
+                sent: Vec::new(),
+                closed: false,
+            },
+            cache.path().to_owned(),
+        );
+        client.app.as_mut().unwrap().parked = std::sync::Arc::new(|| true);
+        let identity = client.connect().unwrap();
+        assert_eq!(identity["artifact_sha256"], spec.sha256);
+        let sent: Vec<(Header, Vec<u8>)> = client
+            .transport
+            .sent
+            .iter()
+            .map(|bytes| {
+                let header =
+                    Header::decode_version(bytes[..32].try_into().unwrap(), wire::Version::V3)
+                        .unwrap();
+                let length = header.length as usize;
+                (header, bytes[32..32 + length].to_vec())
+            })
+            .collect();
+        let first: Value = serde_json::from_slice(&sent[0].1).unwrap();
+        assert_eq!(first["pick"]["ref"], "n16");
+        assert_eq!(first["pick"]["sha256"], spec.sha256);
+        let request: Value = serde_json::from_slice(&sent[1].1).unwrap();
+        assert_eq!(sent[1].0.kind, 3);
+        assert_eq!(request["sha256"], spec.sha256);
+        assert_eq!(request["nbytes"], spec.nbytes);
+        let uploaded: Vec<u8> = sent
+            .iter()
+            .filter(|(header, _)| header.kind == 5)
+            .flat_map(|(_, payload)| payload[8..].to_vec())
+            .collect();
+        assert_eq!(uploaded, data);
+        // The App keeps its own copy now.
+        assert!(!cache.path().join(format!("{}.onnx", spec.sha256)).exists());
+        assert_eq!(
+            crate::selection::approved(cache.path())
+                .unwrap()
+                .unwrap()
+                .sha256,
+            spec.sha256
+        );
     }
     #[test]
     fn app_request_release_checks_fresh_loaded_identity() {

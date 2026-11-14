@@ -213,6 +213,10 @@ pub struct Diagnostics {
     pub temp_c: Option<Value>,
     pub active: bool,
     pub fresh: bool,
+    /// The model the host serves or prepares, for the web's model library.
+    pub sha256: Option<String>,
+    /// Download/upload/build progress while preparing it.
+    pub preparation: Value,
 }
 pub fn diagnostics(saved: &Value, link: &Value, model: &Value, now: f64) -> Option<Diagnostics> {
     if !truth(&saved["peer"])
@@ -233,6 +237,20 @@ pub fn diagnostics(saved: &Value, link: &Value, model: &Value, now: f64) -> Opti
         temp_c: None,
         active: truth(&model["active"]),
         fresh: false,
+        sha256: link["sha256"]
+            .as_str()
+            .filter(|sha| sha.len() == 64 && sha.bytes().all(|b| b.is_ascii_hexdigit()))
+            .map(str::to_owned),
+        preparation: if link["state"] == "loading" {
+            let item = &link["preparation"];
+            serde_json::json!({
+                "stage": item["stage"].as_str().map(|v| v.chars().take(40).collect::<String>()),
+                "fraction": item["fraction"].as_f64().filter(|v| (0. ..=1.).contains(v)),
+                "message": item["message"].as_str().map(|v| v.chars().take(200).collect::<String>()),
+            })
+        } else {
+            Value::Null
+        },
     };
     if link["state"] == "updating" && result.label == "jetSON" {
         let badge = update_badge(&link["host_update"]);
