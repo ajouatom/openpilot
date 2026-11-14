@@ -36,6 +36,7 @@ SESSION_MODE = 'usb'
 ACTIVE_UDC = None
 SESSION_DETACHED = False
 log = logging.getLogger('carrot.jetlink')
+LAST_STATUS_EVENT = None
 sys.path.insert(0, str(VENDOR.parents[1] / 'tools/jetlink'))
 from hud_protocol import Publisher, HUD_MESSAGE
 from hud_wifi import publisher as display_publisher, USB_CAPABILITY as HUD_USB_CAPABILITY
@@ -131,6 +132,7 @@ def _role_attached():
 
 
 def publish(status, spec=None, **extra):
+  global LAST_STATUS_EVENT
   record = dict(state=status, updated=time.monotonic(), model=model_name(spec) if spec else 'App selection',
                 sha256=spec.sha256 if spec else None,
                 transport=SESSION_MODE if TRANSPORT_MODE == 'auto' else TRANSPORT_MODE,
@@ -138,6 +140,12 @@ def publish(status, spec=None, **extra):
   temporary = STATUS.with_suffix('.tmp')
   temporary.write_text(json.dumps(record))
   os.replace(temporary, STATUS)
+  event = (status, (extra.get('preparation') or {}).get('stage'), str(extra.get('error') or '')[:300])
+  if event != LAST_STATUS_EVENT:
+    from openpilot.common.swaglog import cloudlog
+    cloudlog.event('jetlinkConnectionState', state=status, stage=event[1], error=event[2],
+                   transport=record['transport'])
+    LAST_STATUS_EVENT = event
 
 
 class CarrotTransport(FfsTransport):
@@ -556,11 +564,13 @@ def main():
         if owner is None:
           # Optional iOS networking must not make existing bulk USB depend on
           # NCM, dnsmasq or a firewall backend. Cleanup is verified below first.
+          publish('connecting', peer=peer, preparation={'stage': 'usb-setup'})
           setup_gadget('usb' if mobile_unavailable else TRANSPORT_MODE)
           udc = next(Path('/sys/class/udc').iterdir()).name
           owner = CarrotTransport('/dev/ffs-jetlink', gadget=GADGET, udc=udc)
           if TRANSPORT_MODE in ('auto', 'ios') and not mobile_unavailable:
             cable = MobileCable(owner)
+            publish('connecting', peer=peer, preparation={'stage': 'network-setup'})
             cable.start()
             if TRANSPORT_MODE == 'auto':
               log.warning('%s', AutoTransport.diagnostic)
