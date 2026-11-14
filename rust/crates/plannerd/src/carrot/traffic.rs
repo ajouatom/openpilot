@@ -2,6 +2,14 @@ use super::{CarrotPlanner, EventName, Input, TrafficState, XState};
 use crate::{traffic_stop::entry_allowed, Error};
 use openpilot_control_policy::math::{interp, minimum};
 
+/// Frames (20 Hz) a model start sign must last before it releases a stop
+/// that is being approached. carrot released on its first green (0.25 s):
+/// approaching a red light at 40-70 km/h the model's end speed hovered at the
+/// start/stop thresholds, red and green alternated every ~0.5 s, every green
+/// dropped the stop and the car accelerated toward the light until the driver
+/// braked (route 00000cb1, three times). A real green still releases, 1 s later.
+pub(super) const GREEN_RELEASE_FRAMES: u64 = 20;
+
 impl CarrotPlanner {
     pub(super) fn check_stopping(&mut self, input: &Input<'_>, cruise: f64) -> Result<(), Error> {
         let velocities = &input.model.velocity.x;
@@ -106,7 +114,9 @@ impl CarrotPlanner {
                         self.traffic_starting_count = 200;
                     } else if super::signal::lead_in_stop_range(lead.status, lead.d_rel, stop_raw) {
                         self.x_state = XState::Lead;
-                    } else if self.traffic_state == TrafficState::Green {
+                    } else if self.traffic_state == TrafficState::Green
+                        && self.start_sign_count >= GREEN_RELEASE_FRAMES
+                    {
                         self.add_signal_event(EventName::TrafficSignGreen, clock);
                         self.x_state = XState::E2eCruise;
                     } else {

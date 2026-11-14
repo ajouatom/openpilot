@@ -361,3 +361,51 @@ mod signal_refresh_tests {
         }
     }
 }
+
+#[cfg(test)]
+mod stop_release_tests {
+    use super::*;
+    struct Settings;
+    impl Parameters for Settings {
+        fn integer(&mut self, key: &'static str) -> Result<i32, Error> {
+            Ok(if key == "MyDrivingMode" { 3 } else { 0 })
+        }
+        fn float(&mut self, _: &'static str) -> Result<f64, Error> {
+            Ok(0.)
+        }
+    }
+    #[test]
+    fn a_brief_green_does_not_release_a_stop_being_approached() {
+        let mut planner = CarrotPlanner::new(&mut Settings).unwrap();
+        let car = CarState {
+            v_ego: 11.,
+            ..CarState::default()
+        };
+        let (model, radar) = (Model::default(), Radar::default());
+        let input = Input {
+            car: &car,
+            model: &model,
+            radar: &radar,
+            personality: Personality::Standard,
+            navigation: None,
+            navigation_receive_time: None,
+            mode_checks: false,
+            lane_valid: false,
+            model_ns: 0,
+            radar_ns: 0,
+            pose_ns: 0,
+            pose_valid: false,
+            yaw_rate: 0.,
+        };
+        for (count, released) in [(5, false), (19, false), (20, true)] {
+            planner.x_state = XState::E2eStop;
+            planner.traffic_state = TrafficState::Green;
+            planner.start_sign_count = count;
+            let (mut cruise, mut stop_model) = (20., 50.);
+            planner
+                .transition(&input, &mut cruise, [50., 50.], &mut stop_model, TrafficState::Red, &mut || 100.)
+                .unwrap();
+            assert_eq!(planner.x_state == XState::E2eCruise, released, "{count}");
+        }
+    }
+}
