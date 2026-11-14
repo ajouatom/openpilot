@@ -566,9 +566,19 @@ impl DesireHelper {
             && navigation.command == "LANECHANGE"
         {
             self.carrot_cmd_index_last = navigation.command_index;
-            self.carrot_lane_change_count = 4;
-            self.carrot_blinker_state = if navigation.argument == "LEFT" { 1 } else { 2 };
-            blinker = self.carrot_blinker_state;
+            // carrot took every argument other than "LEFT" (empty, CANCEL, a
+            // typo) as a right lane change. Only LEFT/RIGHT request one; any
+            // other argument is consumed without a request.
+            let direction = match navigation.argument.as_str() {
+                "LEFT" => 1,
+                "RIGHT" => 2,
+                _ => 0,
+            };
+            if direction != 0 {
+                self.carrot_lane_change_count = 4;
+                self.carrot_blinker_state = direction;
+                blinker = direction;
+            }
         } else if matches!(kind, "turn left" | "turn right") {
             if self.atc_active != 2 {
                 blinker = if kind == "turn left" { 1 } else { 2 };
@@ -1200,5 +1210,27 @@ fn classify(
         }
     } else {
         Maneuver::LaneChange
+    }
+}
+
+#[cfg(test)]
+mod lane_command_tests {
+    use super::DesireHelper;
+    use crate::types::Navigation;
+
+    #[test]
+    fn only_left_or_right_lane_change_commands_request_a_side() {
+        for (argument, expected) in [("LEFT", 1), ("RIGHT", 2), ("", 0), ("CANCEL", 0), ("left", 0)] {
+            let mut helper = DesireHelper::new(false, None);
+            let navigation = Navigation {
+                command_index: 7,
+                command: "LANECHANGE".into(),
+                argument: argument.into(),
+                ..Navigation::default()
+            };
+            let (blinker, _) = helper.atc_blinker(&navigation, 0, None);
+            assert_eq!(blinker, expected, "{argument:?}");
+            assert_eq!(helper.carrot_cmd_index_last, 7, "{argument:?} is consumed");
+        }
     }
 }
