@@ -6,6 +6,26 @@ import pytest
 from openpilot.common import jetlink_status as status
 
 
+@pytest.mark.parametrize('active', [False, True])
+def test_status_replaced_during_read_is_not_a_future_timestamp(monkeypatch, active):
+  clock = [100.]
+  monkeypatch.setattr(status.time, 'monotonic', lambda: clock[0])
+
+  def concurrent_read(path):
+    # The writer atomically replaces the report after the UI starts reading.
+    clock[0] += .001
+    if path == status.MODEL_STATUS:
+      return {'updated': clock[0], 'active': active, 'warp_preparing': not active}
+    return {'updated': clock[0], 'state': 'ready', 'peer': {'carrot_host': 'jetson'},
+            'telemetry_updated': clock[0],
+            'telemetry': {'carrot_health': {'age_s': 0., 'severity': 'ok'}}}
+
+  monkeypatch.setattr(status, '_read', concurrent_read)
+  expected = ('jetSON 사용 중', 'active') if active else ('jetSON 콤마 영상 준비 중', 'loading')
+  assert status.badge() == expected
+  assert status.diagnostics()['severity'] == 'ok'
+
+
 @pytest.mark.parametrize('reason', [
   '[adb-handoff:opt_in_missing] ADB handoff permission is missing (/data/jetlink-adb-handoff)',
   "[adb-handoff:offroad] Offroad required: IsOffroad='0', IsOnroad='1' (pre-write recheck)",
