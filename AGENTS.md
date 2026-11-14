@@ -1,5 +1,43 @@
 # Repository memory
 
+- 2026-11-14: SD/NVMe Super image uses reviewed R2 initrd PARTUUID resolution,
+  exact-one-device admission, same-disk APP/EFI/DATA, and portable storage format2.
+  Official vendor TEGRA_BOOT_STORAGE is deprecated and can remain mmcblk0 when
+  EFI is already mounted; validate the mounted EFI against the actual root disk.
+  Reuse hash-verified v0.6 ONNX after a redundant network fetch timed out.
+  ARM image43584236953 on3903ab9889 passes91/1skip and offline chroot/storage/
+  capsule/first-DATA admission checks. Signed N16 runtime stays0cb67d46cc.
+  Raw40GiB SHA256fd73ab80fc635a02a6884ec422497f6be986d60535170f58254c20bbdaf2dfd9;
+  compressed8538661725B SHA256771644c507b72e96ed5bd69967f8d24bc757b1bf0d7aaff84efab01244fa6743.
+  Installer977ebb826d ZIP8563362842B SHA256d2d8058cc82cb0c0e3e9cb712f0fa9ecddfde9a2c48f502ef2a4cd1842be0c62.
+  Actual final ZIP extraction/CRC and bundled Python preparation in Korean/space
+  path reproduce the raw hash; installed initrd NVMe drivers, helper sources,
+  capsule, consumer ordering and clean EFI66012160B free independently read back.
+  v0.7.0-super-auto-sd-nvme-preview targets P3767-0005/P3768 bootable JetPack6.x;
+  published on NAS with full readback SHA256 and HTTPS checks; GitHub prerelease
+  jetson-super-auto-sd-nvme-20261114 points to installer977ebb826d. Final native
+  integration43586335520 and full-build43586335505 pass.
+  physical new-image SD/NVMe boot, QSPI update and power interruption unverified.
+  Evidence .analysis/scratch/2026-11-14-super-sd-nvme. Existing Super devices use
+  normal runtime GitPull/restart; automatic firmware installation is image-side.
+
+- 2026-11-14: Owner I5PE07b62e389ed26c81 already has protected R2 SD,36.4.7,
+  Super DT, MAXN_SUPER id2/GPU1020MHz. No image rewrite needed for this device.
+  Startup route11dd reaches host ready around94s, then comma warp preparation
+  takes30.956s. Setup can block20s against the old8s display lease. Add explicit
+  bounded setup phases22s, model/warp/active wording and jetlinkConnectionState
+  transition events, verified in actual11df/0 full rlog. Live monitor catches one
+  false ERROR while warp prepares: sampling time before atomic status read can
+  reject a concurrently newer record as future-dated. Two regressions fail before
+  and pass after post-read time sampling. Preserve optional clock argument used
+  by standalone HUD; initial CI caught that caller and correction passes88 local
+  status/startup/HUD checks. Native43585815662 main2571/56skip plus other groups,
+  full-build43585815661 pass. Owner pulled/restarted91eb1e86bb in P/zero speed/
+  controls disabled, N16 active/MAXN_SUPER verified. Two fixed restarts reach
+  active94.420/95.885s after monitor start, no error badge after daemon connection
+  starts. Deliberate process-stop stale reports before daemon restart are excluded.
+  This tests current installed image and software restart, not new image boot.
+
 - 2026-11-14: I5PE Nov13/14 six drives,60 hash-matched full rlogs on162da468cc,
   show31/33 manual turns with physical onset all2.48..2.50s and60/63 B1 requests
   reporting driver_override. Release4 rejects its persistent0x413 tap echo during
