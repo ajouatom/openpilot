@@ -70,6 +70,41 @@ def test_state_is_bound_to_recipient_board():
   assert boot.decision({**current, 'supported': False}, {}) == 'unsupported_board'
 
 
+@pytest.mark.parametrize('disk', ['mmcblk0', 'mmcblk1', 'nvme0n1', 'nvme1n1'])
+@pytest.mark.parametrize('mismatch', [None, 'efi', 'data', 'root', 'board'])
+def test_firmware_uses_actual_boot_disk_with_stale_vendor_storage(tmp_path, monkeypatch, disk, mismatch):
+  import protected_storage as storage
+  layout = dict(format=2, root=f'/dev/{disk}p1', data=f'/dev/{disk}p17',
+                setup=f'/dev/{disk}p16', efi=f'/dev/{disk}p10')
+  monkeypatch.setattr(storage, 'portable_configuration', lambda: layout.copy())
+  selected = layout.copy()
+  if mismatch == 'root':
+    selected['root'] = '/dev/otherp1'
+  monkeypatch.setattr(storage, 'configuration', lambda: selected)
+  original_read, original_dir = Path.read_text, Path.is_dir
+  control = 'TEGRA_BOOT_STORAGE mmcblk0\nCOMPATIBLE_SPEC 3767--0005--1--jetson-orin-nano-devkit-super-\n'
+  if mismatch == 'board':
+    control = control.replace('0005', '0001')
+  monkeypatch.setattr(Path, 'read_text', lambda path, *a, **kw:
+    control if path.as_posix() == '/etc/nv_boot_control.conf' else original_read(path, *a, **kw))
+  monkeypatch.setattr(Path, 'is_dir', lambda path:
+    True if path.as_posix() == '/sys/firmware/efi/efivars' else original_dir(path))
+  def run(*args):
+    if args == ('findmnt', '-n', '-o', 'SOURCE', str(boot.EFI)):
+      return '/dev/otherp10' if mismatch == 'efi' else layout['efi']
+    if args == ('findmnt', '-n', '-o', 'SOURCE', str(boot.STATE.parent)):
+      return '/dev/otherp17' if mismatch == 'data' else layout['data']
+    if args == ('blkid', '-s', 'TYPE', '-o', 'value', layout['efi']):
+      return 'vfat'
+    pytest.fail(str(args))
+  monkeypatch.setattr(boot, 'run', run)
+  if mismatch:
+    with pytest.raises(ValueError):
+      boot.validate_storage()
+  else:
+    boot.validate_storage()
+
+
 @pytest.fixture
 def staging(tmp_path, monkeypatch):
   capsule = tmp_path / 'TEGRA_BL_3767_super.Cap'

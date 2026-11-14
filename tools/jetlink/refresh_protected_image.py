@@ -14,8 +14,8 @@ from update_host import fetch, verify_signature
 BASE_URL = 'https://upload.shind0.synology.me/downloads/jetson/v0.4.0-boot-preview/carrot-jetson.img.zst'
 BASE_SHA = 'b277f3c6318d5b3210eee6e6aa4e74e492f73ffe2f9a669e108822a7ceb6c614'
 RAW_SHA = 'b11f5601d3a713ad0de23315ee90daddf5452f8e548f2c87c8eeec28d321e55f'
-CACHED_SHA = '4cb5db4e006e41433adcc866f10252d9bb2fec68ad1f7f75229e217fb8c80620'
-CACHED_RAW_SHA = '5e0da1b97485f3f06cfc809d6ddff446a868a8dfe0fd1c65e90a3ed386cc8c54'
+CACHED_SHA = '34312ff6d9ea216a947f725b80059cc140952992d0282391e50c6dea6796d36c'
+CACHED_RAW_SHA = 'b2645ce45a6e20a6932ae11338dd9cbf95af52309ebaf8e3a0131a962249886f'
 
 
 def unpack_base(work, cached=None):
@@ -51,9 +51,10 @@ def rebuild(work, manifest, cached=None):
   work.mkdir(parents=True)
   image = unpack_base(work, cached)
   bundle = work / 'runtime.tar.gz'
-  fetch(manifest['bundle']['url'], bundle, manifest['bundle']['sha256'], manifest['bundle']['size'], None)
   model = work / 'model.onnx'
-  fetch(manifest['model']['url'], model, manifest['model']['sha256'], manifest['model']['size'], None)
+  if cached is None:
+    fetch(manifest['bundle']['url'], bundle, manifest['bundle']['sha256'], manifest['bundle']['size'], None)
+    fetch(manifest['model']['url'], model, manifest['model']['sha256'], manifest['model']['size'], None)
   layout = json.loads(subprocess.check_output(['sfdisk', '--json', str(image)]))['partitiontable']
   parts = layout['partitions']
   if (layout['label'] != 'gpt' or len(parts) != 17 or parts[0]['start'] != 3188736
@@ -80,7 +81,15 @@ def rebuild(work, manifest, cached=None):
       marker = json.loads((root / 'etc/carrot-jetlink-image.json').read_text())
       if marker['source_commit'] != manifest['source_commit']:
         raise ValueError('Cached image runtime differs from the signed manifest')
+      cached_model = root / 'opt/carrot-jetlink/cache/models' / (manifest['model']['sha256'][:16] + '.onnx')
+      if cached_model.stat().st_size != manifest['model']['size'] or digest(cached_model) != manifest['model']['sha256']:
+        raise ValueError('Cached model differs from the signed manifest')
+      shutil.copyfile(cached_model, model)
     source = Path(__file__).resolve().parent
+    from portable_initrd import configure as configure_portable, APP_UUID
+    if parts[0]['uuid'].lower() != APP_UUID:
+      raise ValueError('Unexpected portable APP partition identity')
+    configure_portable(root, source)
     from install_super_bootstrap import configure as configure_super
     configure_super(root, source, work)
     from install_boot_display import configure as configure_boot_display
@@ -102,13 +111,14 @@ def rebuild(work, manifest, cached=None):
     run('cp', '-a', runtime, data / 'runtime')
     (data / 'runtime/protected-runtime.json').write_text(json.dumps({
       'format': 1, 'preloaded_model': {'sha256': spec['sha256'], 'bytes': spec['nbytes']}}) + '\n')
-    marker.update(state='PROTECTED_CANDIDATE_NOT_BOOT_TESTED', storage_format=1,
+    marker.update(state='PROTECTED_CANDIDATE_NOT_BOOT_TESTED', storage_format=2,
+                  boot_media=['microSD', 'M.2 NVMe'],
                   builder_commit=subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip(),
                   data_partition=17, data_grow=False, image_bytes=image.stat().st_size,
                   model_sha256=spec['sha256'], engine_prebuilt=False,
                   power_setup='automatic NVIDIA Super capsule provisioning and MAXN_SUPER verification',
                   automatic_super_firmware=True,
-                  firmware_provisioning='Orin Nano 8GB developer kit; bootable JetPack 6.x SD required')
+                  firmware_provisioning='Orin Nano 8GB developer kit; bootable JetPack 6.x firmware required')
     for path in (root / 'etc/carrot-jetlink-image.json', setup / 'IMAGE.json'):
       path.write_text(json.dumps(marker, indent=2) + '\n')
     audit_unprovisioned(root, setup)
@@ -169,7 +179,7 @@ def rebuild(work, manifest, cached=None):
                 bundle_sha256=manifest['bundle']['sha256'],
                 offline_checks={'runtime_imports': True, 'model_hashes': True, 'privacy': True,
                                 'filesystems': True, 'gpt': True, 'systemd_units': True,
-                                'firmware_capsule': True, 'fresh_data_admission': True},
+                                'firmware_capsule': True, 'fresh_data_admission': True, 'portable_boot': True},
                 validation='Offline import, model hash, privacy and filesystem checks; physical boot pending')
   (work / 'candidate.json').write_text(json.dumps(marker, indent=2) + '\n')
   (work / 'SHA256SUMS').write_text(f'{marker["image_sha256"]}  {image.name}\n' +

@@ -45,6 +45,19 @@ def test_prepare_patch_and_repeat_without_touching_original(package):
   prepare.prepare(root, lambda *_: pytest.fail('Valid prepared file decompressed again'))
 
 
+@pytest.mark.parametrize('storage_format,command', [(1, '02_SD카드설치.cmd'), (2, '02_SD_SSD설치.cmd')])
+def test_preparation_points_to_the_packaged_install_command(package, capsys, storage_format, command):
+  root, *_ = package
+  manifest = root / 'support/release.json'
+  release = json.loads(manifest.read_text())
+  release['storage_format'] = storage_format
+  manifest.write_text(json.dumps(release))
+  prepare.prepare(root, open)
+  assert command in capsys.readouterr().out
+  prepare.prepare(root, lambda *_: pytest.fail('Valid image decompressed again'))
+  assert command in capsys.readouterr().out
+
+
 @pytest.mark.parametrize('name', ['carrot-jetson.img.zst', 'offline-usbc.json'])
 def test_bad_input_never_produces_ready_image(package, name):
   root, *_ = package
@@ -185,3 +198,15 @@ def test_public_integrated_package_requires_checks_for_exact_image(tmp_path, mon
   assert 'automatically prepares Super firmware' in guide
   assert 'is not updated by this SD installer' not in guide
   assert 'physical firmware update and boot are unverified' in guide
+  value.update(storage_format=2, boot_media=['microSD', 'M.2 NVMe'])
+  metadata.write_text(json.dumps(value))
+  with pytest.raises(ValueError, match='Portable image'):
+    publisher.integrated_release(image, compressed, metadata, offline_preview=True)
+  value['offline_checks']['portable_boot'] = True
+  metadata.write_text(json.dumps(value))
+  preview = publisher.integrated_release(image, compressed, metadata, offline_preview=True)
+  assert preview['version'] == 'v0.7.0-super-auto-sd-nvme-preview'
+  assert preview['storage_format'] == 2 and preview['physical_boot'] is False
+  guide = publisher.candidate_guide(html, preview)
+  assert '02_SD_SSD설치.cmd' in guide and 'Jetson M.2 slot' in guide
+  assert 'v0.7.0-super-auto-sd-nvme-preview/carrot-jetson-windows.zip' in guide

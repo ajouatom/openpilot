@@ -50,7 +50,7 @@ ExecStart=/usr/sbin/nvbootctrl verify
 ''')
   name = 'carrot-super-firmware.service'
   (units / name).write_text('''[Unit]
-Description=Provision and verify NVIDIA Super firmware from the boot SD
+Description=Provision and verify NVIDIA Super firmware from the boot SD or NVMe
 Requires=carrot-protected-storage.service nv-l4t-bootloader-config.service nvpmodel.service
 After=carrot-protected-storage.service nv-l4t-bootloader-config.service nvpmodel.service
 Before=carrot-jetlink-performance.service carrot-jetlink.service carrot-jetlink-xorg.service carrot-jetlink-hud.service carrot-jetlink-update-apply.service

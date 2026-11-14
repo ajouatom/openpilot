@@ -2,6 +2,20 @@
   "sensitivity": 50,
   "cases": [
     {
+      "id": "ioniq5-pe-705-52-offset-sedan-near-lead",
+      "vehicle_folder": "HYUNDAI_IONIQ_5_PE 7f419ed56030e135",
+      "log": "00000705--b425976950--52/rlog.zst",
+      "source": "front+corner",
+      "window": [25.0, 32.2],
+      "expected": "detect",
+      "validation_stage": "lead_one",
+      "target_track_ids": [61],
+      "required_lead_one_ids": [61],
+      "latest_detection_s": 26.8,
+      "lead_one_continuous_window": [26.8, 32.2],
+      "scene": "Slow merge from the left. Front 61 is the near silver sedan. Before the driver's brake at video 31.86 s the recorded primary still follows the distant car through SCC. Require the physical near track to own L1 through brake onset."
+    },
+    {
       "id": "carnival-225-28-in-lane-braking-corner-3776",
       "vehicle_folder": "KIA_CARNIVAL_4TH_GEN c4dcf95545dafe68",
       "log": "00000225--74da14534f--28/rlog.zst",

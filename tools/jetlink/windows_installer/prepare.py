@@ -26,6 +26,8 @@ def check(path, size, sha):
 def prepare(root, decompress=None):
   root = Path(root).resolve()
   release = json.loads((root / 'support/release.json').read_text(encoding='utf-8'))
+  install_name = '02_SD_SSD설치.cmd' if release.get('storage_format') == 2 else '02_SD카드설치.cmd'
+  ready_message = f'준비 완료! {install_name}를 실행하세요.\n  Ready! Run {install_name} to install.'
   mode = release.get('preparation', 'legacy-usbc-patch')
   if mode not in ('legacy-usbc-patch', 'integrated'):
     raise RuntimeError('지원하지 않는 설치 형식입니다.\n  Unsupported installation format.')
@@ -35,7 +37,7 @@ def prepare(root, decompress=None):
   if target.exists():
     print('기존 준비 파일 검사 중\n  Checking the prepared image. Please wait.', flush=True)
     check(target, release['image_bytes'], release['prepared_sha256'])
-    print('준비 완료! 02_SD카드설치.cmd를 실행하세요.\n  Ready! Run 02 to install to the SD card.', flush=True)
+    print(ready_message, flush=True)
     return
   if shutil.disk_usage(root).free < release['image_bytes'] + (1 << 30):
     required = (release['image_bytes'] + (1 << 30) + 999999999) // 1000000000
@@ -76,7 +78,7 @@ def prepare(root, decompress=None):
   print('4/4 최종 이미지 검사\n  Verifying the final installation image.', flush=True)
   check(partial, release['image_bytes'], release['prepared_sha256'])
   partial.replace(target)
-  print('준비 완료! 02_SD카드설치.cmd를 실행하세요.\n  Ready! Run 02 to install to the SD card.', flush=True)
+  print(ready_message, flush=True)
 
 
 if __name__ == '__main__':

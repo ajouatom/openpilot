@@ -72,22 +72,22 @@ async function openNaverMap(id, expiresAt) {
 }
 export async function openToolPanel(action) {
   if (document.hidden) throw new Error('Keep Carrot Web visible');
-  if (document.querySelector('.app-dialog:not([hidden])')) throw new Error('Close the current dialog first');
+  if (document.querySelector('.app-dialog:not([hidden]), dialog[open]')) throw new Error('Close the current dialog first');
   if (action !== 'tools' && action !== 'egpu' && !Object.hasOwn(toolPanelButtons, action)) throw new Error('Unknown Tools panel');
   globalThis.showPage('tools', true);
   globalThis.CarrotToolsRuntime?.init?.();
   if (document.getElementById('pageTools')?.hidden !== false) throw new Error('Tools page did not open');
-  const button = action === 'egpu' ? document.getElementById('egpuModelCard') : document.getElementById(toolPanelButtons[action]);
+  const button = action === 'egpu' ? document.getElementById('btnChangeModel') : document.getElementById(toolPanelButtons[action]);
   if (action === 'tools') return 'opened';
   if (!button || button.hidden || button.disabled) throw new Error('This panel is unavailable on this device');
   const group = button.closest('.tools-group');
   if (group && !group.classList.contains('is-open')) group.querySelector('.tools-group__toggle')?.click();
   button.scrollIntoView({ block: 'center' }); button.focus();
-  if (action === 'egpu' || manualPanels.has(action)) return 'needs_input';
+  if (manualPanels.has(action)) return 'needs_input';
   button.click();
   // Event handlers can fetch data before opening a dialog. Do not call this an applied change.
   for (let i = 0; i < 30; i++) {
-    if (document.querySelector('.app-dialog:not([hidden])') || (action === 'car_select' && document.getElementById('pageCar')?.hidden === false)) return 'opened';
+    if (document.querySelector('.app-dialog:not([hidden]), dialog[open]') || (action === 'car_select' && document.getElementById('pageCar')?.hidden === false)) return 'opened';
     await new Promise(resolve => setTimeout(resolve, 100));
   }
   return 'needs_input';

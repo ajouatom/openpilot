@@ -56,13 +56,23 @@ def host_label(peer, mode='usb'):
   return 'Jetlink'
 
 
-def _fresh(path, now, *, handshake=False):
+def _fresh(path, now=None, *, handshake=False):
   try:
     value = _read(path)
+    # Sample after the read: a concurrent atomic replacement can carry a
+    # timestamp newer than the time at which this reader started.
+    if now is None:
+      now = time.monotonic()
     # HELLO blocks for 3s in auto probing, or 5s in the normal path. A 3s
     # display lease falsely declares a dead daemon during that bounded wait.
     # Cover HELLO + the 2s reconnect pause; all other reports still expire at 3s.
     limit = 8 if handshake and value.get('state') == 'connecting' else 3
+    if handshake and value.get('state') == 'connecting':
+      # Root setup has a 15s subprocess bound; NCM creation adds up to 5s.
+      # These explicit phases must outlive those operations, plus reconnect.
+      phase = (value.get('preparation') or {}).get('stage')
+      if phase in ('usb-setup', 'network-setup'):
+        limit = 22
     if isinstance(value, dict) and 0 <= now - value['updated'] < limit:
       return value
   except (OSError, ValueError, KeyError, TypeError):
@@ -70,16 +80,32 @@ def _fresh(path, now, *, handshake=False):
   return {}
 
 
+def preparation_text(link, model):
+  if model.get('active'):
+    return ''
+  phase = (link.get('preparation') or {}).get('stage')
+  if link.get('state') == 'connecting':
+    return {'usb-setup': 'USB 연결 준비 중', 'network-setup': 'USB 통신 준비 중',
+            'runtime-handoff': '실행 프로그램 시작 중',
+            'waiting-host': '응답 대기 중', 'usb-probe': '응답 확인 중',
+            'transport-selection': '연결 장치 확인 중'}.get(phase, '연결 대기')
+  if link.get('state') == 'loading':
+    return '모델 준비 중'
+  if link.get('state') == 'ready' and model:
+    return '콤마 영상 준비 중' if model.get('warp_preparing') else '모델 전환 대기'
+  return ''
+
+
 def diagnostics():
   """Only current telemetry can report health or an address; HELLO is identity."""
-  now = time.monotonic()
   saved = _read(LINK_STATUS)
-  link = _fresh(LINK_STATUS, now, handshake=True)
-  model = _fresh(MODEL_STATUS, now)
+  link = _fresh(LINK_STATUS, handshake=True)
+  model = _fresh(MODEL_STATUS)
+  now = time.monotonic()
   if not saved.get('peer') and saved.get('state') not in ('connecting', 'loading', 'retrying', 'blocked') and not model.get('active'):
     return None
   result = {'label': host_label(saved.get('peer'), saved.get('transport', 'usb')), 'state': link.get('state', 'disconnected'),
-            'severity': 'unknown', 'reason': '', 'addresses': [], 'temp_c': None,
+            'severity': 'unknown', 'reason': preparation_text(link, model), 'addresses': [], 'temp_c': None,
             'active': bool(model.get('active')), 'fresh': False}
   if link.get('state') == 'updating' and result['label'] == 'jetSON':
     text, style = update_badge(link.get('host_update') or {})
@@ -122,13 +148,14 @@ def diagnostics():
       continue
   if model_error:
     result.update(severity='error', reason=model_error)
+  elif result['severity'] == 'ok' and not result['active']:
+    result['reason'] = preparation_text(link, model) or result['reason']
   return result
 
 
 def badge():
-  now = time.monotonic()
-  link = _fresh(LINK_STATUS, now, handshake=True)
-  model = _fresh(MODEL_STATUS, now)
+  link = _fresh(LINK_STATUS, handshake=True)
+  model = _fresh(MODEL_STATUS)
   label = host_label(link.get('peer'), link.get('transport', 'usb'))
   if link.get('state') == 'updating' and label == 'jetSON':
     return update_badge(link.get('host_update') or {})
@@ -144,7 +171,10 @@ def badge():
     if label == 'jetSON' and link.get('state') == 'ready' and (not health['fresh'] or health['severity'] == 'unknown'):
       return f'{label} DATA?', 'loading'
   if model.get('active'):
-    return label, 'active'
+    return (f'{label} 사용 중' if label == 'jetSON' else label), 'active'
+  progress = preparation_text(link, model)
+  if progress:
+    return f'{label} {progress}', 'loading'
   state = link.get('state')
   if state == 'ready':
     return f'{label} READY', 'ready'

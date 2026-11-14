@@ -115,9 +115,18 @@ class BoundaryIndicator:
         self._reset_geometry()
         return
       if max(abs(y[i] - prev_y[i]) for i in (0, 1)) > 0.4:
-        self.relabel_until = now + 2.0
-        self._reset_geometry()
-        return
+        # During an established driver approach both boundaries can advance
+        # together as markings reappear beyond an intersection.
+        episode = self.episode
+        side = episode['direction'] - 1 if episode else 0
+        paired_approach = (episode is not None and now - episode['intent'] <= .5 and
+                           self.lane_admission(cs, md, side + 1, now) and
+                           0 < prev_y[side] - y[side] <= .8 and
+                           abs(sum(y) - sum(prev_y)) < .2)
+        if not paired_approach:
+          self.relabel_until = now + 2.0
+          self._reset_geometry()
+          return
       self.rates = [0.5 * self.rates[i] + 0.5 * (prev_y[i] - y[i]) / dt for i in (0, 1)]
       for i in (0, 1):
         self.lane_since[i] = (now if self.lane_since[i] is None else self.lane_since[i]) if self.lane_admission(cs, md, i + 1, now) else None
@@ -130,7 +139,7 @@ class BoundaryIndicator:
       if (self.episode is None and confirmed and self.lane_since[confirmed - 1] is not None and now - self.lane_since[confirmed - 1] >= .2 and
           self.confident[confirmed - 1] is not None and 0 <= now-self.confident[confirmed - 1] <= TRACK_SEC):
         self.episode = {'direction':confirmed, 'start':now, 'intent':now, 'initial':y[confirmed - 1],
-                        'minimum':y[confirmed - 1], 'approach':now}
+                        'minimum':y[confirmed - 1], 'approach':now, 'retreat_since':None}
       episode = self.episode
       if episode is None:
         return
@@ -141,12 +150,16 @@ class BoundaryIndicator:
       if self.rates[i] > .1:
         episode['approach'] = now
       episode['minimum'] = min(episode['minimum'], y[i])
+      retreating = y[i] - episode['minimum'] > .15
+      episode['retreat_since'] = (now if episode['retreat_since'] is None else episode['retreat_since']) if retreating else None
       # A brief release or countersteer does not erase continued approach. Actual
       # retreat, stalled approach, stale intent or lost adjacent lane does.
       if (self.lane_since[i] is None or now - episode['intent'] > 1.5 or now - episode['start'] > 4 or
-          now - episode['approach'] > .3 or y[i] - episode['minimum'] > .15):
+          now - episode['approach'] > .3 or (episode['retreat_since'] is not None and now - episode['retreat_since'] >= .15)):
         self.episode = None
         self.relabel_until = now + .2
+        return
+      if retreating:
         return
       # The crossed boundary must have been observed recently. The opposite
       # boundary supplies geometric consistency, not a second confidence veto.
