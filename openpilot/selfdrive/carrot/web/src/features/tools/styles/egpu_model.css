@@ -156,12 +156,40 @@
   }
 }
 
-.model-library { margin-bottom: 16px; padding: 18px; border: 1px solid var(--md-outline-var); border-radius: 18px; background: var(--md-surface-container); }
+.model-library {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--md-outline-var);
+  border-radius: 14px;
+  background: var(--md-surface-container);
+}
 .model-library[hidden] { display: none; }
-.model-library h3 { margin: 0 0 8px; }
-.model-library p { font-size: 13px; line-height: 1.55; opacity: .85; }
-.model-library label { display: grid; gap: 6px; margin-bottom: 10px; }
-.model-library select { width: 100%; padding: 12px; border-radius: 10px; background: var(--md-surface); color: var(--md-on-surface); }
-.model-library__row { display: grid; gap: 7px; padding: 12px 0; border-top: 1px solid var(--md-outline-var); margin-top: 12px; }
-.model-library__row span, .model-library__row small { font-size: 12px; opacity: .8; }
-.model-library__row .btn { justify-self: start; }
+.model-library__summary { min-width: 0; overflow-wrap: anywhere; }
+.model-library__summary strong { font-size: 15px; }
+.model-library__summary p { margin: 4px 0 0; font-size: 12px; color: var(--md-on-surface-var); }
+.model-library[data-state="error"] .model-library__summary p { color: #ff7474; }
+.model-library > .btn { flex: 0 0 auto; }
+.model-library-dialog {
+  box-sizing: border-box;
+  width: min(560px, calc(100vw - 24px));
+  max-height: 88dvh;
+  overflow-y: auto;
+  padding: 18px;
+  border: 1px solid var(--md-outline-var);
+  border-radius: 18px;
+  background: var(--md-surface-container);
+  color: var(--md-on-surface);
+}
+.model-library-dialog::backdrop { background: #0009; }
+.model-library-dialog__heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.model-library-dialog h2 { margin: 0; font-size: 18px; }
+.model-library-dialog p { font-size: 13px; line-height: 1.55; overflow-wrap: anywhere; }
+.model-library-dialog label { display: grid; gap: 6px; margin-bottom: 10px; }
+.model-library-dialog select { width: 100%; min-width: 0; padding: 12px; border-radius: 10px; background: var(--md-surface); color: var(--md-on-surface); }
+.model-library-dialog .egpu-model-card { margin: 16px 0 0; padding: 12px; grid-template-columns: minmax(0, 1fr); }
+.model-library-dialog .egpu-model-card__icon { display: none; }
+.model-library-dialog .egpu-model-card__footer { flex-wrap: wrap; }

@@ -74,3 +74,15 @@ test('Naver Map launches only for the Android wrapper and reports the matching n
   outcome = 'not_installed';
   assert.match((await module.executeToolsCommand(command('c'))).result.error, /not installed/);
 });
+
+
+test('model panel opens the model dialog through the compact change button', async () => {
+  const module = await import('../src/features/tools/assistant_tools.js');
+  let open = false;
+  const button = { hidden: false, closest: () => null, scrollIntoView() {}, focus() {}, click() { open = true; } };
+  globalThis.document = { hidden: false, querySelector: () => open ? {} : null,
+    getElementById: id => id === 'pageTools' ? { hidden: false } : id === 'btnChangeModel' ? button : null };
+  globalThis.showPage = () => {};
+  assert.equal(await module.openToolPanel('egpu'), 'opened');
+  assert.equal(open, true);
+});
