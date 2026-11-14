@@ -3172,6 +3172,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "openpilot-mapsd"
+version = "0.1.0"
+dependencies = [
+ "flate2",
+ "openpilot-cereal",
+ "openpilot-messaging",
+ "openpilot-params",
+ "serde",
+ "serde_json",
+ "signal-hook",
+ "thiserror 2.0.21",
+ "ureq",
+]
+
+[[package]]
 name = "openpilot-messaging"
 version = "0.1.0"
 dependencies = [
