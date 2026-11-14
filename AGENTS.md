@@ -1,5 +1,27 @@
 # Repository memory
 
+- 2026-11-15: Owner reports missed turns/lanes and straight-road indications
+  after Nov14 fixes. Post-update11e0 evening/11e1 morning run91eb1e86bb and
+  B1 release5 exact ELF.35 requests, zero reported driver_override, three
+  TWAI0x600 bus-error+TX-failed events, one confirms0 frames/no lamp. Two moving
+  holds lose accepted ID while board remains waiting, subreason absent.
+  Junction relabel gate erased above30kmh manual-turn onset. Far-boundary-only
+  spike erased another approach. Current model lane desire lit on straight
+  travel. Tiny negative estimated speeds ended two stopped holds.
+  Remove manual-turn relabel gate, bounded150ms far-only spike wait with no
+  emission, require current model lane probability plus both boundaries moving
+  .15m/.30..55s, permit existing hold at confirmed D standstill abs(v)<.1m/s.
+  Capture once-per-request lost-ACK diagnostic and late ownership transitions.
+  92836-frame/81-rlog/eight-route fixed-input replay99->102 requests,97 exact,
+  one turn .447s earlier, straight false indication removed, four added manual
+  requests. Two older additions lack retained video for visual classification.
+  Seven regressions fail before correction,898 local checks pass/2skip.
+  Normal GitPull/full comma restart.
+  CAN transmit fault and moving ACK-loss causes remain unresolved. No live
+  writes/actuation or physical proof of Nov15 corrections. Evidence
+  .analysis/archive/2026-11-15/indicators, docs/indicator_replay_20261114.md.
+
+
 - 2026-11-14: SD/NVMe Super image uses reviewed R2 initrd PARTUUID resolution,
   exact-one-device admission, same-disk APP/EFI/DATA, and portable storage format2.
   Official vendor TEGRA_BOOT_STORAGE is deprecated and can remain mmcblk0 when

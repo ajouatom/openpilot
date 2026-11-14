@@ -206,7 +206,8 @@ def test_badge_publishes_short_ack_without_lamp_edge(monkeypatch, tmp_path):
 
 
 @pytest.mark.parametrize('failed_read', [False, True])
-def test_failure_diagnostic_once_before_stop_even_if_read_fails(monkeypatch, failed_read):
+@pytest.mark.parametrize('lost_ack', [False, True, None])
+def test_failure_diagnostic_once_before_stop_even_if_read_fails(monkeypatch, failed_read, lost_ack):
   import asyncio
   import sys
   import time
@@ -219,7 +220,9 @@ def test_failure_diagnostic_once_before_stop_even_if_read_fails(monkeypatch, fai
     monkeypatch.setitem(sys.modules, 'openpilot.common.params', SimpleNamespace(Params=lambda: monitor.params))
     monitor.session = 71
     monitor.sent_sequences.append(9)
-    monitor.last_command = {'id':'one', 'seq':9, 'time':time.monotonic()}
+    monitor.last_command = {'id':'one', 'seq':9, 'time':time.monotonic() - (20 if lost_ack else 0)}
+    monitor.last_display = ('waiting', 1, 'one') if lost_ack is not False else None
+    monitor.source = {'hold': {'id': 'one'}} if lost_ack else None
     monitor.attrs = {b1.META:'meta', b1.CONTROL:'command', b1.TRACE:'trace'}
     monitor.output_owner.acquire = lambda ready: False
     monitor.publish_badge = lambda *args: None
@@ -229,7 +232,7 @@ def test_failure_diagnostic_once_before_stop_even_if_read_fails(monkeypatch, fai
     async def board(path, interface, method, sig, body, reply_timeout):
       calls.append(path)
       if path == 'meta':
-        return (struct.pack('<IIHBBBH', 71, 1000, 0, 4, 0, 2, 9),)
+        return (struct.pack('<IIHBBBH', 71, 1000, 0, 2 if lost_ack is not False else 4, 0, 2, 9),)
       if path == 'trace':
         assert reply_timeout == .15
         if failed_read:
@@ -240,10 +243,15 @@ def test_failure_diagnostic_once_before_stop_even_if_read_fails(monkeypatch, fai
     monitor.client.call = board
     await monitor.exchange(bytes(32))
     await monitor.exchange(bytes(32))
+    if lost_ack is None:  # A normal source release does not read the diagnostic.
+      assert calls == ['meta', 'command', 'meta', 'command']
+      assert not events
+      return
     assert calls == ['meta', 'trace', 'command', 'meta', 'command']
     assert len(events) == (0 if failed_read else 1)
     if events:
       assert events[0][0] == 'b1TapDiagnostic'
       assert events[0][1]['request_id'] == 'one'
+      assert events[0][1]['ack_lost'] == lost_ack
       assert len(events[0][1]['detail']) == 256
   asyncio.run(run())

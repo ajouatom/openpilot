@@ -71,19 +71,25 @@ def following_road_curve(md, speed, yaw_rate):
     return False
 
 
+def boundary_approach(samples, direction, minimum):
+  """Require both measured boundaries to move toward the indicated crossing."""
+  if len(samples) < 2:
+    return False
+  old_t, old_l, old_r, _, _ = samples[0]
+  t, left, right, _, _ = samples[-1]
+  sign = -1 if direction == 1 else 1
+  return (.30 <= t-old_t <= .55 and 0 < (-left if direction == 1 else right) <= 1.5 and
+          min(sign*(old_l-left), sign*(old_r-right)) >= minimum and
+          any(sample[2+direction] >= LINE_CONFIDENCE for sample in samples))
+
+
 def anticipated_lane(md, samples):
   """Confirm the two nearest forecast rows against measured motion of both lane boundaries."""
   forecast = getattr(md.meta, 'desirePrediction', ())
-  if len(forecast) != 32 or len(samples) < 2:
+  if len(forecast) != 32:
     return 0
-  old_t, old_l, old_r, _, _ = samples[0]
-  t, left, right, _, _ = samples[-1]
-  if not .30 <= t-old_t <= .55:
-    return 0
-  for side, index, sign in ((1, 3, -1), (2, 4, 1)):
-    if (0 < (-left if side == 1 else right) <= 1.5 and
-        min(sign*(old_l-left), sign*(old_r-right)) >= .06 and
-        any(sample[2+side] >= LINE_CONFIDENCE for sample in samples)):
+  for side, index in ((1, 3), (2, 4)):
+    if boundary_approach(samples, side, .06):
       # Two 8-class softmax rows; check the cheap geometric gates first.
       rows = ([forecast[j+i] for i in range(8)] for j in (0, 8))
       if all(all(math.isfinite(x) and 0 <= x <= 1 for x in row) and
@@ -269,12 +275,11 @@ class ModelIndicator:
       # A new driver turn may be observed before other automatic sources rearm.
       # Lamp masking and the uninterrupted dark interval still apply.
       manual_turn_after = isolation.block_until - QUIET_SEC + MANUAL_TURN_QUIET_SEC
-      # At low speeds a lane-boundary relabel is common in parking areas. A
-      # manual turn uses measured steering and yaw independently of those lines.
-      lane_labels_ready = cs.vEgo < 30 / 3.6 or now >= isolation.relabel_until
+      # Junction lane relabels must not erase the steering onset. Manual turns
+      # have independent torque, angle-growth, yaw and road-curve checks.
       turn = self.manual_turn.update(now, cs, md.frameId, yaw_rate,
         allowed=(manual_turn_enabled and common and not busy and not cs.leftBlinker and not cs.rightBlinker and
-                 now >= manual_turn_after and lane_labels_ready and
+                 now >= manual_turn_after and
                  isolation.dark_since is not None and now - isolation.dark_since >= 1.),
         following_curve=manual_turn_enabled and following_road_curve(md, cs.vEgo, yaw_rate))
       if turn is not None:
@@ -318,7 +323,7 @@ class ModelIndicator:
                          cs.steeringAngleDeg * (1 if direction == 1 else -1) >= 15 and
                          yaw_rate * (-1 if direction == 1 else 1) >= math.radians(3))
           if probs[index] >= .5 and probs[index] >= probs[0] and probs[index]-opposite >= .3 and (index >= 3 or turn_motion):
-            if index < 3 or cs.vEgo >= 30/3.6:
+            if index < 3 or cs.vEgo >= 30/3.6 and boundary_approach(self.approach, direction, .15):
               candidate = (direction, 'model_turn' if index < 3 else 'model_desire')
           if candidate is None and probs[0] == max(probs) and cs.vEgo >= 30/3.6:
             direction = anticipated_lane(md, self.approach)

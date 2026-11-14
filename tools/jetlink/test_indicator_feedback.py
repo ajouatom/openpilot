@@ -107,9 +107,10 @@ def test_early_prediction_does_not_trigger_far_from_boundary_even_at_high_rate()
     update(d,now,cs,md,enabled=True,valid=True,busy=False)
     assert not d.request_direction
 
+@pytest.mark.parametrize('stopped_noise',[False,True])
 @pytest.mark.parametrize('driver_override',[False,True])
 @pytest.mark.parametrize('complete_ack',[False,True])
-def test_actual_source_model_roundtrip_survives_echo_and_waits_for_ack(monkeypatch,driver_override,complete_ack):
+def test_actual_source_model_roundtrip_survives_echo_and_waits_for_ack(monkeypatch,driver_override,complete_ack,stopped_noise):
   import sys,json,types
   from contextlib import nullcontext
   import blink_source as source
@@ -130,6 +131,7 @@ def test_actual_source_model_roundtrip_survives_echo_and_waits_for_ack(monkeypat
     cs.blinkerLever=1 if i in (6,8) else 0
     cs.rightBlinkerStalkCount=0 if i<6 else 1 if i<8 else 2
     cs.rightBlinker=6<=i<=8
+    if stopped_noise and i>=14:cs.vEgo=-.002;cs.standstill=True
     if driver_override and i>=18:cs.blinkerLever=2;cs.leftBlinkerStalkCount=1
     sm['selfdriveState'].atcTurnStartMonoTime=0;sm['selfdriveState'].atcTurnDirection='none'
     isolation.request_time=10.1

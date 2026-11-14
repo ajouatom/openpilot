@@ -164,3 +164,14 @@ def test_new_timestamp_roundtrips_real_schema():
   event.init('carState').laneLineInfoMonoTime = 123456789
   with log.Event.from_bytes(event.to_bytes()) as decoded:
     assert decoded.carState.laneLineInfoMonoTime == 123456789
+
+
+@pytest.mark.parametrize('direction', [1, 2])
+def test_opposite_boundary_single_frame_jump_preserves_driver_approach(direction):
+  def jitter(cs, md, now, frame):
+    if frame == 44:
+      lane = md.laneLines[3-direction]
+      lane.y = [v + (.55 if direction == 1 else -.55) for v in lane.y]
+  requests = maneuver(direction, gate=jitter)
+  assert requests and len({r[2] for r in requests}) == 1
+  assert requests[0][0] < 12.6
