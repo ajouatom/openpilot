@@ -1,4 +1,4 @@
-"""First-boot Super firmware provisioning for the protected Orin Nano SD image."""
+"""First-boot Super firmware provisioning for the protected Orin Nano SD/NVMe image."""
 import hashlib
 import json
 import os
@@ -93,26 +93,24 @@ def inspect(root=Path('/')):
 
 
 def validate_storage():
-  # Bind firmware writes and transaction state to the card which booted Linux.
-  from protected_storage import configuration
+  # Bind firmware writes and transaction state to the disk which booted Linux.
+  from protected_storage import configuration, portable_configuration
   layout = configuration()
-  number = run('findmnt', '-n', '-o', 'MAJ:MIN', '/')
-  partition = (Path('/sys/dev/block') / number).resolve(strict=True)
-  disk = partition.parent.name
-  if not re.fullmatch(r'mmcblk\d+', disk) or partition.name != disk + 'p1':
-    raise ValueError('Automatic firmware provisioning requires the boot SD')
-  expected = f'/dev/{disk}p10'
-  if (Path(layout['root']).resolve() != Path('/dev/' + partition.name).resolve()
+  actual = portable_configuration()
+  expected = actual['efi']
+  if (layout['root'] != actual['root'] or layout['data'] != actual['data']
       or Path(run('findmnt', '-n', '-o', 'SOURCE', str(EFI))).resolve() != Path(expected).resolve()
       or Path(run('findmnt', '-n', '-o', 'SOURCE', str(STATE.parent))).resolve() != Path(layout['data']).resolve()
       or run('blkid', '-s', 'TYPE', '-o', 'value', expected) != 'vfat'):
-    raise ValueError('Boot SD, EFI and DATA partitions do not match')
+    raise ValueError('Boot SD/NVMe, EFI and DATA partitions do not match')
   if not Path('/sys/firmware/efi/efivars').is_dir():
     raise ValueError('UEFI runtime services are unavailable')
   control = Path('/etc/nv_boot_control.conf').read_text()
-  if (not re.search(r'^TEGRA_BOOT_STORAGE ' + re.escape(disk) + r'\s*$', control, re.M)
-      or not re.search(r'^COMPATIBLE_SPEC 3767--0005--1--jetson-orin-nano-devkit-super-\s*$', control, re.M)):
-    raise ValueError('NVIDIA boot storage or board specification does not match the Super SD')
+  # NVIDIA declares TEGRA_BOOT_STORAGE deprecated. Its helper leaves the image's
+  # old value untouched when EFI is already mounted. Use the mounted root and
+  # same-disk EFI/DATA above, retaining the vendor-generated board contract.
+  if not re.search(r'^COMPATIBLE_SPEC 3767--0005--1--jetson-orin-nano-devkit-super-\s*$', control, re.M):
+    raise ValueError('NVIDIA board specification does not match the Super image')
 
 
 def publish(value):

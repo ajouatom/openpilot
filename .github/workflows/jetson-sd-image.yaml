@@ -22,7 +22,7 @@ jobs:
         if: inputs.use_verified_cache
         with:
           name: carrot-jetson-sd
-          run-id: 43202280805
+          run-id: 43209977486
           github-token: ${{ github.token }}
           path: ${{ runner.temp }}/verified-base
       - name: Install image tools
@@ -32,7 +32,7 @@ jobs:
           python -m pip install zstandard pycryptodome pytest
           df -h .
       - name: Check firmware provisioning policy
-        run: python -m pytest -q -o addopts='' --confcutdir=tools/jetlink tools/jetlink/test_super_bootstrap.py tools/jetlink/test_protected_storage.py
+        run: python -m pytest -q -o addopts='' --confcutdir=tools/jetlink tools/jetlink/test_super_bootstrap.py tools/jetlink/test_protected_storage.py tools/jetlink/test_sd_nvme_patch.py tools/jetlink/test_windows_installer.py
       - name: Rebuild and validate the signed N16 image
         run: |
           args=()
