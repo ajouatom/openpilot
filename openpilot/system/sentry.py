@@ -4,6 +4,7 @@ from enum import Enum
 from sentry_sdk.integrations.threading import ThreadingIntegration
 
 from openpilot.common.params import Params
+from openpilot.common.api import comma_connect_enabled
 from openpilot.system.athena.registration import is_registered_device
 from openpilot.system.hardware import HARDWARE, PC
 from openpilot.common.swaglog import cloudlog
@@ -45,6 +46,9 @@ def set_tag(key: str, value: str) -> None:
 
 
 def init(project: SentryProject) -> bool:
+  if not comma_connect_enabled():
+    return False
+
   build_metadata = get_build_metadata()
   # forks like to mess with this, so double check
   comma_remote = build_metadata.openpilot.comma_remote and "commaai" in build_metadata.openpilot.git_origin

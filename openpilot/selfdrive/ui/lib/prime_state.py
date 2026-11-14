@@ -4,7 +4,7 @@ import requests
 import threading
 import time
 
-from openpilot.common.api import api_get
+from openpilot.common.api import api_get, comma_connect_enabled
 from openpilot.common.params import Params
 from openpilot.common.swaglog import cloudlog
 from openpilot.system.athena.registration import UNREGISTERED_DONGLE_ID
@@ -46,6 +46,9 @@ class PrimeState:
     return PrimeType.UNKNOWN
 
   def _fetch_prime_status(self) -> None:
+    if not comma_connect_enabled():
+      return
+
     dongle_id = self._params.get("DongleId")
     if not dongle_id or dongle_id == UNREGISTERED_DONGLE_ID:
       return
@@ -80,6 +83,9 @@ class PrimeState:
         time.sleep(self.SLEEP_INTERVAL)
 
   def start(self) -> None:
+    if not comma_connect_enabled():
+      return
+
     if self._thread and self._thread.is_alive():
       return
     self._running = True

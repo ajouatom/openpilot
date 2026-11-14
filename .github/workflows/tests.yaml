@@ -21,6 +21,22 @@ env:
   CI: 1
 
 jobs:
+  comma_connect:
+    name: comma Connect offline policy
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: python -m pip install pytest pytest-mock requests
+      - run: >-
+          python -m pytest -q -c /dev/null --confcutdir=openpilot/system/tests
+          openpilot/system/tests/test_comma_connect.py
+          openpilot/system/tests/test_setup_download.py
+          openpilot/system/tests/test_agnos_download_cache.py
+          openpilot/common/tests/test_repo_update.py
+
   egpu_startup:
     name: eGPU selected-model startup
     runs-on: ubuntu-24.04

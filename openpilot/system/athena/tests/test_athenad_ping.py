@@ -4,6 +4,7 @@ import threading
 import time
 from typing import cast
 
+from openpilot.common.api import comma_connect_enabled
 from openpilot.common.params import Params
 from openpilot.common.timeout import Timeout
 from openpilot.system.athena import athenad
@@ -20,6 +21,7 @@ def wifi_radio(on: bool) -> None:
   subprocess.run(["nmcli", "radio", "wifi", "on" if on else "off"], check=True)
 
 
+@pytest.mark.skipif(not comma_connect_enabled(), reason="requires explicit cloud opt-in")
 class TestAthenadPing:
   params: Params
   dongle_id: str
