@@ -169,6 +169,21 @@ def test_each_boot_applies_once_and_failed_boot_retries_after_reboot(board, monk
   assert power.read_status(root / 'run/carrot-jetlink-power.json')['boot_id'] == 'boot2'
 
 
+def test_repeated_boots_restore_super_when_vendor_mode_resets(board, monkeypatch):
+  root, calls, mode = board
+  if sys.platform == 'win32':
+    monkeypatch.setitem(sys.modules, 'fcntl', NS(flock=lambda *a: None, LOCK_EX=2))
+  for index in range(3):
+    mode[:] = ['15W', 0]
+    (root / 'proc/sys/kernel/random/boot_id').write_text(f'reboot-{index}')
+    assert power.run_once(root)['state'] == 'ready'
+    assert mode == ['MAXN_SUPER', 7]
+    count = len(calls)
+    assert power.run_once(root)['state'] == 'ready'
+    assert len(calls) == count
+  assert sum(call[0] == '/usr/bin/jetson_clocks' for call in calls) == 3
+
+
 def test_wrong_board_is_read_only(board):
   root, calls, _ = board
   (root / 'proc/device-tree/model').write_text('Jetson AGX Orin')

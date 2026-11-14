@@ -190,6 +190,11 @@ def build(image, compressed, patch, python_zip, output, candidate_json=None, val
       add('support/' + name, data.encode('utf-8-sig' if name.endswith('.ps1') else 'utf-8'))
     for name in ('prepare.py', 'launcher.ps1', 'disks.ps1', 'messages.ps1'):
       data = (tools / 'windows_installer' / name).read_text(encoding='utf-8-sig')
+      if name == 'messages.ps1' and release.get('storage_format') == 2:
+        data = data.replace('02_SD카드설치.cmd', '02_SD_SSD설치.cmd')
+        data = data.replace('SD카드', 'SD카드/SSD').replace('SD card', 'SD card/SSD')
+        data = data.replace('카드를 꽂고 콤마에 연결하세요.', 'SD 또는 M.2 NVMe SSD를 장착하고 콤마에 연결하세요.')
+        data = data.replace('insert the card and connect to comma.', 'install the SD or M.2 NVMe SSD and connect to comma.')
       add('support/' + name, data.encode('utf-8-sig' if name.endswith('.ps1') else 'utf-8'))
     with zipfile.ZipFile(python_zip) as runtime:
       for entry in runtime.infolist():
