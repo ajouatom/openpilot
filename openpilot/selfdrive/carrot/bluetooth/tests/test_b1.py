@@ -3,6 +3,8 @@ import hashlib
 import hmac
 import struct
 
+import pytest
+
 from openpilot.selfdrive.carrot.bluetooth.b1_monitor import Intent, command, compatible, SERVICE
 
 
@@ -34,6 +36,21 @@ def test_one_request_once_and_exact_completion():
   assert intent.choose(data,'ready',7,now+.03)[0]==4
   data['hold']=None
   assert intent.choose(data,'ready',7,now+.04)[0]==0
+
+
+def test_acknowledged_turn_hold_survives_flash_cycles_and_stops_on_override():
+  intent = Intent()
+  start = intent.started + .1
+  data = source(start)
+  assert intent.choose(data, 'ready', 0, start)[:2] == (1, 'a')
+  intent.inflight = (7, 'a', start)
+  data.update(events=[], hold={**data['events'][0], 'source':'observation'}, b1_hold=True)
+  for i in range(1, 201):
+    now = start + i*.05
+    data['stamp'] = now
+    assert intent.choose(data, 'waiting', 7, now)[:2] == (4, None)
+  assert intent.choose(data, 'driver_override', 0, now)[0] == 3
+  assert intent.choose(data, 'ready', 7, now)[0] == 0
 
 
 def test_rapid_opposite_request_and_loss_of_remote():
@@ -186,3 +203,47 @@ def test_badge_publishes_short_ack_without_lamp_edge(monkeypatch, tmp_path):
   assert b1.read_json(b1.BADGE)['accepted_id']=='one'
   m.publish_badge('waiting',10.16,1,'one')
   assert len(events)==2 and events[-1][1]['seq']==9
+
+
+@pytest.mark.parametrize('failed_read', [False, True])
+def test_failure_diagnostic_once_before_stop_even_if_read_fails(monkeypatch, failed_read):
+  import asyncio
+  import sys
+  import time
+  from types import SimpleNamespace
+  from openpilot.selfdrive.carrot.bluetooth import b1_monitor as b1
+
+  async def run():
+    monitor = b1.Monitor()
+    monitor.params = SimpleNamespace(get_bool=lambda name: False)
+    monkeypatch.setitem(sys.modules, 'openpilot.common.params', SimpleNamespace(Params=lambda: monitor.params))
+    monitor.session = 71
+    monitor.sent_sequences.append(9)
+    monitor.last_command = {'id':'one', 'seq':9, 'time':time.monotonic()}
+    monitor.attrs = {b1.META:'meta', b1.CONTROL:'command', b1.TRACE:'trace'}
+    monitor.output_owner.acquire = lambda ready: False
+    monitor.publish_badge = lambda *args: None
+    events, calls = [], []
+    monitor.report = lambda name, **fields: events.append((name, fields))
+
+    async def board(path, interface, method, sig, body, reply_timeout):
+      calls.append(path)
+      if path == 'meta':
+        return (struct.pack('<IIHBBBH', 71, 1000, 0, 4, 0, 2, 9),)
+      if path == 'trace':
+        assert reply_timeout == .15
+        if failed_read:
+          raise TimeoutError
+        return (b'feedback_override ' + b'x'*300,)
+      assert body[0][10] == 3
+
+    monitor.client.call = board
+    await monitor.exchange(bytes(32))
+    await monitor.exchange(bytes(32))
+    assert calls == ['meta', 'trace', 'command', 'meta', 'command']
+    assert len(events) == (0 if failed_read else 1)
+    if events:
+      assert events[0][0] == 'b1TapDiagnostic'
+      assert events[0][1]['request_id'] == 'one'
+      assert len(events[0][1]['detail']) == 256
+  asyncio.run(run())

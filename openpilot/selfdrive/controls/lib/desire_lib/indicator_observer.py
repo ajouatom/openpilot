@@ -119,7 +119,9 @@ class Movement:
       if self.source == 'model_turn':
         signed_angle = angle*(1 if self.direction == 1 else -1)
         self.peak_angle = max(self.peak_angle, signed_angle)
-        done = self.peak_angle >= 30 and abs(angle) <= 10 and cs.vEgo > 1/3.6
+        probability = md.meta.desireState[self.direction]
+        withdrawn = math.isfinite(probability) and probability < .3
+        done = (self.peak_angle >= 30 or withdrawn) and abs(angle) <= 10 and cs.vEgo > 1/3.6
       else:
         selected = -left if self.direction == 1 else right
         old_selected = -old_left if self.direction == 1 else old_right
@@ -231,12 +233,23 @@ class ModelIndicator:
                 not cs.steerFaultTemporary and not cs.steerFaultPermanent and (not cs.blinkerLever or echo) and
                 math.isfinite(cs.vEgo) and math.isfinite(cs.steeringTorque))
       if self.active:
-        self.manual_turn.reset('busy')
+        promoted = False
+        if self.active.source == 'manual':
+          turn = self.manual_turn.update(now, cs, md.frameId, yaw_rate,
+            allowed=manual_turn_enabled and common and not busy,
+            following_curve=following_road_curve(md, cs.vEgo, yaw_rate))
+          if turn is not None and turn.direction == self.active.direction:
+            # Keep the original request identity and its acknowledged lamp lease.
+            self.active = turn
+            promoted = True
+        else:
+          self.manual_turn.reset('busy')
         a = self.active
         allowed = (manual_turn_enabled if a.source == 'manual_turn' else a.source == 'manual' or lateral_active and
                    (path_enabled if a.source == 'model_path' else desire_enabled))
         opposite_lamp = cs.rightBlinker if a.direction == 1 else cs.leftBlinker
-        if not common or busy or not allowed or opposite_lamp or not a.update(now, cs, yaw_rate if a.source == 'manual_turn' else md):
+        if (not common or busy or not allowed or opposite_lamp or
+            not promoted and not a.update(now, cs, yaw_rate if a.source == 'manual_turn' else md)):
           self.reason = a.reason if common and allowed and not busy and not opposite_lamp else 'cancelled'
           self.active = None
         else:
@@ -248,7 +261,6 @@ class ModelIndicator:
         self.previous = None
         return
       if manual_edge and common and isolation.request_time != self.manual_seen:
-        self.manual_turn.reset('busy')
         self.manual_seen = isolation.request_time
         self.active = Movement(now, manual_edge, 'manual', cs, md)
         self.request_time = now
@@ -301,7 +313,11 @@ class ModelIndicator:
           direction = 1 if index in (1, 3) else 2
           # Dominant categorical prediction, not merely a nonzero softmax value.
           opposite = max(probs[i] for i in ((2, 4) if direction == 1 else (1, 3)))
-          if probs[index] >= .5 and probs[index] >= probs[0] and probs[index]-opposite >= .3:
+          turn_motion = (yaw_rate is not None and math.isfinite(yaw_rate) and
+                         math.isfinite(cs.steeringAngleDeg) and
+                         cs.steeringAngleDeg * (1 if direction == 1 else -1) >= 15 and
+                         yaw_rate * (-1 if direction == 1 else 1) >= math.radians(3))
+          if probs[index] >= .5 and probs[index] >= probs[0] and probs[index]-opposite >= .3 and (index >= 3 or turn_motion):
             if index < 3 or cs.vEgo >= 30/3.6:
               candidate = (direction, 'model_turn' if index < 3 else 'model_desire')
           if candidate is None and probs[0] == max(probs) and cs.vEgo >= 30/3.6:

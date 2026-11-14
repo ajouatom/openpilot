@@ -16,6 +16,7 @@ ENROLLMENT = CONFIG_PATH.with_name('b1-monitor.json')
 SERVICE = 'db340a90-804c-4ead-af37-8a0e6af754a1'
 META = 'db340a92-804c-4ead-af37-8a0e6af754a1'
 CONTROL = 'db340a93-804c-4ead-af37-8a0e6af754a1'
+TRACE = 'db340a96-804c-4ead-af37-8a0e6af754a1'
 CLAIM = 'db340a95-804c-4ead-af37-8a0e6af754a1'
 SETUP = CONFIG_PATH.with_name('b1-discovery.json')
 STAGED = CONFIG_PATH.with_name('b1-pending.json')
@@ -124,6 +125,7 @@ class Monitor:
       self.report = cloudlog.event
     self.proven_at = -10.
     self.last_command = None
+    self.diagnostic_request = None
     self.next_discovery = 0.
 
   def publish_badge(self, state, now, lamps, accepted_id):
@@ -224,6 +226,14 @@ class Monitor:
       latest = self.worker.latest()
       if latest is not None:
         self.source = latest
+    # Capture the receiver's failure before Stop replaces its diagnostic reason.
+    if (authenticated and state in ('driver_override', 'error') and self.report and self.last_command and TRACE in self.attrs and
+        self.diagnostic_request != self.last_command['id'] and 0 <= now-self.last_command['time'] < 5):
+      self.diagnostic_request = self.last_command['id']
+      with suppress(Exception):
+        diagnostic = await self.client.call(self.attrs[TRACE], GATT, 'ReadValue', 'a{sv}', ({},), reply_timeout=.15)
+        self.report('b1TapDiagnostic', request_id=self.last_command['id'],
+                    detail=bytes(diagnostic[0])[:256].decode('ascii', errors='replace'))
     # The worker can publish a newer timestamp while latest() drains its socket.
     now = time.monotonic()
     op, ident, ttl = self.intent.choose(self.source, state, ack, now)

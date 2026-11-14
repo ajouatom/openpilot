@@ -11,9 +11,9 @@
 
 Cruise CANCEL stops automatic indicator requests and releases an automatic hold. Parking maneuvers no longer trigger an indication until SET/RES or +/− clears the cruise cancel state. The stock lever and explicit Bluetooth indicator buttons remain available.
 
-`ManualLaneChangeIndicator` is a separate option, OFF by default, for Ioniq 5 PE with Jetson USB2CAN and AutoBlinkerControl 1 or 2. At 5km/h or above, same-direction steering is confirmed for 0.15s. Release or brief countersteer does not erase continued boundary approach: recent intent is retained for up to 1.5s. Approach stopping for over 0.3s, retreat exceeding 0.15m or a four-second episode limit cancels tracking. On the left, fresh OEM white-line classification excludes centre lines; yellow, unknown or stale classifications block requests. On the right, road-edge clearance beyond the approached boundary must be at least 2.5m both nearby and ahead. Outer-line probability, adjacent lane width and road-edge standard deviation are not admission conditions. A wide shoulder can also pass the distance condition.
+`ManualLaneChangeIndicator` is a separate option, OFF by default, for Ioniq 5 PE with Jetson USB2CAN and AutoBlinkerControl 1 or 2. At 5km/h or above, same-direction steering is confirmed for 0.15s. Release or brief countersteer does not erase continued boundary approach: recent intent is retained for up to 1.5s. Approach stopping for over 0.3s, retreat exceeding 0.15m for 0.15s or a four-second episode limit cancels tracking. On the left, fresh OEM white-line classification excludes centre lines; yellow, unknown or stale classifications block requests. On the right, road-edge clearance beyond the approached boundary must be at least 2.5m both nearby and ahead. Outer-line probability, adjacent lane width and road-edge standard deviation are not admission conditions. A wide shoulder can also pass the distance condition.
 
-This feature's lamp feedback does not request an automatic lane change or turn. The driver steers the maneuver. Detection works during ATC preparation, but an executing automatic lane change or another indicator request takes precedence. Episode admission requires target-line confidence of at least 10% within the preceding second; continuous geometry/intent tracking lasts at most four seconds. Boundary jumps and invalid inputs block new requests. A request then tracks completion or return for at most 12 seconds. Another request requires at least three seconds since the previous hold ended, one continuous second with the lamps off, and fresh driver steering/boundary approach conditions. It does not repeat automatically every three seconds. Owned lamp feedback and synthesized lever counts remain excluded from automatic steering for at least 12 seconds after the latest hold and until extinction is confirmed. A quick opposite request preserves protection for the previous direction too.
+This feature's lamp feedback does not request an automatic lane change or turn. The driver steers the maneuver. Detection works during ATC preparation, but an executing automatic lane change or another indicator request takes precedence. Episode admission requires target-line confidence of at least 10% within the preceding second; continuous geometry/intent tracking lasts at most four seconds. Inconsistent boundary jumps and invalid inputs block new requests. A request then tracks completion or return for at most 12 seconds. Another request requires at least three seconds since the previous hold ended, one continuous second with the lamps off, and fresh driver steering/boundary approach conditions. It does not repeat automatically every three seconds. Owned lamp feedback and synthesized lever counts remain excluded from automatic steering for at least 12 seconds after the latest hold and until extinction is confirmed. A quick opposite request preserves protection for the previous direction too.
 
 Switching OFF may leave an already requested OEM one-touch sequence flashing; its steering-request exclusion remains until extinction is confirmed. Physical lamps and real manual-crossing detection rates have not yet been validated. This option does not assess lane-change safety or replace use of the turn-signal lever.
 
@@ -22,6 +22,8 @@ Measured boundary approach projects 0.3 seconds ahead to request indication earl
 
 Manual/model indication distinguishes its short one-touch echo only with matching request time, direction and stalk counters. Opposite input, a latched lever or receiver-detected driver intervention cancels. Lamp feedback preceding the completed-send response is remembered briefly; holding still requires the matching response. Same-direction physical input during the brief transmission interval cannot be uniquely distinguished from these fields alone.
 
+
+Boundary retreat must persist for 0.15s to cancel tracking, and new indications pause during retreat. Recent steering intent and paired boundary movement with consistent lane width permit bounded position changes during approach.
 
 ## Manual turn indicator (trial)
 
@@ -33,6 +35,8 @@ After a request, moving wheel return within ±15 degrees and rotation at most 3 
 
 The comma display labels the source as a manual driver turn. Existing USB HUD bundles receive the compatible driver-boundary category with the turning reason. Parking aisles, ramps and parking entry can also trigger. Unmarked bends and evasive movements can produce false indications. Recorded-input replay and physical lamp validation require separate evaluation. Apply with Git Pull and a full comma restart. Physical vehicle validation remains pending.
 
+When same-direction manual-turn conditions are met during a manual lane indication, the existing request continues under turn completion tracking.
+
 ## Model indication (trial)
 
 `ModelDesireIndicator` and `ModelPathIndicator` are separate default-off options for Ioniq 5 PE with Jetson USB2CAN and `AutoBlinkerControl=1` or `2`. Initiation requires active lateral control. Their lamp feedback is not reused as a new automatic steering request. At 30 km/h or above, the two nearest model forecasts can also trigger an indication when both predict the same lane change with at least 65% probability and both measured lane boundaries show the vehicle approaching that side. A forecast alone does not light the indicator or request steering. After forecast-based initiation, widening lane lines at a fork do not end the hold while the model and measured motion still indicate the same direction. Fading or opposite intent ends the fork hold; cruise CANCEL releases it immediately.
@@ -41,6 +45,8 @@ The comma display labels the source as a manual driver turn. Existing USB HUD bu
 - Model path: at 30km/h or above, compares the 1–3 second prediction with curved boundaries at identical forward positions. Requires target-line confidence of at least 10%, continued crossing, agreeing control curvature and at least four observations spanning 0.2 seconds within 0.4 seconds. Boundary jumps, left centre lines and nearby right road edges block initiation.
 
 Same-direction origins share a continuing signal. Alignment after crossing, return before crossing, driver intervention, invalid inputs or a bounded timeout ends the hold request. Ending a request does not guarantee immediate extinction of OEM one-touch flashing. Recorded-input replay is not physical lamp or road validation.
+
+Model-turn indication also requires at least 15 degrees of same-direction steering and 3 degrees/s of measured rotation. While moving, a turn probability below 30% and wheel return within ±10 degrees for 0.4s end the hold.
 
 ## TBT turn indication
 
