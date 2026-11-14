@@ -94,6 +94,8 @@ pub struct FrameInput {
 /// not lost. With a 50 ms budget every late frame swapped the published model
 /// to the internal one for five seconds and back, twice a minute in the car.
 pub const FRAME_BUDGET_NS: u64 = 150_000_000;
+/// A shadow frame slower than this does not qualify the peer for joining.
+pub const PROBE_BUDGET: Duration = Duration::from_millis(100);
 
 pub struct Runtime {
     work: Option<SyncSender<Work>>,
@@ -115,6 +117,10 @@ pub struct Runtime {
     deadline: Deadline,
     started: Instant,
     slow_logged: Option<Instant>,
+    /// A shadow frame (sent while the internal model is published) answered
+    /// within `PROBE_BUDGET` since the last loss. Joining waits for it, so a
+    /// peer that stopped answering never blocks the frame thread.
+    probe_passed: bool,
     /// Stage times of the peer frame collected since the last `begin`.
     last_stages: Option<Stages>,
     frame: u32,
@@ -159,6 +165,7 @@ impl Runtime {
             deadline: Deadline(0),
             started: now,
             slow_logged: None,
+            probe_passed: false,
             last_stages: None,
             frame: 0,
             status: Status {
@@ -200,6 +207,7 @@ impl Runtime {
             }
         }
         self.detail = error.to_string().chars().take(240).collect();
+        self.probe_passed = false;
         self.status.decision = self.transition.update(false, self.controls, Outcome::Lost);
         self.cancel();
         self.model = None;
@@ -240,6 +248,11 @@ impl Runtime {
             }) => {
                 let elapsed = stages.total();
                 self.last_stages = Some(stages);
+                // Collected for a frame sent while the internal model was
+                // published: a shadow frame, which qualifies (or not) a join.
+                if self.status.decision.source != Source::Jetlink {
+                    self.probe_passed = elapsed <= PROBE_BUDGET;
+                }
                 self.status.execution_ms = elapsed.as_secs_f64() * 1000.0;
                 // As carrot's model.py: a frame over 50 ms is reported, at most
                 // once a second, and still used.
@@ -313,7 +326,14 @@ impl Runtime {
             && self.small_runs >= 3
             && !self.pending;
         self.status.validated = ready;
-        self.status.decision = self.transition.update(ready, controls, Outcome::None);
+        // carrot's JoiningModel switches on the first frame and, when the peer
+        // does not answer, holds modeld for the whole 150 ms budget every 5 s
+        // (dropped frames, commIssue at a standstill). Join only after a
+        // shadow frame answered in time; until then frames still go to the
+        // peer without being waited for.
+        self.status.decision =
+            self.transition
+                .update(ready && self.probe_passed, controls, Outcome::None);
         if !ready {
             return;
         }
