@@ -157,6 +157,36 @@ def test_unknown_initrd_and_oversized_replacements_rejected():
     fit_text(b'long', 3)
 
 
+def test_full_image_installs_portable_boot_and_current_storage_helpers(tmp_path, monkeypatch):
+  import portable_initrd as portable
+  from initrd_readonly import encode, entries
+  source = Path(__file__).parent
+  for name in ('etc', 'boot/extlinux', 'usr/lib/carrot-jetlink-storage'):
+    (tmp_path / name).mkdir(parents=True)
+  (tmp_path / 'etc/carrot-jetlink-protected.json').write_text('{"format":1}')
+  (tmp_path / 'boot/extlinux/extlinux.conf').write_text('APPEND root=/dev/mmcblk0p1 ro rootwait\n')
+  init = b'''#!/bin/bash
+if [ "${rootdev}" != "mmcblk0p1" ]; then
+  exit 1
+fi
+rootfs_is_encrypted=0
+mount -t ext4 -o ro,noload "$dev" /mnt
+chroot . /sbin/blockdev --setro /dev/mmcblk0p1
+exec chroot . /sbin/init
+'''
+  monkeypatch.setattr(portable, 'R2_INIT_SHA', hashlib.sha256(init).hexdigest())
+  fields = [42, 0o100755, 0, 0, 1, 12345, 0, 0, 0, 0, 0, 0, 0]
+  (tmp_path / 'boot/initrd').write_bytes(encode([('init', fields, init), ('TRAILER!!!', fields, b'')]))
+  portable.configure(tmp_path, source)
+  updated = dict((name, body) for name, _, body in entries((tmp_path / 'boot/initrd').read_bytes()))['init'].decode()
+  assert 'root=PARTUUID=' + APP_UUID in (tmp_path / 'boot/extlinux/extlinux.conf').read_text()
+  assert 'ro,noload' in updated and '--setro "${carrot_root}"' in updated
+  assert json.loads((tmp_path / 'etc/carrot-jetlink-protected.json').read_text()) == {'format': 2, 'layout': 'carrot-r2-sd-nvme'}
+  assert '/run/carrot-efi /boot/efi vfat ro,nofail' in (tmp_path / 'etc/fstab').read_text()
+  for name in ('protected_storage.py', 'protected_first_boot.py'):
+    assert (tmp_path / 'usr/lib/carrot-jetlink-storage' / name).read_bytes() == (source / name).read_bytes()
+
+
 def test_packed_python_is_exact_source_and_preserves_module_globals():
   source = b'ANSWER=42\ndef answer():\n return ANSWER\n'
   result = packed_python(source, 2048)
