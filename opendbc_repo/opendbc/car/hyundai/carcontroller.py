@@ -75,6 +75,10 @@ SPAS_STEER_RATE = 1.0
 # kick: ~2 flashes when the driver starts crossing a lane line without the blinker (lane_crossing.py).
 # shortcut: flash count at 1.0 s is not measured (BCM ran on ~1.2 s after the command stopped, EV4 10-26), tune after a drive
 BLINKER_PULSE_FRAMES = int(1.0 / DT_CTRL)
+# CanfdBlinkerKickModel holds its pulse through the change like the CCNC blink hold (hyundaicanfd._blink_hold_change):
+# renewed by this gap every frame it still holds, never past the max (DesireHelper owns the lamp for 12 s)
+MODEL_HOLD_GAP_FRAMES = int(0.2 / DT_CTRL)
+MODEL_HOLD_MAX_FRAMES = int(10.0 / DT_CTRL)
 # No kick across a yellow (centre) line. The camera color drops to 0 while the line is crossed (10-30 seg 22: 10 -> 2
 # at the kick), so a yellow seen on that side in the last 2 s counts (10-30 seg 1: kick over yellow dashed 20)
 YELLOW_HOLD_FRAMES = int(2.0 / DT_CTRL)
@@ -297,6 +301,7 @@ class CarController(CarControllerBase):
     self.aprk_state, self.aprk_frame, self.aprk_nanos, self.aprk_acked = APRK_IDLE, 0, 0, False
     self.lane_crossing, self.blinker_side, self.blinker_pulse_end = LaneCrossing(), 0, 0
     self.lane_change_prev, self.model_pulse = "off", False  # last modelV2 laneChangeState; pulse from the model trigger
+    self.blinker_pulse_start, self.model_hold = 0, {}  # pulse start frame (Palisade flash phase); _blink_hold_change state
     self.yellow_until = [0, 0]  # left, right
     self.standstill_frame = -1e6
 
@@ -394,14 +399,16 @@ class CarController(CarControllerBase):
     return [CanData(0x400, bytes([0, 0, 0, 0, val, 0, 0, 0]), self.CAN.ECAN)]
 
   def kick_pulse(self, CS):
-    """CanfdBlinkerKick trigger, any CAN: starts a BLINKER_PULSE_FRAMES pulse toward blinker_side (3 left, 4 right) with
+    """CanfdBlinkerKick trigger, any CAN: starts a pulse (BLINKER_PULSE_FRAMES at least) toward blinker_side (3 left, 4 right) with
     the lamp off, in D, outside a tunnel / roundabout. True while a pulse runs.
     - the driver crossing a lane line (lane_crossing), not across a yellow line and not during a model lane change:
       nothing owns that lamp, so it must not light up a change DesireHelper is running.
     - CanfdBlinkerKickModel: modelV2 laneChangeState rising to laneChangeStarting (remote, app, voice, navigation), only
       when that side's indicatorIsolationMask bit rides in the same modelV2: DesireHelper owned the lamp on that frame, so
       the kicked lamp cannot read back as the driver's blinker (EV4 10-26: a lamp held through the change never went off,
-      measurements 31: a kick lamp started a change). Not in a cruise CANCEL latch; cut when the change is cancelled."""
+      measurements 31: a kick lamp started a change). Not in a cruise CANCEL latch; cut when the change is cancelled.
+      Held through Starting / Finishing like the I5 PE cluster blink hold: until the car centre is 60 % of a lane width
+      into the new lane (no crossing seen: the end of the change), at most MODEL_HOLD_MAX_FRAMES."""
     drive = CS.out.gearShifter == structs.CarState.GearShifter.drive
     lamp = CS.out.leftBlinker or CS.out.rightBlinker
     # lane changes are banned in a tunnel announced as no-lane-change, and for 20 s after a roundabout sign (carstate)
@@ -430,8 +437,13 @@ class CarController(CarControllerBase):
         side = bit + 2
       elif state == "off" and self.model_pulse and self.frame < self.blinker_pulse_end:
         self.blinker_pulse_end = self.frame  # the change was cancelled: so is its lamp
+      elif (self.model_pulse and changing and self.frame < self.blinker_pulse_end and
+            self.frame - self.blinker_pulse_start < MODEL_HOLD_MAX_FRAMES and
+            hyundaicanfd._blink_hold_change(md, self.blinker_side, self.model_hold)):
+        self.blinker_pulse_end = max(self.blinker_pulse_end, self.frame + MODEL_HOLD_GAP_FRAMES)
     if side:
       self.blinker_side, self.blinker_pulse_end, self.model_pulse = side, self.frame + BLINKER_PULSE_FRAMES, model
+      self.blinker_pulse_start, self.model_hold = self.frame, {}
     return self.frame < self.blinker_pulse_end
 
   def cgw_blinkers(self, CS):
@@ -446,8 +458,7 @@ class CarController(CarControllerBase):
     if raw[4] & 0x06 or raw[5] & 0x06:  # hazard or the driver's own lever: theirs, not ours
       self.blinker_pulse_end = 0
       return []
-    start = self.blinker_pulse_end - BLINKER_PULSE_FRAMES
-    lamp = (self.frame - start) // CGW_FLASH_HALF_FRAMES % 2 == 0
+    lamp = (self.frame - self.blinker_pulse_start) // CGW_FLASH_HALF_FRAMES % 2 == 0
     return [CanData(*cgw_frame(raw, self.blinker_side - 2, lamp))]
 
   def aprk_blinkers(self, CC, CS):

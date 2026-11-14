@@ -44,7 +44,7 @@ class Ecu:
 def make_cc(control=True, test=0, spas=0, ecu=None, mode=1, model=True):
   cc = SimpleNamespace(blinker_control=control, blinker_test=test, blinker_kick_mode=mode, aprk_state=0, aprk_frame=0, aprk_nanos=0, aprk_acked=False,
                          lane_crossing=Crossing(), blinker_side=0, blinker_pulse_end=0, frame=0, yellow_until=[0, 0],
-                         blinker_kick_model=model, lane_change_prev="off", model_pulse=False,
+                         blinker_kick_model=model, lane_change_prev="off", model_pulse=False, blinker_pulse_start=0, model_hold={},
                          CAN=SimpleNamespace(ECAN=0, ACAN=1), packer=CANPacker('hyundai_canfd_generated'), params=SimpleNamespace(STEER_THRESHOLD=250),
                          spas_steer_test=spas, spas_angle=0., aprk_buses=(), ecu=ecu or Ecu())
   cc.kick_pulse = lambda CS: CarController.kick_pulse(cc, CS)
@@ -315,18 +315,51 @@ def test_model_lane_change_start_kicks_with_the_mask():
     # the model decided: no yellow-line guard (that one is for the driver's own crossing)
     sent = model_step(cc, 30, md, left_line=20)
     assert set(spas2(cc, sent)) == {side} and cc.aprk_state == carcontroller.APRK_ACTIVE
-    # one 1 s pulse for the edge, however long Starting lasts
-    sent = model_step(cc, carcontroller.BLINKER_PULSE_FRAMES + 100, md)
-    assert uds(sent)[-2:] == [(DEFAULT, 0), (DEFAULT, 1)] and cc.aprk_state == carcontroller.APRK_IDLE
-    assert model_step(cc, 100, md) == []
+    # held through Starting and Finishing (no lane lines here: no crossing seen), off with the change
+    assert set(spas2(cc, model_step(cc, 200, md))) == {side}
+    fin = lc("laneChangeFinishing", md.meta.laneChangeDirection, md.meta.indicatorIsolationMask)
+    sent = model_step(cc, 100, fin)
+    assert set(spas2(cc, sent)) == {side} and (DEFAULT, 0) not in uds(sent)
+    sent = model_step(cc, 1, OFF)
+    assert spas2(cc, sent) == [] and uds(sent) == [(DEFAULT, 0), (DEFAULT, 1)] and cc.aprk_state == carcontroller.APRK_IDLE
+    assert model_step(cc, 100, OFF) == []
+
+
+def lines(target, other):
+  """modelV2 with lane lines for a left change: line 1 (left, the target) and line 2 (right) at the car, m"""
+  md = lc("laneChangeStarting", "left", 1)
+  md.laneLines = [SimpleNamespace(y=[y]) for y in (-5.4, -target, other, 5.4)]
+  return md
+
+
+def test_model_kick_released_once_the_car_is_across():
+  cc = make_cc()
+  model_step(cc, 10, OFF)
+  assert set(spas2(cc, model_step(cc, 150, lines(1.8, 1.8)))) == {3}  # past the 1 s minimum: still held
+  assert set(spas2(cc, model_step(cc, 10, lines(0.5, 3.1)))) == {3}  # at the line
+  assert set(spas2(cc, model_step(cc, 10, lines(3.5, 0.3)))) == {3}  # relabelled: across, not 60 % in yet
+  sent = model_step(cc, 40, lines(3.3, 0.5))  # 60 % in: released, the gap runs out
+  assert 0 < len(spas2(cc, sent)) <= carcontroller.MODEL_HOLD_GAP_FRAMES + 1 and uds(sent)[-2:] == [(DEFAULT, 0), (DEFAULT, 1)]
+  assert model_step(cc, 100, lines(3.3, 0.5)) == []  # Starting goes on: no new kick, no new hold
+
+
+def test_model_kick_hold_has_a_ceiling():
+  cc = make_cc()
+  model_step(cc, 10, OFF)
+  sent = model_step(cc, carcontroller.MODEL_HOLD_MAX_FRAMES + 200, LEFT)
+  n = len(spas2(cc, sent))
+  assert carcontroller.MODEL_HOLD_MAX_FRAMES - 60 < n <= carcontroller.MODEL_HOLD_MAX_FRAMES + carcontroller.MODEL_HOLD_GAP_FRAMES
 
 
 def test_palisade_model_lane_change_kick_on_cgw1():
   cc = make_cc()
   assert cgw_step(cc, 20, md=OFF) == []
-  sent = cgw_step(cc, carcontroller.BLINKER_PULSE_FRAMES + 20, md=RIGHT)
-  assert sent and all(addr == 0x541 and (dat[5] >> 1) & 3 == 1 for _, addr, dat, _ in sent)  # right lever
-  assert sent[-1][0] < carcontroller.BLINKER_PULSE_FRAMES + 20
+  sent = cgw_step(cc, 400, md=RIGHT)  # 4 s of Starting: held, flashing on the stock 0.35 s rhythm the whole time
+  assert len(sent) == 400 // carcontroller.CGW_TX_FRAMES
+  assert all(addr == 0x541 and (dat[5] >> 1) & 3 == 1 for _, addr, dat, _ in sent)  # right lever
+  lamp = [bool(dat[7] & 0x40) for _, _, dat, _ in sent]  # right lamp bit (cgw_frame)
+  assert True in lamp and False in lamp and sum(a != b for a, b in zip(lamp, lamp[1:])) >= 8
+  assert cgw_step(cc, 50, md=OFF) == []  # the change is over
 
 
 def test_no_model_kick_without_ownership_or_outside_the_rules():
@@ -350,7 +383,7 @@ def test_no_model_kick_without_ownership_or_outside_the_rules():
 def test_model_kick_only_on_the_edge():
   cc = make_cc()
   assert set(spas2(cc, model_step(cc, 30, LEFT))) == {3} and cc.model_pulse  # Starting when first seen: one kick
-  model_step(cc, carcontroller.BLINKER_PULSE_FRAMES + 50, LEFT)
+  model_step(cc, carcontroller.MODEL_HOLD_MAX_FRAMES + 50, LEFT)  # held up to the ceiling
   assert model_step(cc, 50, LEFT) == []  # repeated Starting frames: no second kick
   # modelV2 None (not alive / invalid) is no transition: Starting -> None -> Starting does not kick again
   assert model_step(cc, 20, None) == [] and cc.lane_change_prev == "laneChangeStarting"
