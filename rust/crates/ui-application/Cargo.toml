@@ -38,7 +38,7 @@ flate2 = "1"
 openpilot-registration = { path = "../registration" }
 openpilot-uploader = { path = "../uploader" }
 openpilot-timed = { path = "../timed" }
-cxx = "1"
+libc = "0.2"
 qrcodegen = "=1.8.0"
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 openpilot-ui-framework = { path = "../ui-framework" }
@@ -55,9 +55,6 @@ serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["float_roundtrip"] }
 thiserror = "2"
 rustix = { version = "1", features = ["time", "process", "thread"] }
-
-[build-dependencies]
-cxx-build = "1"
 
 [dev-dependencies]
 tempfile = "3"

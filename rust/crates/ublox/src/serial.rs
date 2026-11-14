@@ -28,7 +28,7 @@ impl Serial {
             file: File::from(fd),
         };
         port.baud(9600)?;
-        crate::bridge::ffi::raise_modem_lines(port.file.as_raw_fd())?;
+        crate::bridge::raise_modem_lines(port.file.as_raw_fd())?;
         termios::tcflush(&port.file, QueueSelector::IFlush).map_err(std::io::Error::from)?;
         Ok(port)
     }

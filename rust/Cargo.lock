@@ -2685,8 +2685,7 @@ dependencies = [
 name = "openpilot-cweb-push"
 version = "0.1.0"
 dependencies = [
- "cxx",
- "cxx-build",
+ "libc",
  "openpilot-logging",
  "openpilot-managed-entry",
  "openpilot-params",
@@ -3935,8 +3934,7 @@ version = "0.1.0"
 dependencies = [
  "capnp",
  "chrono",
- "cxx",
- "cxx-build",
+ "libc",
  "openpilot-cereal",
  "openpilot-hardware-control",
  "openpilot-http-transport",
@@ -3963,9 +3961,8 @@ dependencies = [
  "capnp",
  "chrono",
  "cookie_store",
- "cxx",
- "cxx-build",
  "flate2",
+ "libc",
  "num-traits",
  "openpilot-agnos",
  "openpilot-cereal",

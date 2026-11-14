@@ -23,10 +23,7 @@ url = "=2.5.8"
 rustix = { version = "1", features = ["time", "system"] }
 rand = "0.9"
 signal-hook = "0.3"
-cxx = "1.0"
-
-[build-dependencies]
-cxx-build = "1.0"
+libc = "0.2"
 
 [dev-dependencies]
 serde_json = { version = "1", features = ["float_roundtrip"] }

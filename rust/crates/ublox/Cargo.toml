@@ -8,7 +8,7 @@ publish = false
 
 [features]
 default = ["native"]
-native = ["dep:cxx", "dep:openpilot-msgq", "dep:openpilot-messaging", "dep:openpilot-logging", "dep:openpilot-hardware-control", "dep:openpilot-params", "dep:openpilot-params-typed", "dep:signal-hook", "dep:ureq", "dep:openpilot-http-transport", "dep:openpilot-timed", "dep:url"]
+native = ["dep:libc", "dep:openpilot-msgq", "dep:openpilot-messaging", "dep:openpilot-logging", "dep:openpilot-hardware-control", "dep:openpilot-params", "dep:openpilot-params-typed", "dep:signal-hook", "dep:ureq", "dep:openpilot-http-transport", "dep:openpilot-timed", "dep:url"]
 
 [lints.rust]
 unsafe_code = "deny"
@@ -31,12 +31,10 @@ thiserror = "2"
 signal-hook = { version = "0.3", optional = true }
 openpilot-http-transport = { path = "../http-transport", optional = true }
 openpilot-timed = { path = "../timed", optional = true }
-cxx = { version = "1.0", optional = true }
+libc = { version = "0.2", optional = true }
 url = { version = "=2.5.8", optional = true }
 ureq = { version = "=3.4.2", features = ["gzip", "brotli", "rustls", "cookies"], optional = true }
 
-[build-dependencies]
-cxx-build = "1.0"
 
 [[bin]]
 name = "openpilot-ubloxd"

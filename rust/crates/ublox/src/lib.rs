@@ -36,9 +36,6 @@ pub enum Error {
     Json(#[from] serde_json::Error),
     #[cfg(feature = "native")]
     #[error(transparent)]
-    Kernel(#[from] cxx::Exception),
-    #[cfg(feature = "native")]
-    #[error(transparent)]
     Messaging(#[from] openpilot_messaging::runtime::Error),
     #[cfg(feature = "native")]
     #[error(transparent)]
