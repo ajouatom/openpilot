@@ -120,7 +120,8 @@ impl<T: Transport> Client<T> {
             .filter(|app| self.transport.version() == wire::Version::V3 && (app.parked)())
             .and_then(|app| crate::app_pick::current(&app.cache));
         if let Some(pick) = &pick {
-            hello["pick"] = pick.hello(crate::now_ns() as f64 / 1e9);
+            // Inside `client`: the App reads the pick from the hello's client.
+            hello["client"]["pick"] = pick.hello(crate::now_ns() as f64 / 1e9);
         }
         if let Some(app) = &mut self.app {
             app.pick_at = pick.as_ref().map(|pick| pick.at);
@@ -1444,8 +1445,8 @@ mod tests {
             })
             .collect();
         let first: Value = serde_json::from_slice(&sent[0].1).unwrap();
-        assert_eq!(first["pick"]["ref"], "n16");
-        assert_eq!(first["pick"]["sha256"], spec.sha256);
+        assert_eq!(first["client"]["pick"]["ref"], "n16");
+        assert_eq!(first["client"]["pick"]["sha256"], spec.sha256);
         let request: Value = serde_json::from_slice(&sent[1].1).unwrap();
         assert_eq!(sent[1].0.kind, 3);
         assert_eq!(request["sha256"], spec.sha256);
