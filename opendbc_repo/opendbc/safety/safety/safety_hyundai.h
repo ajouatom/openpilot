@@ -91,8 +91,17 @@ static struct {
 } hyundai_cgw_pb;
 #define HYUNDAI_CGW_PB_HOLD_US 150000U  // stock CGW1 is 10 Hz: a held frame older than this is dropped, not sent
 
+// Parked-only 0x5B6 experiment (K5 DL3 11-14: forged CGW1 lit the cluster and BVM but not the exterior lamps; stock
+// 0x5B6 byte 2 holds 0x10 left / 0x40 right for the whole real flash, 5 Hz). Sent directly, parked, 3 s per trial.
+static struct {
+  bool template_valid, attempted, sent, trial_active, cutoff;
+  uint8_t template[8];
+  uint32_t template_ts, attempt_ts, sent_ts, trial_ts;
+} hyundai_lamp_test;
+
 static void hyundai_cgw_test_init(uint16_t param) {
   hyundai_cgw_test = (__typeof__(hyundai_cgw_test)){0};  // no libc here (host libsafety build has no memset)
+  hyundai_lamp_test = (__typeof__(hyundai_lamp_test)){0};
   hyundai_cgw_test.enabled = (param & 32768U) != 0U;  // HyundaiSafetyFlags.PALISADE_CGW_TEST
   hyundai_cgw_pb = (__typeof__(hyundai_cgw_pb)){0};
   hyundai_cgw_pb.direct = (param & 1024U) != 0U;  // HyundaiSafetyFlags.CANFD_SPAS_DIRECT
@@ -156,6 +165,44 @@ static bool hyundai_cgw_test_tx(const CANPacket_t *msg) {
       extern bool safety_tx_buffered_for_fwd;
       safety_tx_buffered_for_fwd = true;
     }
+  }
+  return allowed;
+}
+
+static bool hyundai_lamp_test_tx(const CANPacket_t *msg) {
+  uint32_t now = microsecond_timer_get();
+  // same one-shot rules as the CGW1 test: 3 s per trial, rearmed only after 1 s without any request
+  if (hyundai_lamp_test.attempted && (get_ts_elapsed(now, hyundai_lamp_test.attempt_ts) >= 1000000U)) {
+    hyundai_lamp_test.trial_active = false;
+    hyundai_lamp_test.cutoff = false;
+  }
+  hyundai_lamp_test.attempted = true;
+  hyundai_lamp_test.attempt_ts = now;
+  if (hyundai_lamp_test.trial_active && (get_ts_elapsed(now, hyundai_lamp_test.trial_ts) >= 3000000U)) {
+    hyundai_lamp_test.cutoff = true;
+  }
+  bool parked = !controls_allowed && hyundai_cgw_test.wheels_valid && hyundai_cgw_test.gear_valid &&
+                hyundai_cgw_test.stationary && hyundai_cgw_test.park &&
+                (get_ts_elapsed(now, hyundai_cgw_test.wheels_ts) <= 250000U) &&
+                (get_ts_elapsed(now, hyundai_cgw_test.gear_ts) <= 250000U);
+  // stock frame idle (no real flash) and ours = stock + exactly one side bit (byte 2: 0x10 left, 0x40 right)
+  uint8_t side = GET_BYTE(msg, 2) ^ hyundai_lamp_test.template[2];
+  bool fits = ((side == 0x10U) || (side == 0x40U)) && ((hyundai_lamp_test.template[2] & 0x50U) == 0U);
+  for (int i = 0; i < 8; i++) {
+    fits = fits && ((i == 2) || (GET_BYTE(msg, i) == hyundai_lamp_test.template[i]));
+  }
+  bool allowed = hyundai_cgw_test.enabled && !relay_malfunction && parked && fits &&
+                 (GET_BUS(msg) == 0) && (GET_LEN(msg) == 8) && !msg->extended && !msg->fd &&
+                 hyundai_lamp_test.template_valid && !hyundai_lamp_test.cutoff &&
+                 (get_ts_elapsed(now, hyundai_lamp_test.template_ts) <= 500000U) &&  // stock is 5 Hz
+                 (!hyundai_lamp_test.sent || (get_ts_elapsed(now, hyundai_lamp_test.sent_ts) >= 50000U));
+  if (allowed) {
+    if (!hyundai_lamp_test.trial_active) {
+      hyundai_lamp_test.trial_active = true;
+      hyundai_lamp_test.trial_ts = now;
+    }
+    hyundai_lamp_test.sent = true;
+    hyundai_lamp_test.sent_ts = now;
   }
   return allowed;
 }
@@ -269,6 +316,14 @@ static void hyundai_rx_hook(const CANPacket_t *to_push) {
           hyundai_cgw_test.template[i] = to_push->data[i];
         }
         hyundai_cgw_test.template_ts = now;
+      }
+    } else if (addr == 0x5B6) {
+      hyundai_lamp_test.template_valid = valid;
+      if (valid) {
+        for (int i = 0; i < 8; i++) {
+          hyundai_lamp_test.template[i] = to_push->data[i];
+        }
+        hyundai_lamp_test.template_ts = now;
       }
     } else if (addr == 0x367) {
       // hyundai_kia_generic.dbc: LVR12 CF_Lvr_Gear bits 32..35, P = 0.
@@ -402,6 +457,9 @@ static bool hyundai_tx_hook(const CANPacket_t *to_send) {
 
   if (addr == 0x541) {
     return hyundai_cgw_test_tx(to_send);
+  }
+  if (addr == 0x5B6) {
+    return hyundai_lamp_test_tx(to_send);
   }
 
   // FCA11: Block any potential actuation
@@ -632,13 +690,14 @@ static safety_config hyundai_init_carrot(bool legacy_car) {
         else ret = BUILD_SAFETY_CFG(hyundai_rx_checks, HYUNDAI_TX_MSGS);
     }
     if (hyundai_cgw_test.enabled) {
-      static CanMsg test_tx_msgs[(sizeof(HYUNDAI_TX_MSGS) / sizeof(HYUNDAI_TX_MSGS[0])) + 1U];
+      static CanMsg test_tx_msgs[(sizeof(HYUNDAI_TX_MSGS) / sizeof(HYUNDAI_TX_MSGS[0])) + 2U];
       for (int i = 0; i < ret.tx_msgs_len; i++) {
         test_tx_msgs[i] = ret.tx_msgs[i];
       }
       test_tx_msgs[ret.tx_msgs_len] = (CanMsg){0x541, 0, 8};
+      test_tx_msgs[ret.tx_msgs_len + 1] = (CanMsg){0x5B6, 0, 8};
       ret.tx_msgs = test_tx_msgs;
-      ret.tx_msgs_len++;
+      ret.tx_msgs_len += 2;
     }
     return ret;
 }

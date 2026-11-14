@@ -61,6 +61,24 @@ class TestPalisadeCgwTest(unittest.TestCase):
       self.assertEqual(self.call(raw=raw), [])
       self.assertEqual(self.call(), [])
 
+  def test_lamp_message_variants(self):
+    # 3/4 = the 1/2 CGW1 plus 0x5B6 byte 2 0x10 left / 0x40 right (K5 DL3 11-14), held through the flash, same 3 s
+    for selection, plain, side_byte in ((3, 1, 0x10), (4, 2, 0x40)):
+      self.setUp()
+      cgw_plain = self.call(plain)[0]
+      self.setUp()
+      frames = []
+      for tick in range(60):
+        self.now = 1_000_000_000 + tick * 60_000_000
+        frames.append(self.call(selection))
+      sent = [f for f in frames if f]
+      self.assertEqual(len(sent), 50)
+      self.assertEqual(sent[0][0], cgw_plain)
+      self.assertTrue(all(f[1] == (0x5B6, bytes([0, 0, side_byte, 0, 0, 0, 0, 0]), 0) for f in sent))
+      self.assertEqual({bool(f[0][1][2] & 0x08 or f[0][1][7] & 0x40) for f in sent}, {True, False})  # CGW1 lamp flashes
+    self.setUp()
+    self.assertEqual(self.call(5), [])
+
   def test_no_startup_request_or_direction_switch(self):
     self.sender = PalisadeCgwTest()
     self.assertEqual(self.call(), [])

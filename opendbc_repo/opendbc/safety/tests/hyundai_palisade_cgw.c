@@ -200,10 +200,66 @@ int main(void) {
   CANPacket_t door = msg(0x541, stock ^ (1ULL << 8)); timer.CNT = 820000; CHECK(safety_rx_hook(&door)); CHECK(!safety_rx_tx_hook(&door, &out));
   relay_malfunction = true; CHECK(held(550000, stock | left) == false); relay_malfunction = false;
   // CANFD_SPAS_DIRECT (1024, CanfdBlinkerKickMode 2/3): queued directly even while driving
-  init(32768 | 1024); timer.CNT = 0; CHECK(safety_rx_hook(&c)); CHECK(held(30000, stock | left));
+  init(32768 | 1024); timer.CNT = 0; CHECK(safety_rx_hook(&c));
+  timer.CNT = 30000; { CANPacket_t d = msg(0x541, stock | left); safety_tx_buffered_for_fwd = false;
+    CHECK(safety_tx_hook(&d) && !safety_tx_buffered_for_fwd); }  // accepted, not held (was asserting held: NDEBUG hid it)
   CHECK(!safety_rx_tx_hook(&in, &out));
   // the parked test is never held
   init(32768); ready(0, stock, 0); CHECK(held(0, stock | left));
+  // 0x5B6 lamp trial (K5 DL3): parked only, stock + exactly one side bit in byte 2, direct, 50 ms, 3 s per trial
+  const uint64_t L5 = 0x10ULL << 16, R5 = 0x40ULL << 16;
+  #define LAMP(now, data) (timer.CNT = (now), lp = msg(0x5B6, (data)), safety_tx_hook(&lp))
+  CANPacket_t lp, s5 = msg(0x5B6, 0);
+  init(0); ready(0, stock, 0); CHECK(safety_rx_hook(&s5)); CHECK(!LAMP(0, L5));  // flag off
+  init(32768); ready(0, stock, 0); CHECK(!LAMP(0, L5));  // no stock 0x5B6 seen
+  CHECK(safety_rx_hook(&s5)); CHECK(LAMP(0, L5)); CHECK(!LAMP(49999, R5)); CHECK(LAMP(50000, R5));
+  for (uint64_t v = 0; v < 256; v++) {
+    init(32768); ready(0, stock, 0); CHECK(safety_rx_hook(&s5));
+    CHECK(LAMP(0, v << 16) == ((v == 0x10) || (v == 0x40)));
+  }
+  for (int bit = 0; bit < 64; bit++) if ((bit < 16) || (bit > 23)) {
+    init(32768); ready(0, stock, 0); CHECK(safety_rx_hook(&s5)); CHECK(!LAMP(0, L5 | (1ULL << bit)));
+  }
+  init(32768); ready(0, stock, 0); s5 = msg(0x5B6, 0xABULL << 40); CHECK(safety_rx_hook(&s5));
+  CHECK(LAMP(0, (0xABULL << 40) | L5)); CHECK(!LAMP(50000, L5)); s5 = msg(0x5B6, 0);
+  for (int flash = 0; flash < 2; flash++) {  // a real flash already running: never
+    init(32768); ready(0, stock, 0); CANPacket_t f = msg(0x5B6, flash ? L5 : R5); CHECK(safety_rx_hook(&f));
+    CHECK(!LAMP(0, L5 ^ (flash ? 0 : R5))); CHECK(!LAMP(50000, R5 | (flash ? L5 : 0)));
+  }
+  for (int kind = 0; kind < 9; kind++) {  // not parked, bad frame or relay fault
+    init(32768); ready(0, stock, 0); CHECK(safety_rx_hook(&s5));
+    timer.CNT = 0; lp = msg(0x5B6, L5);
+    if (kind == 0) { CANPacket_t g = msg(0x367, 5ULL << 32); CHECK(safety_rx_hook(&g)); }
+    if (kind == 1) { CANPacket_t w = wheels(2, 1, 1); CHECK(safety_rx_hook(&w)); }
+    if (kind == 2) controls_allowed = true;
+    if (kind == 3) relay_malfunction = true;
+    if (kind == 4) lp.bus = 1;
+    if (kind == 5) lp.bus = 2;
+    if (kind == 6) lp.data_len_code = 7;
+    if (kind == 7) lp.extended = 1;
+    if (kind == 8) lp.fd = 1;
+    CHECK(!safety_tx_hook(&lp));
+    controls_allowed = false; relay_malfunction = false;
+  }
+  init(32768); timer.CNT = 0; CHECK(safety_rx_hook(&s5));  // gear and wheels never seen: no parked proof
+  CHECK(!LAMP(0, L5));
+  init(32768); ready(0, stock, 0); CHECK(safety_rx_hook(&s5)); ready(250000, stock, 1);
+  CHECK(LAMP(250000, L5));  // 0x5B6 is 5 Hz: 500 ms freshness
+  init(32768); ready(0, stock, 0); CHECK(safety_rx_hook(&s5)); ready(250001, stock, 1); CHECK(LAMP(250001, L5));
+  init(32768); ready(0, stock, 0); CHECK(safety_rx_hook(&s5)); ready(500001, stock, 1); CHECK(!LAMP(500001, L5));
+  init(32768); ready(0, stock, 0); timer.CNT = 260000; CHECK(safety_rx_hook(&s5)); CHECK(!LAMP(260000, L5));  // gear/wheels stale
+  // exactly 60 frames at 20 Hz, cutoff while requests continue, rearm after 1 s quiet
+  init(32768);
+  for (int i = 0; i <= 100; i++) {
+    uint32_t now = i * 50000U;
+    ready(now, stock, i % 16); timer.CNT = now; CHECK(safety_rx_hook(&s5));
+    CHECK(LAMP(now, L5) == (i < 60));
+  }
+  ready(6999999U, stock, 6); timer.CNT = 6999999U; CHECK(safety_rx_hook(&s5)); CHECK(LAMP(6999999U, R5));
+  // not held for the rx_tx hook, and the CGW1 path is untouched
+  init(32768); ready(0, stock, 0); CHECK(safety_rx_hook(&s5)); safety_tx_buffered_for_fwd = false;
+  CHECK(LAMP(0, L5) && !safety_tx_buffered_for_fwd); CHECK(held(0, stock | left));
+  CHECK(!safety_rx_tx_hook(&s5, &out));
   printf("Palisade CGW production safety: %u checks passed\n", checks);
   return 0;
 }

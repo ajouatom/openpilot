@@ -14,6 +14,12 @@ def cgw_frame(raw, direction, lamp):
   return (0x541, bytes(data), 0)
 
 
+def lamp_frame(direction):
+  """0x5B6 as the K5 DL3 BCM sends it during a real flash (11-14 rlog 0000024a): all zero but byte 2, 0x10 left / 0x40 right.
+  shortcut: fixed bytes instead of the stock frame; panda refuses it if the stock 0x5B6 has other bits set."""
+  return (0x5B6, bytes([0, 0, 0x10 if direction == 1 else 0x40, 0, 0, 0, 0, 0]), 0)
+
+
 class PalisadeCgwTest:
   """Parked, one-shot CGW1 status experiment; lamp actuation is unverified."""
 
@@ -31,7 +37,7 @@ class PalisadeCgwTest:
 
     if self.armed:
       self.armed = False
-      self.direction = selection if selection in (1, 2) else 0
+      self.direction = selection if selection in (1, 2, 3, 4) else 0
       self.started = now
       self.last_tx = 0
 
@@ -46,4 +52,5 @@ class PalisadeCgwTest:
 
     lamp = (now - self.started) // FLASH_HALF_NS % 2 == 0
     self.last_tx = now
-    return [cgw_frame(raw, self.direction, lamp)]
+    side = (self.direction - 1) % 2 + 1  # 3/4: the same left/right CGW1 plus 0x5B6 (K5 DL3 exterior lamp trial)
+    return [cgw_frame(raw, side, lamp)] + ([lamp_frame(side)] if self.direction > 2 else [])
