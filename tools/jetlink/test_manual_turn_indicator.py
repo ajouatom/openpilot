@@ -92,9 +92,9 @@ def test_moderate_driver_turn_requests_indicator(direction):
   assert drive(direction, 'moderate_turn')[4]
 
 
-def test_low_speed_lane_relabels_do_not_hide_an_independent_manual_turn():
+def test_lane_relabels_do_not_hide_an_independent_manual_turn():
   assert drive(fault='slow_relabel')[4]
-  assert not drive(fault='fast_relabel')[4]
+  assert drive(fault='fast_relabel')[4]
 
 
 @pytest.mark.parametrize('last_lamp', [0., 1.75])
@@ -275,3 +275,19 @@ def test_source_loop_uses_independent_option_with_lateral_control_off(monkeypatc
     assert sent[2]['hold'] and sent[9]['hold'] and not sent[8]['hold']
     # Release the active hold, and never replay its old edge on resume.
     assert all(bool(value['hold']) is (not cancel) for value in sent[4:8])
+
+
+@pytest.mark.parametrize('speed', [-0.0004, -0.002, 0.])
+def test_confirmed_stop_keeps_owned_turn_despite_speed_estimator_noise(speed):
+  cs, md = scene()
+  cs.vEgo, cs.standstill = speed, True
+  assert allowed(cs, N(latActive=False), md, 'manual_turn', 10., holding=True)
+  assert not allowed(cs, N(latActive=False), md, 'manual_turn', 10., holding=False)
+
+
+@pytest.mark.parametrize('speed,standstill,gear', [(-.002, False, 'drive'), (-.2, True, 'drive'),
+                                                  (-.002, True, 'reverse')])
+def test_reverse_motion_still_ends_owned_turn(speed, standstill, gear):
+  cs, md = scene()
+  cs.vEgo, cs.standstill, cs.gearShifter = speed, standstill, gear
+  assert not allowed(cs, N(latActive=False), md, 'manual_turn', 10., holding=True)

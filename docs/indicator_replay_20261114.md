@@ -89,3 +89,63 @@ false-positive rate.
 
 Private logs, video frames, replay scripts and outputs are indexed in
 `.analysis/archive/2026-11-14/indicators/INDEX.md`.
+
+
+## November 15 follow-up after vehicle deployment
+
+The November 14 evening and November 15 morning drives run `91eb1e86bb`.
+The B1 diagnostic records identify release 5 and the ELF listed above. These
+two drives contain 35 B1 requests and zero reported `driver_override` events.
+Three requests report `twai_alert` with `0x600`, combining bus error and failed
+transmission. One of those confirms zero transmitted frames and has no lamp
+onset. Two other moving turns lose the accepted request ID while the receiver
+still reports `waiting`. Their receiver subreasons were not captured.
+
+Camera review and recorded inputs identify additional software defects.
+
+- A junction boundary relabel suppressed manual-turn admission for two seconds
+  above 30 km/h. Steering had reached its peak when detection resumed, losing
+  the required angle growth. Manual turns now retain their independent torque,
+  angle-growth, rotation and curve checks throughout boundary relabels.
+- A jump of only the far boundary erased a continuous manual approach. A recent
+  established driver approach now waits for a valid sample for up to 150 ms when
+  the target boundary remains continuous. Requests pause during that gap.
+- Current model lane-change probability could trigger with little lateral
+  movement. It now also requires both measured boundaries to move at least
+  0.15 m toward the crossing over 0.30–0.55 s, within 1.5 m of the target line.
+- At two stops, very small negative speed estimates ended an owned manual-turn
+  hold. Drive plus confirmed standstill now permits estimates within 0.1 m/s
+  of zero during an existing hold.
+- Loss of a previously accepted B1 request now captures the receiver diagnostic
+  once even while its state remains `waiting`. Ownership transitions remain
+  logged through the hold lifetime. This supplies evidence for the two unresolved
+  moving-turn interruptions.
+
+The combined fixed-input comparison covers 92,836 model frames across eight
+routes and 81 full rlogs, including the previous six drives. Baseline produces
+99 requests and the candidate produces 102. Of the baseline requests, 97 retain
+exact direction and onset. One manual turn starts 0.447 s earlier and one
+camera-reviewed straight-road model indication is suppressed. Four manual
+requests are added.
+
+| Segment and offset | Replay result |
+| --- | --- |
+| 11e1/0 + 55.400 s | Previously missed junction left turn detected |
+| 11e0/98 + 40.077 s | Previously missed left lane approach detected |
+| 11e1/2 + 0.757 s | Straight-road left model indication suppressed |
+| 11e0/98 + 22.282 s | Existing left turn detected 0.447 s earlier |
+| 11d5/1 + 13.250 s and 11d9/6 + 50.390 s | Additional right manual requests in older logs |
+
+The two added older requests have recorded driver and boundary evidence, but
+retained camera video was unavailable for their new visual classification.
+The comparison preserves recorded lamp feedback and vehicle motion and supplies
+bounded tap-echo context. Changes to real lamps could alter later admission.
+The standstill correction also passes the source-loop test with exact-request
+acknowledgement and lamp feedback.
+
+Seven focused regression cases fail before these corrections. The indicator,
+Bluetooth and B1 suites pass 898 local checks, with two platform skips. The three CAN transmit
+faults and the two moving ACK-loss causes remain unresolved by this patch.
+Vehicle installation and physical verification of these November 15 changes
+remain pending. Private evidence is in
+`.analysis/archive/2026-11-15/indicators/INDEX.md`.

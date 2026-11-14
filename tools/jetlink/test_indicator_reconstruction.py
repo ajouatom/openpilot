@@ -345,3 +345,23 @@ def test_forecast_hold_tracks_widening_fork_without_a_second_request(side, stop)
     for i in range(1, 15):
       assert move.update(10.6+i*.05, cs, md)
   assert not move.update(11.41 if stop == 'stalled' else 11. if stop == 'gap' else 10.65, cs, md)
+
+
+@pytest.mark.parametrize('direction', [1, 2])
+@pytest.mark.parametrize('crossing', [False, True])
+def test_current_model_lane_desire_requires_measured_boundary_approach(direction, crossing):
+  cs, md = scene()
+  detector, isolation = ModelIndicator(), BoundaryIndicator()
+  md.meta.desireState = [.1, 0., 0., 0., 0., 0., 0., 0.]
+  md.meta.desireState[direction + 2] = .9
+  sign = 1 if direction == 1 else -1
+  for i in range(30):
+    now = 10 + i * .05
+    md.frameId = i
+    cs.laneLineInfoMonoTime = int(now * 1e9)
+    shift = min(.8, i * .03) if crossing else .04 * math.sin(i)
+    for lane, initial in zip(md.laneLines[1:3], (-1.4, 1.4), strict=True):
+      lane.y = [initial + sign * shift] * 13
+    detector.update(now, cs, md, valid=True, lateral_active=True, desire_enabled=True,
+                    path_enabled=False, busy=False, isolation=isolation)
+  assert bool(detector.active) is crossing
