@@ -792,6 +792,16 @@ def test_set_engage_starts_at_the_road_limit(v_ego, road_limit, expected):
   helper, CS, CC = make_cruise_helper(81, 0, carrot_cruise_active=False, cruise_enabled=False)
   helper._prepare_buttons = lambda CS, v_cruise_kph, remote=None: (v_cruise_kph, ButtonType.decelCruise, False)
   helper.v_ego_kph_set, helper.nRoadLimitSpeed, helper._last_engaged_kph = v_ego, road_limit, 64
+  helper.autoRoadSpeedOnEngage = True
+  assert helper._update_cruise_buttons(CS, CC, 64) == expected
+
+
+@pytest.mark.parametrize("v_ego, expected", [(80, 80), (0, 5)])
+def test_set_engage_without_the_option_starts_at_the_current_speed(v_ego, expected):
+  # AutoRoadSpeedOnEngage off (default): SET- engages at the current speed like carrot-wip, a known limit or not
+  helper, CS, CC = make_cruise_helper(81, 0, carrot_cruise_active=False, cruise_enabled=False)
+  helper._prepare_buttons = lambda CS, v_cruise_kph, remote=None: (v_cruise_kph, ButtonType.decelCruise, False)
+  helper.v_ego_kph_set, helper.nRoadLimitSpeed, helper._last_engaged_kph = v_ego, 60, 64
   assert helper._update_cruise_buttons(CS, CC, 64) == expected
 
 
@@ -914,6 +924,7 @@ def test_set_engage_ignores_a_stale_road_limit(live, car_limit, expected):
   helper, CS, CC = make_cruise_helper(81, 0, carrot_cruise_active=False, cruise_enabled=False)
   helper._prepare_buttons = lambda CS, v_cruise_kph, remote=None: (v_cruise_kph, ButtonType.decelCruise, False)
   helper.v_ego_kph_set, helper.nRoadLimitSpeed, helper._road_limit_live = 100, 60, live
+  helper.autoRoadSpeedOnEngage = True
   CS.speedLimit = car_limit
   assert helper._update_cruise_buttons(CS, CC, 64) == expected
 

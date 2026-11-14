@@ -709,8 +709,9 @@ class VCruiseCarrot:
           self._paddle_decel_active = True
           pass
         elif not CC.enabled:
-          # SET- engage starts at the road speed limit; at a stop the current speed gave 5 km/h (11-05, §46)
-          road_limit = self._live_road_limit(CS)
+          # AutoRoadSpeedOnEngage: SET- engage starts at the road speed limit (at a stop the current speed gave 5 km/h,
+          # 11-05 §46). Off: the current speed, as carrot-wip (Palisade owner 11-14 wanted that back)
+          road_limit = self._live_road_limit(CS) if self.autoRoadSpeedOnEngage else 0
           v_cruise_kph = road_limit if road_limit > 0 else max(self.v_ego_kph_set, self._cruise_speed_min)
         elif self.v_ego_kph_set > v_cruise_kph + 2 and self._cruise_button_mode in [2, 3]:
           v_cruise_kph = max(self.v_ego_kph_set, self._cruise_speed_min)
