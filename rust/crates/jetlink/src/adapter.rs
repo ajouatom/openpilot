@@ -148,3 +148,26 @@ impl Adapter {
         Ok(parsed)
     }
 }
+
+#[cfg(test)]
+mod n16_tests {
+    use super::*;
+
+    #[test]
+    fn n16_outputs_parse_and_navigation_rides_after_the_scalars() {
+        let spec = crate::model_spec::ModelSpec::parse(include_bytes!("../data/n16.json")).unwrap();
+        let mut adapter = Adapter::for_spec(&spec).unwrap();
+        let warped = vec![0u8; contract::WARPED_BYTES];
+        let mut navigation = [0f32; crate::model_spec::NAVIGATION_FLOATS];
+        navigation[15] = 1.;
+        navigation[46] = 2.5;
+        let packed = adapter
+            .prepare_session(&warped, [0.; 8], [1., 0.], [0.2, 0.], &navigation, 12 + crate::model_spec::NAVIGATION_FLOATS)
+            .unwrap();
+        assert_eq!(packed.len(), 59);
+        assert_eq!(&packed[12..], &navigation);
+        let output = vec![0.01f32; spec.output_count().unwrap()];
+        let deadline = crate::Deadline(crate::now_ns() + 1_000_000_000);
+        adapter.parse(&output, deadline).expect("N16 output parses");
+    }
+}

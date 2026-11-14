@@ -93,6 +93,16 @@ fn parked() -> bool {
 impl<T: Transport> Client<T> {
     /// A new, fresh, valid route map to send, or one blank map when it went
     /// stale so the server stops using the last one; None when unchanged.
+    /// The hidden_state range a protocol-3 stateful session leaves out of
+    /// replies. carrot's client asked for the whole vector (WANT_HIDDEN)
+    /// though nothing on the comma reads a stateful graph's hidden state.
+    fn omitted_hidden(&self) -> Option<[usize; 2]> {
+        let contract = self.session_contract();
+        (contract.version == wire::Version::V3 && contract.spec.stateful())
+            .then(|| contract.spec.range("hidden_state").ok())
+            .flatten()
+    }
+
     fn next_map(&mut self) -> Option<Vec<u8>> {
         let now = crate::now_ns();
         let map = openpilot_mapsd::output::read(std::path::Path::new(openpilot_mapsd::output::PATH))
@@ -764,8 +774,11 @@ impl<T: Transport> Client<T> {
         } else {
             None
         };
+        // A stateful graph's hidden_state never feeds back from the comma: ask
+        // the server to leave it out (64 KB a frame) and zero-fill it below.
+        let omitted = self.omitted_hidden();
         let flags = u32::from(reset)
-            | if self.transport.version() == wire::Version::V3 {
+            | if self.transport.version() == wire::Version::V3 && omitted.is_none() {
                 4
             } else {
                 0
@@ -785,7 +798,9 @@ impl<T: Transport> Client<T> {
             self.phase.sent(self.source_sof);
         }
         let response = self.expect(9, seq, deadline)?;
-        let end = 20 + self.session_contract().spec.output_count()? * 4;
+        let full = self.session_contract().spec.output_count()?;
+        let omitted_len = omitted.map_or(0, |[start, stop]| stop - start);
+        let end = 20 + (full - omitted_len) * 4;
         if response.payload.len() < 20 {
             return Err(Error::Contract("inference response is missing its header"));
         }
@@ -837,6 +852,16 @@ impl<T: Transport> Client<T> {
             self.report("ready", "ready", None, Some(&state));
         }
         let output = rpc::decode_floats(&response.payload[20..end])?;
+        let output = match omitted {
+            Some([start, stop]) => {
+                let mut whole = Vec::with_capacity(full);
+                whole.extend_from_slice(&output[..start]);
+                whole.resize(stop, 0.);
+                whole.extend_from_slice(&output[start..]);
+                whole
+            }
+            None => output,
+        };
         self.session_contract().check_output(&output)?;
         deadline.remaining()?;
         self.last_frame = Some(frame);
