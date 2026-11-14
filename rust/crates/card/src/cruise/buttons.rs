@@ -444,10 +444,12 @@ impl CruiseCarrot {
                     match self.s._lfa_button_mode {
                         0 => {
                             self.s._lat_enabled = !self.s._lat_enabled;
+                            // carrot's `"Lateral " + "enabled" if ... else "disabled"`
+                            // dropped the prefix by precedence.
                             self.add_log(if self.s._lat_enabled {
                                 "Lateral enabled"
                             } else {
-                                "disabled"
+                                "Lateral disabled"
                             });
                         }
                         2 => self.s.carrot_cruise_active = true,
@@ -459,7 +461,7 @@ impl CruiseCarrot {
                     self.s._paddle_decel_active = false;
                     if self.s._cancel_button_mode == 1 {
                         self.s._lat_enabled = false;
-                        self.add_log("disabled");
+                        self.add_log("Lateral disabled");
                     }
                     self.s._cruise_cancel_state = true;
                 }
@@ -499,7 +501,7 @@ impl CruiseCarrot {
                     self.s._cruise_cancel_state = true;
                     self.s._lat_enabled = false;
                     self.s._paddle_decel_active = false;
-                    self.add_log("disabled");
+                    self.add_log("Lateral disabled");
                 }
                 Button::Unknown
                 | Button::LeftBlinker

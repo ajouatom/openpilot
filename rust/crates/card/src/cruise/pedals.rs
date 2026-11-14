@@ -369,7 +369,16 @@ impl CruiseCarrot {
     pub(super) fn auto_speed_up(&mut self, mut speed: Number) -> Number {
         if !self.s._pause_auto_speed_up && self.s.apply_model_speed != 0. {
             let model = self.s.model_v_kph * self.s.apply_model_speed.abs();
-            let apply = model.min(self.s.n_road_limit_speed * 1.1);
+            // carrot capped with `nRoadLimitSpeed * 1.1` unconditionally; with no
+            // road limit (0) a negative ApplyModelSpeed set the cruise speed to 0,
+            // i.e. the minimum. Without a limit only the model speed applies.
+            let apply = if self.s.n_road_limit_speed > 0. {
+                model.min(self.s.n_road_limit_speed * 1.1)
+            } else if self.s.apply_model_speed < 0. {
+                model
+            } else {
+                0.
+            };
             if self.s.apply_model_speed < 0. {
                 speed = Number::float(model.min(apply));
             } else if speed.value < apply {
@@ -447,5 +456,46 @@ impl CruiseCarrot {
             }
         }
         Ok(speed)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::{assistant_speed::AssistantSpeed, number::Number, state::CruiseState, CruiseCarrot};
+    use openpilot_desire::command::CommandReader;
+
+    fn cruise() -> CruiseCarrot {
+        let root = std::env::temp_dir().join(format!("card-cruise-{}", std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        CruiseCarrot {
+            s: CruiseState::new(0, 0, false, false),
+            params: openpilot_params::Params::open(&root, "d").unwrap(),
+            pcm_cruise: false,
+            brand: "hyundai".into(),
+            fingerprint: String::new(),
+            openpilot_longitudinal: true,
+            commands: CommandReader::new(&root, "cruise", 0.),
+            assistant_speed: AssistantSpeed::new(0.),
+            assistant_speed_valid: false,
+            long_active: false,
+            writes: Vec::new(),
+            prints: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn a_negative_model_speed_without_a_road_limit_follows_the_model() {
+        let mut c = cruise();
+        c.s.apply_model_speed = -1.;
+        c.s.model_v_kph = 72.;
+        c.s.n_road_limit_speed = 0.;
+        // carrot computed min(model, 0) here: the set speed collapsed to 0.
+        assert_eq!(c.auto_speed_up(Number::float(100.)).value, 72.);
+        c.s.n_road_limit_speed = 50.;
+        assert!((c.auto_speed_up(Number::float(100.)).value - 55.).abs() < 1e-9);
+        // A positive ratio still never raises the speed without a road limit.
+        c.s.apply_model_speed = 1.;
+        c.s.n_road_limit_speed = 0.;
+        assert_eq!(c.auto_speed_up(Number::float(40.)).value, 40.);
     }
 }
