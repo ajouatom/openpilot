@@ -231,7 +231,10 @@ impl CruiseCarrot {
                     }
                 }
                 ("SPEED", arg) => {
-                    if let Some(value) = super::integer::command_speed(arg)? {
+                    // carrot's `int(self.carrot_arg)` raised on a non-numeric
+                    // argument and took card (and vehicle control) down; a
+                    // malformed remote command is ignored instead.
+                    if let Some(value) = super::integer::command_speed(arg).ok().flatten() {
                         speed = Number::int(value);
                         self.add_log(&format!("Cruise speed set to {speed} (carrot command)"));
                     }
@@ -584,5 +587,24 @@ impl CruiseCarrot {
             }
         }
         Ok(speed)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Button, Number};
+
+    #[test]
+    fn a_malformed_speed_command_is_ignored_instead_of_failing_the_frame() {
+        let mut c = super::super::pedals::tests::cruise();
+        for (arg, expected) in [("RESET", 80.), ("", 80.), ("120", 120.), ("250", 80.)] {
+            c.s.carrot_cmd = "SPEED".into();
+            c.s.carrot_arg = arg.into();
+            c.s.carrot_cmd_index += 1;
+            let (speed, _, _) = c
+                .carrot_command(Number::int(80.), Button::Unknown, false)
+                .unwrap_or_else(|e| panic!("{arg:?}: {e:?}"));
+            assert_eq!(speed.value, expected, "{arg:?}");
+        }
     }
 }

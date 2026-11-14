@@ -460,11 +460,11 @@ impl CruiseCarrot {
 }
 
 #[cfg(test)]
-mod tests {
+pub(super) mod tests {
     use super::super::{assistant_speed::AssistantSpeed, number::Number, state::CruiseState, CruiseCarrot};
     use openpilot_desire::command::CommandReader;
 
-    fn cruise() -> CruiseCarrot {
+    pub(in crate::cruise) fn cruise() -> CruiseCarrot {
         let root = std::env::temp_dir().join(format!("card-cruise-{}", std::process::id()));
         std::fs::create_dir_all(&root).unwrap();
         CruiseCarrot {
