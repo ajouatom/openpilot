@@ -187,6 +187,7 @@ pub fn run(
         .parse::<i64>()
         .map_err(|_| Error::Contract("invalid SIMULATION"))?
         != 0;
+    let mut navigation_input = openpilot_driving_modeld::navigation::NavigationInput::default();
     let mut external =
         openpilot_jetlink::runtime::Runtime::new(Path::new("/dev/shm/carrot-jetlink.sock"))?;
     let mut external_stored = None;
@@ -298,6 +299,14 @@ pub fn run(
                 desire,
                 traffic,
                 action: [lateral as f32, longitudinal as f32],
+                // A missing route input must never fail the model loop.
+                navigation: navigation_input
+                    .update(
+                        external.navigation_model(),
+                        f64::from(sources.car.get_v_ego()),
+                        process::monotonic(),
+                    )
+                    .unwrap_or([0.; openpilot_modeld::navigation::NAVIGATION_LEN]),
             },
             || {
                 runtime

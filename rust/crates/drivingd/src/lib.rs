@@ -5,6 +5,7 @@ pub mod clock;
 pub mod diagnostics;
 pub mod indicator;
 pub mod jetlink;
+pub mod navigation;
 pub mod parameters;
 pub mod publication;
 pub mod recovery;

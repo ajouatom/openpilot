@@ -88,6 +88,8 @@ pub struct FrameInput {
     pub desire: [f32; 8],
     pub traffic: [f32; 2],
     pub action: [f32; 2],
+    /// N16 `navigation` (zeros without a route); ignored by other graphs.
+    pub navigation: [f32; crate::model_spec::NAVIGATION_FLOATS],
 }
 /// How long modeld waits for the peer's answer to one frame: carrot's local
 /// client timeout (link.py `timeout=.15`). A frame slower than 50 ms is late,
@@ -121,6 +123,8 @@ pub struct Runtime {
     /// within `PROBE_BUDGET` since the last loss. Joining waits for it, so a
     /// peer that stopped answering never blocks the frame thread.
     probe_passed: bool,
+    /// The connected graph takes N16 navigation inputs.
+    navigation_model: bool,
     /// Stage times of the peer frame collected since the last `begin`.
     last_stages: Option<Stages>,
     frame: u32,
@@ -166,6 +170,7 @@ impl Runtime {
             started: now,
             slow_logged: None,
             probe_passed: false,
+            navigation_model: false,
             last_stages: None,
             frame: 0,
             status: Status {
@@ -229,6 +234,7 @@ impl Runtime {
                 self.status.generation = crate::rpc::encode_generation(model.client.generation);
                 self.identity = Some(model.client.identity.clone());
                 self.selected_sha = model.client.session.spec.sha256.clone();
+                self.navigation_model = model.client.session.spec.navigation();
                 match model.client.cancel_handle() {
                     Ok(handle) => self.cancel = Some(handle),
                     Err(error) => {
@@ -279,6 +285,10 @@ impl Runtime {
             }
         }
     }
+    /// Whether frames should carry N16 navigation inputs.
+    pub fn navigation_model(&self) -> bool {
+        self.navigation_model
+    }
     pub fn selected_sha(&self) -> &str {
         &self.selected_sha
     }
@@ -292,6 +302,7 @@ impl Runtime {
             desire,
             traffic,
             action,
+            navigation,
         } = input;
         self.started = Instant::now();
         self.last_stages = None;
@@ -355,6 +366,7 @@ impl Runtime {
                 desire,
                 traffic,
                 action,
+                &navigation,
                 model.client.session.packed_count(),
             )?;
             Ok((warped, packed))
