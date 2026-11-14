@@ -2,7 +2,7 @@ use crate::Error;
 use openpilot_modeld::camera::{CameraSource, Captured, FrameMeta};
 use openpilot_msgq::{VisionClient, VisionMetadata};
 use std::{
-    cell::RefCell,
+    cell::{OnceCell, RefCell},
     rc::Rc,
     sync::{
         atomic::{AtomicBool, Ordering},
@@ -11,10 +11,55 @@ use std::{
     time::Duration,
 };
 
+/// A received camera frame, read in place from its VisionIPC mapping as
+/// carrot's modeld does (`VisionBuf.data`); a CPU copy is made only for a
+/// consumer that needs bytes.
 pub struct Image {
     pub layout: VisionMetadata,
-    pub bytes: Vec<u8>,
+    address: usize,
+    bytes: OnceCell<Vec<u8>>,
     spare: Rc<RefCell<Spare>>,
+}
+
+impl Image {
+    /// Pixels in place; mapped until the camera generation ends, which ends
+    /// this process.
+    pub fn address(&self) -> usize {
+        self.address
+    }
+
+    pub fn len(&self) -> usize {
+        self.layout.len
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.layout.len == 0
+    }
+
+    /// A CPU copy, made on first use.
+    pub fn bytes(&self) -> &[u8] {
+        self.bytes.get_or_init(|| {
+            let mut bytes = {
+                let mut spare = self.spare.borrow_mut();
+                if spare.len != self.layout.len {
+                    spare.len = self.layout.len;
+                    spare.bytes = None;
+                }
+                spare.bytes.take().unwrap_or_else(|| vec![0; self.layout.len])
+            };
+            // SAFETY: the VisionIPC mapping holds `layout.len` pixel bytes at
+            // `address` for the client's lifetime, which outlives this frame.
+            // Like the source API, the producer may recycle the buffer.
+            unsafe {
+                std::ptr::copy_nonoverlapping(
+                    self.address as *const u8,
+                    bytes.as_mut_ptr(),
+                    self.layout.len,
+                );
+            }
+            bytes
+        })
+    }
 }
 
 #[derive(Default)]
@@ -28,8 +73,10 @@ impl Drop for Image {
         // A source may already have gone away or changed layouts while this snapshot was retained.
         // Keep at most one spare and never panic while releasing an image.
         if let Ok(mut spare) = self.spare.try_borrow_mut() {
-            if self.bytes.len() == spare.len && spare.bytes.is_none() {
-                spare.bytes = Some(std::mem::take(&mut self.bytes));
+            if let Some(bytes) = self.bytes.take() {
+                if bytes.len() == spare.len && spare.bytes.is_none() {
+                    spare.bytes = Some(bytes);
+                }
             }
         }
     }
@@ -69,15 +116,7 @@ impl CameraSource for Source {
             return Ok(None);
         };
         let layout = *frame.metadata();
-        let mut bytes = {
-            let mut spare = self.spare.borrow_mut();
-            if spare.len != layout.len {
-                spare.len = layout.len;
-                spare.bytes = None;
-            }
-            spare.bytes.take().unwrap_or_else(|| vec![0; layout.len])
-        };
-        frame.copy_into(&mut bytes)?;
+        let address = frame.data_address();
         Ok(Some(Captured {
             metadata: FrameMeta {
                 frame_id: layout.frame_id,
@@ -86,7 +125,8 @@ impl CameraSource for Source {
             },
             buffer: Image {
                 layout,
-                bytes,
+                address,
+                bytes: OnceCell::new(),
                 spare: Rc::clone(&self.spare),
             },
         }))

@@ -18,12 +18,23 @@ enum Step {
     Copy { source: usize, destination: usize },
 }
 
+/// A kernel call's argument block, kept so an input can be rebound.
+struct KernelArgs {
+    kernel: usize,
+    views: Vec<usize>,
+    scalars: Vec<u32>,
+    buffer: usize,
+}
+
 struct Model<D: Driver> {
     bundle: QcomBundle,
     device: Device<D>,
     allocations: Vec<usize>,
     steps: Vec<Step>,
     entries: Vec<Vec<Step>>,
+    kernel_args: Vec<KernelArgs>,
+    /// Graph allocation -> GPU address of the external memory bound to it.
+    external: Vec<Option<u64>>,
 }
 
 pub struct QcomModel(Model<Linux>);
@@ -53,6 +64,17 @@ impl QcomModel {
     }
     pub fn read_output(&self, name: &str) -> Result<&[u8], Error> {
         self.0.read_output(name)
+    }
+    /// Let the GPU read input `name` straight from caller memory instead of a
+    /// copy, as carrot's modeld does with `Tensor.from_blob` on VisionIPC
+    /// buffers. A later `write_input` of `name` restores the internal buffer.
+    ///
+    /// # Safety
+    /// `address..address + len` must stay mapped, at the same address, for
+    /// this model's lifetime; the GPU reads it during every later run that
+    /// uses `name`.
+    pub unsafe fn bind_input(&mut self, name: &str, address: usize, len: usize) -> Result<(), Error> {
+        self.0.bind_input(name, address as u64, len)
     }
     pub fn run(&mut self) -> Result<(), Error> {
         self.0.run()
@@ -99,6 +121,7 @@ impl<D: Driver> Model<D> {
             program_addresses.push(device.address(buffer, 0, program.image().len())?);
         }
         let mut calls = Vec::with_capacity(bundle.graph.calls.len());
+        let mut kernel_args = Vec::new();
         let mut command_words = 0_usize;
         for call in &bundle.graph.calls {
             match call {
@@ -134,6 +157,12 @@ impl<D: Driver> Model<D> {
                     let buffer = device.allocate(bytes.len())?;
                     device.write(buffer, 0, &bytes)?;
                     let args = device.address(buffer, 0, bytes.len())?;
+                    kernel_args.push(KernelArgs {
+                        kernel: *kernel,
+                        views: views.clone(),
+                        scalars: scalars.clone(),
+                        buffer,
+                    });
                     let mut commands = ProgramImage::memory_barrier(dummy);
                     commands.extend(program.dispatch(&Dispatch {
                         program: program_addresses[*kernel],
@@ -171,12 +200,15 @@ impl<D: Driver> Model<D> {
         {
             device.reserve_commands(words)?;
         }
+        let external = vec![None; bundle.graph.allocations.len()];
         Ok(Self {
             bundle,
             device,
             allocations,
             steps,
             entries,
+            kernel_args,
+            external,
         })
     }
 
@@ -210,7 +242,61 @@ impl<D: Driver> Model<D> {
         Ok(())
     }
 
+    /// Rewrite the argument blocks of every kernel that reads `allocation`.
+    fn rebind(&mut self, allocation: usize, address: Option<u64>) -> Result<(), Error> {
+        if self.external[allocation] == address {
+            return Ok(());
+        }
+        let graph = &self.bundle.graph;
+        for call in &self.kernel_args {
+            if !call.views.iter().any(|&v| graph.views[v].allocation == allocation) {
+                continue;
+            }
+            let mut arguments = Vec::new();
+            for (&view, specs) in call.views.iter().zip(&graph.kernels[call.kernel].arguments) {
+                let view = &graph.views[view];
+                let base = match (view.allocation == allocation, address) {
+                    (true, Some(external)) => external
+                        .checked_add(view.offset as u64)
+                        .ok_or(Error::Limit("QCOM address"))?,
+                    _ => self.device.address(
+                        self.allocations[view.allocation],
+                        view.offset,
+                        view.bytes,
+                    )?,
+                };
+                arguments.extend(specs.iter().map(|spec| spec.bind(base)));
+            }
+            let bytes = self.bundle.programs[call.kernel].arguments(&arguments, &call.scalars)?;
+            self.device.write(call.buffer, 0, &bytes)?;
+        }
+        self.external[allocation] = address;
+        Ok(())
+    }
+
+    fn bind_input(&mut self, name: &str, address: u64, len: usize) -> Result<(), Error> {
+        let view = self.binding(&self.bundle.graph.inputs, name)?;
+        let allocation = view.allocation;
+        // Only a whole, kernel-only input: a host-side copy step or another
+        // view at an offset would still use the internal buffer.
+        if view.offset != 0
+            || len != view.bytes
+            || self.bundle.graph.allocations[allocation].bytes != view.bytes
+            || self.bundle.graph.allocations[allocation].weight_offset.is_some()
+            || self.bundle.graph.calls.iter().any(|call| matches!(call,
+                Call::Copy { source, destination }
+                    if self.bundle.graph.views[*source].allocation == allocation
+                        || self.bundle.graph.views[*destination].allocation == allocation))
+        {
+            return Err(Error::Contract("QCOM input cannot be bound externally"));
+        }
+        let address = self.device.external(address, len)?;
+        self.rebind(allocation, Some(address))
+    }
+
     fn write_input(&mut self, name: &str, bytes: &[u8]) -> Result<(), Error> {
+        let allocation = self.binding(&self.bundle.graph.inputs, name)?.allocation;
+        self.rebind(allocation, None)?;
         let view = self.binding(&self.bundle.graph.inputs, name)?;
         if bytes.len() != view.bytes {
             return Err(Error::Size {

@@ -32,6 +32,13 @@ pub(super) trait Driver {
     fn submit(&mut self, address: u64, size: usize) -> io::Result<u32>;
     fn wait(&mut self, timestamp: u32) -> io::Result<()>;
     fn close(&mut self) -> io::Result<()>;
+    /// GPU address of caller-owned CPU memory (tinygrad `_gpu_map`).
+    fn map_user(&mut self, _address: u64, _size: usize) -> io::Result<u64> {
+        Err(io::Error::from(io::ErrorKind::Unsupported))
+    }
+    fn unmap_user(&mut self, _gpu: u64) -> io::Result<()> {
+        Ok(())
+    }
 }
 
 pub(super) struct Device<D: Driver> {
@@ -40,6 +47,8 @@ pub(super) struct Device<D: Driver> {
     command_buffer: Option<usize>,
     allocated_bytes: u64,
     closed: bool,
+    /// `(host address, size, GPU address)` of mapped external memory.
+    externals: Vec<(u64, usize, u64)>,
 }
 
 impl<D: Driver> Device<D> {
@@ -50,6 +59,7 @@ impl<D: Driver> Device<D> {
             command_buffer: None,
             allocated_bytes: 0,
             closed: false,
+            externals: Vec::new(),
         }
     }
 
@@ -78,6 +88,35 @@ impl<D: Driver> Device<D> {
         self.allocations.push(memory);
         self.allocated_bytes = total;
         Ok(self.allocations.len() - 1)
+    }
+
+    /// GPU address of external CPU memory, mapped once per range. The caller
+    /// keeps the memory mapped for this device's lifetime (VisionIPC buffers
+    /// live until the camera generation ends, which restarts the process).
+    pub(super) fn external(&mut self, host: u64, size: usize) -> Result<u64, Error> {
+        self.active()?;
+        if host == 0 || size == 0 {
+            return Err(Error::Contract("QCOM external range"));
+        }
+        if let Some(&(_, _, gpu)) = self
+            .externals
+            .iter()
+            .find(|(address, length, _)| *address == host && *length == size)
+        {
+            return Ok(gpu);
+        }
+        if self.externals.len() >= 64 {
+            for (_, _, gpu) in self.externals.drain(..) {
+                if let Err(error) = self.driver.unmap_user(gpu) {
+                    eprintln!("QCOM external unmap failed: {error}");
+                }
+            }
+        }
+        let aligned = host & !0xfff;
+        let length = (size + (host - aligned) as usize + 0xfff) & !0xfff;
+        let gpu = self.driver.map_user(aligned, length)? + (host - aligned);
+        self.externals.push((host, size, gpu));
+        Ok(gpu)
     }
 
     pub(super) fn address(&self, buffer: usize, offset: usize, size: usize) -> Result<u64, Error> {

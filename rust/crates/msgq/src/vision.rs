@@ -185,6 +185,13 @@ impl VisionFrame<'_> {
         })
     }
 
+    /// Address of the mapped pixels (`metadata().len` bytes), for a consumer
+    /// such as the GPU that reads the buffer in place like the source API's
+    /// `VisionBuf.data`. Stays mapped until this client's generation ends.
+    pub fn data_address(&self) -> usize {
+        self.buffer.mapping.address()
+    }
+
     /// Copies the original mapped bytes into exactly `metadata().len` bytes.
     /// Like the source API, copying does not make producer updates atomic.
     pub fn copy_into(&self, destination: &mut [u8]) -> Result<(), Error> {

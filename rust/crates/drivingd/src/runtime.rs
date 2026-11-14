@@ -1,3 +1,4 @@
+use crate::camera::Image;
 use crate::usb_model::{Controls, UsbModel};
 use crate::Error;
 use openpilot_model_runtime::{
@@ -14,6 +15,18 @@ enum Backend {
 }
 
 impl Backend {
+    /// Bind a camera frame in place on the QCOM GPU; copy it elsewhere.
+    fn frame(&mut self, name: &str, image: &Image) -> Result<(), Error> {
+        if let Self::Qcom(model) = self {
+            // SAFETY: VisionIPC keeps the frame mapped at this address until
+            // the camera generation ends, which restarts this process.
+            if unsafe { model.bind_input(name, image.address(), image.len()) }.is_ok() {
+                return Ok(());
+            }
+        }
+        self.write(name, image.bytes())
+    }
+
     fn write(&mut self, name: &str, bytes: &[u8]) -> Result<(), Error> {
         match self {
             Self::Cpu(model) => model.write_input(name, bytes)?,
@@ -125,7 +138,7 @@ impl<'a> DrivingRuntime<'a> {
     }
 
     /// Exercise actual warp, policy and readback, then discard synthetic history.
-    pub fn warm_internal(&mut self, image: &[u8]) -> Result<(), Error> {
+    pub fn warm_internal(&mut self, image: &Image) -> Result<(), Error> {
         if self.uses_usb() {
             return Err(Error::Contract("warm standby before selecting eGPU"));
         }
@@ -159,16 +172,16 @@ impl<'a> DrivingRuntime<'a> {
 
     pub fn infer(
         &mut self,
-        main: &[u8],
-        extra: &[u8],
+        main: &Image,
+        extra: &Image,
         transforms: [[f32; 9]; 2],
         prepare_only: bool,
     ) -> Result<Option<DrivingPrediction>, Error> {
         if let Some(usb) = &mut self.usb {
-            return usb.infer_with_prepare([main, extra], transforms, prepare_only);
+            return usb.infer_with_prepare([main.bytes(), extra.bytes()], transforms, prepare_only);
         }
-        self.backend.write("frame", main)?;
-        self.backend.write("big_frame", extra)?;
+        self.backend.frame("frame", main)?;
+        self.backend.frame("big_frame", extra)?;
         for (name, matrix) in ["tfm", "big_tfm"].into_iter().zip(transforms) {
             let mut bytes = [0; 36];
             for (target, value) in bytes.chunks_exact_mut(4).zip(matrix) {
@@ -209,8 +222,8 @@ impl<'a> DrivingRuntime<'a> {
 
     pub fn warp_for_jetlink(
         &mut self,
-        main: &[u8],
-        extra: &[u8],
+        main: &Image,
+        extra: &Image,
         transforms: [[f32; 9]; 2],
     ) -> Result<Vec<u8>, Error> {
         if self.bundle.backend != "qcom-cl"
@@ -230,8 +243,8 @@ impl<'a> DrivingRuntime<'a> {
         if warped.bytes()? != openpilot_jetlink::contract::WARPED_BYTES {
             return Err(Error::Contract("Jetlink warped shape"));
         }
-        self.backend.write("frame", main)?;
-        self.backend.write("big_frame", extra)?;
+        self.backend.frame("frame", main)?;
+        self.backend.frame("big_frame", extra)?;
         for (name, matrix) in ["tfm", "big_tfm"].into_iter().zip(transforms) {
             let mut bytes = [0; 36];
             for (target, value) in bytes.chunks_exact_mut(4).zip(matrix) {

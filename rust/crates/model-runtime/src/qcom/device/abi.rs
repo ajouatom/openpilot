@@ -100,7 +100,33 @@ pub(super) struct PowerConstraint {
     pub size: u64,
 }
 
+/// `struct kgsl_map_user_mem`.
+#[repr(C)]
+#[derive(Default)]
+pub(super) struct MapUserMem {
+    pub fd: i32,
+    pub padding: u32,
+    pub gpuaddr: u64,
+    pub len: u64,
+    pub offset: u64,
+    pub hostptr: u64,
+    pub memtype: u32,
+    pub flags: u32,
+}
+
+/// `struct kgsl_sharedmem_free`.
+#[repr(C)]
+#[derive(Default)]
+pub(super) struct SharedmemFree {
+    pub gpuaddr: u64,
+}
+
+/// `KGSL_USER_MEM_TYPE_ADDR`.
+pub(super) const USER_MEM_TYPE_ADDR: u32 = 2;
+
 pub(super) trait Payload {}
+impl Payload for MapUserMem {}
+impl Payload for SharedmemFree {}
 impl Payload for Property {}
 impl Payload for WaitTimestamp {}
 impl Payload for CreateContext {}
@@ -121,4 +147,6 @@ pub(super) const DESTROY_CONTEXT: libc::c_ulong = request::<DestroyContext>(1, 0
 pub(super) const SET_PROPERTY: libc::c_ulong = request::<Property>(1, 0x32);
 pub(super) const ALLOCATE: libc::c_ulong = request::<Allocate>(3, 0x45);
 pub(super) const FREE: libc::c_ulong = request::<Free>(1, 0x46);
+pub(super) const MAP_USER_MEM: libc::c_ulong = request::<MapUserMem>(3, 0x15);
+pub(super) const SHAREDMEM_FREE: libc::c_ulong = request::<SharedmemFree>(1, 0x21);
 pub(super) const GPU_COMMAND: libc::c_ulong = request::<GpuCommand>(3, 0x4a);

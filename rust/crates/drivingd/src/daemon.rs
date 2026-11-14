@@ -83,7 +83,7 @@ pub fn run(
                     ));
                 }
             };
-            runtime.warm_internal(&image.buffer.bytes)?;
+            runtime.warm_internal(&image.buffer)?;
             runtime.enable_usb(model);
         }
         Ok(None) => {}
@@ -302,8 +302,8 @@ pub fn run(
             || {
                 runtime
                     .warp_for_jetlink(
-                        &frame.buffer.bytes,
-                        &extra_frame.buffer.bytes,
+                        &frame.buffer,
+                        &extra_frame.buffer,
                         [calibration.main(), calibration.extra()],
                     )
                     .map_err(|error| openpilot_jetlink::Error::Native(error.to_string()))
@@ -324,8 +324,8 @@ pub fn run(
                 internal_stale = false;
             }
             runtime.infer(
-                &frame.buffer.bytes,
-                &extra_frame.buffer.bytes,
+                &frame.buffer,
+                &extra_frame.buffer,
                 [calibration.main(), calibration.extra()],
                 dropped.prepare_only,
             )
@@ -368,8 +368,8 @@ pub fn run(
             runtime.update_inputs(model_controls);
             internal_stale = false;
             prediction = runtime.infer(
-                &frame.buffer.bytes,
-                &extra_frame.buffer.bytes,
+                &frame.buffer,
+                &extra_frame.buffer,
                 [calibration.main(), calibration.extra()],
                 dropped.prepare_only,
             )?;

@@ -189,6 +189,24 @@ impl Driver for Linux {
         })
     }
 
+    fn map_user(&mut self, address: u64, size: usize) -> io::Result<u64> {
+        let mut map = abi::MapUserMem {
+            len: size as u64,
+            hostptr: address,
+            memtype: abi::USER_MEM_TYPE_ADDR,
+            ..Default::default()
+        };
+        self.ioctl(abi::MAP_USER_MEM, &mut map)?;
+        if map.gpuaddr == 0 {
+            return Err(io::Error::new(io::ErrorKind::InvalidData, "KGSL user map address"));
+        }
+        Ok(map.gpuaddr)
+    }
+
+    fn unmap_user(&mut self, gpu: u64) -> io::Result<()> {
+        self.ioctl(abi::SHAREDMEM_FREE, &mut abi::SharedmemFree { gpuaddr: gpu & !0xfff })
+    }
+
     fn submit(&mut self, address: u64, size: usize) -> io::Result<u32> {
         let mut object = abi::CommandObject {
             gpuaddr: address,
