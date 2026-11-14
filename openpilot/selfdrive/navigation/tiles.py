@@ -7,7 +7,7 @@ from pathlib import Path
 
 import requests
 
-from openpilot.common.api import Api
+from openpilot.common.api import Api, comma_connect_enabled
 from openpilot.system.hardware import PC
 from openpilot.system.hardware.hw import Paths
 from openpilot.common.params import Params
@@ -19,6 +19,9 @@ HEADER_LENGTH = 127
 
 class RemoteTiles:
   def __init__(self):
+    if not comma_connect_enabled():
+      raise OSError('comma Connect map tiles are disabled')
+
     self.cache = Path(Paths.comma_home() if PC else '/data') / 'navigation' / 'tiles'
     self.cache.mkdir(parents=True, exist_ok=True, mode=0o700)
     self.session = requests.Session()
