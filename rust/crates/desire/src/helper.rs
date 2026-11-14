@@ -1203,7 +1203,13 @@ fn classify(
         score -= 2;
     }
     if score >= 2 {
-        if side.dist_to_edge_far > 4.0 {
+        // carrot required the road edge on that side to be over 4 m away at
+        // every speed. At an intersection the model's edge sits on the centre
+        // line (~2-4 m), so a blinker below the lane-change speed - where it can
+        // only mean a turn - waited 1.5-3 s for the edge to recede while the
+        // model kept following the lane (route 00000cb1: 7 of 9 turns, the
+        // driver steering each). Below MIN_SPEED the edge no longer gates it.
+        if side.dist_to_edge_far > 4.0 || speed < crate::types::MIN_SPEED * 3.6 {
             Maneuver::Turn
         } else {
             old
@@ -1232,5 +1238,27 @@ mod lane_command_tests {
             assert_eq!(blinker, expected, "{argument:?}");
             assert_eq!(helper.carrot_cmd_index_last, 7, "{argument:?} is consumed");
         }
+    }
+}
+
+#[cfg(test)]
+mod classify_tests {
+    use super::{classify, Maneuver};
+    use crate::{side::SideState, types::Input};
+
+    #[test]
+    fn a_blinker_below_lane_change_speed_turns_even_with_a_near_road_edge() {
+        let mut side = SideState::new("left");
+        side.dist_to_edge_far = 2.5; // centre line of a two-way road
+        let mut input = Input::default();
+        for (kph, expected) in [(15., Maneuver::Turn), (29., Maneuver::Turn), (35., Maneuver::None)] {
+            input.car.v_ego = kph / 3.6;
+            // score: below 30 km/h (+1 only there) and no side lane seen (+1)
+            let got = classify(&input, &side, true, "", Maneuver::None);
+            assert_eq!(got, expected, "{kph}");
+        }
+        side.dist_to_edge_far = 5.;
+        input.car.v_ego = 35. / 3.6;
+        assert_eq!(classify(&input, &side, true, "", Maneuver::None), Maneuver::Turn);
     }
 }
