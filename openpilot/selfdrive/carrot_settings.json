@@ -453,41 +453,6 @@
           ]
         },
         {
-          "id": "VEH_TEST",
-          "ko": "Joongyu Lab",
-          "en": "Joongyu Lab",
-          "zh": "Joongyu Lab",
-          "params": [
-            "CanfdAprkDiag",
-            "CanfdBlinkerTest",
-            "CanfdBlinkerMenuTest",
-            "CanfdBlinkerStalk",
-            "CanfdBvmView",
-            "CanfdBvmRaw",
-            "CanfdBvmAltTime",
-            "PalisadeBlinkerTest",
-            "PaddleSignalPriority",
-            "StockCruiseAdopt",
-            "CameraSetSpeedSync",
-            "ClusterLaneTest",
-            "ClusterLaneTestValue",
-            "ClusterLaneTestFrom",
-            "ClusterLaneTestTo",
-            "CanfdHazardTest",
-            "SteerAngleTest",
-            "SpasSteerTest",
-            "RoundaboutLaneChangeHold",
-            "TunnelLaneChangeHold",
-            "ComfortBrakeSymmetric",
-            "ScreenOn",
-            "StopGoAssist",
-            "AutoRoadSpeedOnEngage",
-            "CanfdBlinkerKick",
-            "CanfdBlinkerKickMode",
-            "CanfdBlinkerKickModel"
-          ]
-        },
-        {
           "id": "VEH_RADAR",
           "ko": "레이더",
           "en": "Radar",
@@ -529,6 +494,89 @@
           "params": [
             "CommaPedalEnabled",
             "HardwareC3xLite"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "LAB",
+      "ko": "Joongyu Lab",
+      "en": "Joongyu Lab",
+      "zh": "Joongyu Lab",
+      "groups": [
+        {
+          "id": "LAB_CRUISE",
+          "ko": "크루즈·속도",
+          "en": "Cruise & Speed",
+          "zh": "巡航·速度",
+          "params": [
+            "AutoRoadSpeedOnEngage",
+            "StockCruiseAdopt",
+            "CameraSetSpeedSync",
+            "PaddleSignalPriority",
+            "StopGoAssist",
+            "ComfortBrakeSymmetric"
+          ]
+        },
+        {
+          "id": "LAB_LANE_HOLD",
+          "ko": "차로변경 보류",
+          "en": "Lane Change Hold",
+          "zh": "变道暂缓",
+          "params": [
+            "RoundaboutLaneChangeHold",
+            "TunnelLaneChangeHold"
+          ]
+        },
+        {
+          "id": "LAB_BLINKER",
+          "ko": "깜빡이",
+          "en": "Blinker",
+          "zh": "转向灯",
+          "params": [
+            "CanfdBlinkerKick",
+            "CanfdBlinkerKickMode",
+            "CanfdBlinkerKickModelMode"
+          ]
+        },
+        {
+          "id": "LAB_BVM",
+          "ko": "사각지대 카메라",
+          "en": "Blind-Spot Camera",
+          "zh": "盲区摄像头",
+          "params": [
+            "CanfdBvmView",
+            "CanfdBvmAltTime",
+            "CanfdBvmRaw"
+          ]
+        },
+        {
+          "id": "LAB_TEST",
+          "ko": "시험·진단",
+          "en": "Tests & Diagnostics",
+          "zh": "测试·诊断",
+          "params": [
+            "CanfdBlinkerMenuTest",
+            "PalisadeBlinkerTest",
+            "CanfdBlinkerStalk",
+            "CanfdBlinkerTest",
+            "CanfdAprkDiag",
+            "SpasSteerTest",
+            "SteerAngleTest",
+            "CanfdHazardTest",
+            "ClusterLaneTest",
+            "ClusterLaneTestValue",
+            "ClusterLaneTestFrom",
+            "ClusterLaneTestTo"
+          ]
+        },
+        {
+          "id": "LAB_DEVICE",
+          "ko": "기기",
+          "en": "Device",
+          "zh": "设备",
+          "params": [
+            "ScreenOn"
           ]
         }
       ]
@@ -2275,13 +2323,13 @@
       "group": "Joongyu Lab",
       "name": "CanfdHazardTest",
       "title": "비상등 CAN 테스트",
-      "descr": "테스트용. 1: 계기판 메시지 0x1ea bit 104를 보내 차 밖 비상등을 켭니다(Ioniq 5 PE 10-29 확인, 약 0.1초 뒤 점등). 0: 끔(바로 꺼짐). 「계기판 표시 테스트」 칸 129를 쓰는 동안은 그 값이 우선. 재부팅하면 0.",
+      "descr": "테스트용. 1: 계기판 메시지 0x1ea bit 104를 보내 차 밖 비상등을 켭니다(Ioniq 5 PE 10-29 확인, 약 0.1초 뒤 점등). 0: 끔(바로 꺼짐). 「계기판 표시 테스트」 칸 129를 쓰는 동안은 그 값이 우선. 재부팅하면 0. 아이오닉5 PE 전용입니다(11-14부터, bit 104가 확인된 차). 다른 차에서는 계기판 칸 시험으로만 보낼 수 있습니다.",
       "egroup": "Joongyu Lab",
       "etitle": "Hazard Lights CAN Test",
-      "edescr": "Test only. 1: sends cluster message 0x1ea bit 104, which turns on the exterior hazard lights (confirmed on Ioniq 5 PE 10-29, about 0.1 s later). 0: off (lights stop right away). Cluster Display Test field 129 overrides it while in use. Resets to 0 on reboot.",
+      "edescr": "Test only. 1: sends cluster message 0x1ea bit 104, which turns on the exterior hazard lights (confirmed on Ioniq 5 PE 10-29, about 0.1 s later). 0: off (lights stop right away). Cluster Display Test field 129 overrides it while in use. Resets to 0 on reboot. Ioniq 5 PE only (since 11-14, the car bit 104 was seen on); other cars only through the cluster cell test.",
       "cgroup": "Joongyu Lab",
       "ctitle": "危险警示灯 CAN 测试",
-      "cdescr": "仅用于测试。1: 发送仪表消息 0x1ea bit 104，点亮车外危险警示灯（Ioniq 5 PE 10-29 已确认，约 0.1 秒后点亮）。0: 关闭（立即熄灭）。使用「仪表显示测试」字段 129 时以其为准。重启后恢复为 0。",
+      "cdescr": "仅用于测试。1: 发送仪表消息 0x1ea bit 104，点亮车外危险警示灯（Ioniq 5 PE 10-29 已确认，约 0.1 秒后点亮）。0: 关闭（立即熄灭）。使用「仪表显示测试」字段 129 时以其为准。重启后恢复为 0。 仅限 IONIQ 5 PE(自11-14起, 已确认 bit 104 的车型); 其他车型只能通过仪表格测试发送。",
       "min": 0,
       "max": 1,
       "default": 0,
@@ -3324,10 +3372,10 @@
       "group": "Joongyu Lab",
       "name": "CanfdBlinkerKick",
       "title": "차로변경 깜빡이 자동",
-      "descr": "운전자가 깜빡이를 켜지 않고 차선을 넘어가기 시작하면, 그 방향 깜빡이를 약 1초(2번 정도) 켜 드립니다.\n- 판단: 모델이 보는 차선 기준입니다. 양쪽 차선이 보이고 실제로 선 쪽으로 다가갈 때만 켭니다. 인게이지 여부와 무관하며, D단이면 속도와 상관없이 동작합니다. 모델 차로변경이 진행 중일 때는 쉽니다.\n- 방식: 자동주차 ECU를 약 1초만 멈추고 SPAS2(0x16A)로 깜빡이 명령을 보낸 뒤 바로 다시 켭니다. panda 펌웨어가 바뀝니다.\n- 확인된 차량: 아이오닉5 PE에서 램프 점등을 확인했습니다. 자동주차 ECU가 멈추지 않는 차량(예: 그랜저 GN7)은 같은 메시지끼리 충돌해 CAN 오류가 날 수 있으니 사용을 권하지 않습니다.\n- 비슷한 설정과의 차이: 「CAN-FD SPAS 깜박이 사용」(CanfdBlinkerControl)은 오픈파일럿이 차로변경·회전할 때 켜 주는 별도 기능입니다. 블루투스 리모컨 깜빡이(AutoBlinkerControl)는 젯슨과 PEAK USB-CAN 장치가 필요한 기능입니다.\n- 이 설정을 켜면 다음 부팅 때 CanfdBlinkerControl이 자동으로 꺼집니다(두 기능이 같은 메시지를 써서 동시에 쓸 수 없습니다).\n- 팰리세이드(일반 CAN): 같은 판단으로 CGW1(0x541) 깜빡이 상태를 1초간 흉내 냅니다(「팰리세이드 깜빡이 테스트」와 같은 프레임, D단 주행 중). panda가 순정 프레임 바로 뒤에 하나씩 보내 충돌을 피합니다(송신 방식 1). 방식 2·3은 10-27 테스트처럼 직접 보내므로 CAN 오류가 날 수 있습니다. 황색선·터널 판단은 CAN-FD 전용이라 팰리세이드엔 없습니다. 실차 점등은 미확인. 기본 꺼짐.",
+      "descr": "운전자가 깜빡이를 켜지 않고 차선을 넘어가기 시작하면, 그 방향 깜빡이를 약 1초(2번 정도) 켜 드립니다.\n- 판단: 모델이 보는 차선 기준입니다. 양쪽 차선이 보이고 실제로 선 쪽으로 다가갈 때만 켭니다. 인게이지 여부와 무관하며, D단이면 속도와 상관없이 동작합니다. 모델 차로변경이 진행 중일 때는 쉽니다.\n- 방식: 자동주차 ECU를 약 1초만 멈추고 SPAS2(0x16A)로 깜빡이 명령을 보낸 뒤 바로 다시 켭니다. panda 펌웨어가 바뀝니다.\n- 확인된 차량: 아이오닉5 PE에서 램프 점등을 확인했습니다. 자동주차 ECU가 멈추지 않는 차량(예: 그랜저 GN7)은 같은 메시지끼리 충돌해 CAN 오류가 날 수 있으니 사용을 권하지 않습니다.\n- 비슷한 설정과의 차이: 「CAN-FD SPAS 깜박이 사용」(CanfdBlinkerControl)은 오픈파일럿이 차로변경·회전할 때 켜 주는 별도 기능입니다. 블루투스 리모컨 깜빡이(AutoBlinkerControl)는 젯슨과 PEAK USB-CAN 장치가 필요한 기능입니다.\n- 이 설정을 켜면 다음 부팅 때 CanfdBlinkerControl이 자동으로 꺼집니다(두 기능이 같은 메시지를 써서 동시에 쓸 수 없습니다).\n- 일반 CAN(CGW1 0x541이 있는 차, 11-14부터. 팰리세이드에서 점등 확인, 다른 차는 미확인): 같은 판단으로 CGW1(0x541) 깜빡이 상태를 1초간 흉내 냅니다(「일반 CAN 깜빡이 상태 시험」과 같은 프레임, D단 주행 중). panda가 순정 프레임 바로 뒤에 하나씩 보내 충돌을 피합니다(송신 방식 1). 방식 2·3은 10-27 테스트처럼 직접 보내므로 CAN 오류가 날 수 있습니다. 황색선·터널 판단은 CAN-FD 전용이라 일반 CAN엔 없습니다. 기본 꺼짐.",
       "egroup": "Joongyu Lab",
       "etitle": "Lane Change Auto Blinker",
-      "edescr": "Flashes the blinker for about 1 s (about two flashes) toward the side the driver starts crossing a lane line without signalling.\n- Detection: model lane lines; only when both lines are seen and the car really moves toward one. Engaged or not, at any speed in D; paused while a model lane change runs.\n- How: pauses the parking ECU for about 1 s, sends the blinker command on SPAS2 (0x16A), then restores it. Changes the panda firmware.\n- Verified: the lamp lights on the Ioniq 5 PE. On cars whose parking ECU keeps sending (e.g. Grandeur GN7) the two same-ID frames collide and can cause a CAN error, so it is not recommended there.\n- Not the same as CAN-FD SPAS Blinkers (CanfdBlinkerControl, blinks for openpilot lane changes and turns) or the Bluetooth remote blinker (AutoBlinkerControl, needs a Jetson and a PEAK USB-CAN adapter).\n- Turning this on switches CanfdBlinkerControl off at the next boot (both use the same message).\n- Palisade (classic CAN): the same trigger forges the CGW1 (0x541) blinker status for 1 s while driving in D (the Palisade blinker test frame); panda sends one right behind each stock frame to avoid collisions (send mode 1; modes 2/3 send directly like the 10-27 test and can cause CAN errors). No yellow-line / tunnel guard on classic CAN. Lamp on the car unverified. Off by default.",
+      "edescr": "Flashes the blinker for about 1 s (about two flashes) toward the side the driver starts crossing a lane line without signalling.\n- Detection: model lane lines; only when both lines are seen and the car really moves toward one. Engaged or not, at any speed in D; paused while a model lane change runs.\n- How: pauses the parking ECU for about 1 s, sends the blinker command on SPAS2 (0x16A), then restores it. Changes the panda firmware.\n- Verified: the lamp lights on the Ioniq 5 PE. On cars whose parking ECU keeps sending (e.g. Grandeur GN7) the two same-ID frames collide and can cause a CAN error, so it is not recommended there.\n- Not the same as CAN-FD SPAS Blinkers (CanfdBlinkerControl, blinks for openpilot lane changes and turns) or the Bluetooth remote blinker (AutoBlinkerControl, needs a Jetson and a PEAK USB-CAN adapter).\n- Turning this on switches CanfdBlinkerControl off at the next boot (both use the same message).\n- Classic CAN (any car with a CGW1 0x541, since 11-14; lamp seen on the Palisade, other cars unverified): the same trigger forges the CGW1 (0x541) blinker status for 1 s while driving in D (the Palisade blinker test frame); panda sends one right behind each stock frame to avoid collisions (send mode 1; modes 2/3 send directly like the 10-27 test and can cause CAN errors). No yellow-line / tunnel guard on classic CAN. Off by default.",
       "cgroup": "Joongyu Lab",
       "ctitle": "变道自动转向灯",
       "cdescr": "驾驶员未打转向灯开始越过车道线时, 向该方向打开转向灯约1秒(约闪2次)。\n- 判断: 按模型车道线, 仅在两侧车道线可见且确实向车道线靠近时。与是否接管无关, D挡任何车速均有效; 模型变道进行中暂停。\n- 方式: 暂停泊车ECU约1秒, 通过SPAS2(0x16A)发送转向灯指令后立即恢复。会更改panda固件。\n- 已确认: IONIQ 5 PE 可点亮转向灯。泊车ECU不停止的车型(如 Grandeur GN7)同ID报文会冲突并可能导致CAN错误, 不建议使用。\n- 与「CAN-FD SPAS 转向灯」(CanfdBlinkerControl, openpilot变道/转弯时点亮)和蓝牙遥控转向灯(AutoBlinkerControl, 需要Jetson和PEAK USB-CAN)不同。\n- 开启后下次启动时会自动关闭 CanfdBlinkerControl(两者使用同一报文)。默认关闭。",
@@ -3356,20 +3404,43 @@
     },
     {
       "group": "Joongyu Lab",
-      "name": "CanfdBlinkerKickModel",
+      "name": "CanfdBlinkerKickModelMode",
       "title": "모델 차로변경 깜빡이",
-      "descr": "리모컨·앱·음성·내비가 시작한 모델 차로변경에도, 변경이 시작되면 그 방향 깜빡이를 켜고 차로변경 동안 유지합니다. 아이오닉5 PE 계기판 깜빡이 유지와 같은 판단으로, 차 중심이 새 차로로 차로 폭의 60% 들어가면 끕니다(최소 1초, 최대 10초).\n- 「차로변경 깜빡이 자동」(CanfdBlinkerKick)이 켜져 있어야 하며, 같은 송신 방식을 씁니다.\n- 우리가 켠 램프가 운전자 깜빡이로 다시 읽히지 않도록, 이런 차로변경이 시작된 뒤 최소 12초(그 뒤 양쪽 램프가 1초 이상 꺼질 때까지) 같은 쪽 레버(깜빡이)를 무시합니다. 그동안 같은 방향 레버 차로변경·더블탭·회전 깜빡이가 안 될 수 있습니다.\n- 운전자 깜빡이로 시작한 차로변경, 크루즈 CANCEL 중, 터널·회전교차로 표지 뒤(CAN-FD만 판단), 시작 순간 램프가 이미 켜져 있을 때는 켜지 않습니다. 차로변경이 취소되면 바로 끕니다.\n- 시험 기능입니다. 실차 점등은 미확인. 기본 꺼짐.",
+      "descr": "리모컨·앱·음성·내비가 시작한 모델 차로변경에도 그 방향 깜빡이를 켭니다. 「차로변경 깜빡이 자동」(CanfdBlinkerKick)이 켜져 있어야 하며 같은 송신 방식을 씁니다.\n0: 유지(기본). 차로변경 동안 켜 두고, 차 중심이 새 차로로 차로 폭의 60% 들어가면 끕니다(아이오닉5 PE 계기판 깜빡이 유지와 같은 판단, 최소 1초·최대 10초).\n1: 끔. 모델 차로변경에는 켜지 않습니다.\n2/3/4: 3/5/7번. 순정 원터치처럼 정한 횟수만 깜빡이며, 차로변경이 먼저 끝나도 횟수를 채웁니다.\n- 우리가 켠 램프가 운전자 깜빡이로 다시 읽히지 않도록, 이런 차로변경이 시작된 뒤 최소 12초(그 뒤 양쪽 램프가 1초 이상 꺼질 때까지) 같은 쪽 레버(깜빡이)를 무시합니다. 그동안 같은 방향 레버 차로변경·더블탭·회전 깜빡이가 안 될 수 있습니다.\n- 운전자 깜빡이로 시작한 차로변경, 크루즈 CANCEL 중, 터널·회전교차로 표지 뒤(CAN-FD만 판단), 시작 순간 램프가 이미 켜져 있을 때는 켜지 않습니다. 차로변경이 취소되면 바로 끕니다.\n- 시험 기능입니다. 팰리세이드 리모컨 차로변경 점등 확인(11-14).",
       "egroup": "Joongyu Lab",
-      "etitle": "Auto Blinker for Model Lane Changes",
-      "edescr": "Also turns the blinker on toward a model lane change started by the remote, the app, voice or navigation and holds it through the change: like the Ioniq 5 PE cluster blink hold, off once the car centre is 60 % of a lane width into the new lane (at least 1 s, at most 10 s).\n- Needs Lane Change Auto Blinker (CanfdBlinkerKick) on; uses the same send mode.\n- So our lamp is not read back as the driver's blinker, the same-side lever is ignored for at least 12 s after such a lane change starts (then until both lamps stay off for 1 s): a same-side lever lane change, double tap or turn blinker may not work then.\n- Not for changes started with the driver's own blinker, during cruise CANCEL, in a tunnel or after a roundabout sign (CAN-FD only), or with a lamp already on at the start. Stopped at once if the lane change is cancelled.\n- Trial. Lamp on the car unverified. Off by default.",
+      "etitle": "Blinker for Model Lane Changes",
+      "edescr": "Also turns the blinker on toward a model lane change started by the remote, the app, voice or navigation. Needs Lane Change Auto Blinker (CanfdBlinkerKick) on; uses the same send mode.\n0: Hold (default). On through the change, off once the car centre is 60 % of a lane width into the new lane (the Ioniq 5 PE cluster blink hold rule, at least 1 s, at most 10 s).\n1: Off. No blinker for model lane changes.\n2/3/4: 3/5/7 flashes, like the stock one-touch setting; the count finishes even if the change ends first.\n- So our lamp is not read back as the driver's blinker, the same-side lever is ignored for at least 12 s after such a lane change starts (then until both lamps stay off for 1 s): a same-side lever lane change, double tap or turn blinker may not work then.\n- Not for changes started with the driver's own blinker, during cruise CANCEL, in a tunnel or after a roundabout sign (CAN-FD only), or with a lamp already on at the start. Stopped at once if the lane change is cancelled.\n- Trial. Lamp seen on a Palisade remote lane change (11-14).",
       "cgroup": "Joongyu Lab",
       "ctitle": "模型变道转向灯",
-      "cdescr": "由遥控器、App、语音或导航发起的模型变道, 也在变道开始时向该方向打开转向灯并在变道期间保持: 与 IONIQ 5 PE 仪表转向灯保持相同, 车辆中心进入新车道达车道宽度60%时关闭(至少1秒, 最多10秒)。\n- 需要开启「变道自动转向灯」(CanfdBlinkerKick), 使用相同的发送方式。\n- 为防止我们点亮的转向灯被误读为驾驶员转向灯, 此类变道开始后至少12秒(之后直到两侧转向灯熄灭1秒以上)忽略同侧拨杆: 期间同侧拨杆变道、双击或转弯转向灯可能无效。\n- 驾驶员自己打灯发起的变道、巡航CANCEL期间、隧道内或环岛标志后(仅CAN-FD判断)、开始时转向灯已亮时不点亮。变道取消时立即停止。\n- 试验功能。实车点灯未确认。默认关闭。",
+      "cdescr": "由遥控器、App、语音或导航发起的模型变道也打开该方向转向灯。需要开启「变道自动转向灯」(CanfdBlinkerKick), 使用相同的发送方式。\n0: 保持(默认)。变道期间保持, 车辆中心进入新车道达车道宽度60%时关闭(与 IONIQ 5 PE 仪表转向灯保持相同, 至少1秒、最多10秒)。\n1: 关闭。模型变道不点亮。\n2/3/4: 3/5/7次。与原厂轻触设置相同, 即使变道先结束也会闪完。\n- 为防止我们点亮的转向灯被误读为驾驶员转向灯, 此类变道开始后至少12秒(之后直到两侧转向灯熄灭1秒以上)忽略同侧拨杆: 期间同侧拨杆变道、双击或转弯转向灯可能无效。\n- 驾驶员自己打灯发起的变道、巡航CANCEL期间、隧道内或环岛标志后(仅CAN-FD判断)、开始时转向灯已亮时不点亮。变道取消时立即停止。\n- 试验功能。Palisade 遥控变道点灯已确认(11-14)。",
       "min": 0,
-      "max": 1,
+      "max": 4,
       "default": 0,
       "unit": 1,
-      "control": "toggle",
+      "control": "select",
+      "options": {
+        "ko": [
+          "유지 (기본)",
+          "끔",
+          "3번",
+          "5번",
+          "7번"
+        ],
+        "en": [
+          "Hold (default)",
+          "Off",
+          "3 flashes",
+          "5 flashes",
+          "7 flashes"
+        ],
+        "zh": [
+          "保持（默认）",
+          "关闭",
+          "3次",
+          "5次",
+          "7次"
+        ]
+      },
       "risk": "high"
     },
     {
@@ -3439,14 +3510,14 @@
     {
       "group": "Joongyu Lab",
       "name": "PalisadeBlinkerTest",
-      "title": "팰리세이드 깜빡이 상태 시험",
-      "descr": "팰리세이드 전용입니다(다른 차량에서는 아무것도 보내지 않습니다). 0: 끔, 1: 왼쪽, 2: 오른쪽.\nP단·정차·제어 해제 상태에서 CGW1(0x541)의 깜빡이 상태(레버 방향 + 순정처럼 0.35초 점멸)를 최대 3초 보냅니다. 주행 중 CanfdBlinkerKick과 같은 방식으로 순정 CGW1 바로 뒤에 붙여 보냅니다(CanfdBlinkerKick을 켜고 송신 방식 2/3이면 직접 송신). 다시 시험하려면 0으로 바꾼 뒤 선택해 주세요.\n- 알려진 결과: 10-27엔 바깥 램프가 안 켜졌고 11-03 영상에서는 켜졌습니다. 직접 20Hz 송신은 버스 오류가 늘어 11-09부터 붙여 보냅니다. 재시작하면 0으로 돌아갑니다.",
+      "title": "일반 CAN 깜빡이 상태 시험",
+      "descr": "일반 CAN 차량 전용입니다(CGW1 0x541이 있는 차, 11-14 전에는 팰리세이드만. CAN-FD 차량에서는 아무것도 보내지 않습니다). 0: 끔, 1: 왼쪽, 2: 오른쪽.\nP단·정차·제어 해제 상태에서 CGW1(0x541)의 깜빡이 상태(레버 방향 + 순정처럼 0.35초 점멸)를 최대 3초 보냅니다. 주행 중 CanfdBlinkerKick과 같은 방식으로 순정 CGW1 바로 뒤에 붙여 보냅니다(CanfdBlinkerKick을 켜고 송신 방식 2/3이면 직접 송신). 다시 시험하려면 0으로 바꾼 뒤 선택해 주세요.\n- 알려진 결과(팰리세이드): 10-27엔 바깥 램프가 안 켜졌고 11-03 영상에서는 켜졌습니다. 직접 20Hz 송신은 버스 오류가 늘어 11-09부터 붙여 보냅니다. 재시작하면 0으로 돌아갑니다.",
       "egroup": "Joongyu Lab",
-      "etitle": "Palisade Blinker Status Test",
-      "edescr": "Palisade only (sends nothing on other cars). 0: Off, 1: Left, 2: Right.\nIn P, stopped and not engaged, sends the CGW1 (0x541) blinker status (lever side + the stock 0.35 s flash) for up to 3 s, the same way CanfdBlinkerKick does while driving: right behind the stock CGW1 (sent directly when CanfdBlinkerKick is on with send mode 2/3). Set it back to 0 before testing again.\n- Known results: the exterior lamps stayed off on 10-27 and lit in the 11-03 video. Direct 20 Hz sending raised bus errors, so it piggybacks since 11-09. Resets to 0 on restart.",
+      "etitle": "Classic CAN Blinker Status Test",
+      "edescr": "Classic CAN cars with a CGW1 0x541 (Palisade only before 11-14; sends nothing on CAN-FD cars). 0: Off, 1: Left, 2: Right.\nIn P, stopped and not engaged, sends the CGW1 (0x541) blinker status (lever side + the stock 0.35 s flash) for up to 3 s, the same way CanfdBlinkerKick does while driving: right behind the stock CGW1 (sent directly when CanfdBlinkerKick is on with send mode 2/3). Set it back to 0 before testing again.\n- Known results (Palisade): the exterior lamps stayed off on 10-27 and lit in the 11-03 video. Direct 20 Hz sending raised bus errors, so it piggybacks since 11-09. Resets to 0 on restart.",
       "cgroup": "Joongyu Lab",
-      "ctitle": "Palisade 转向灯状态测试",
-      "cdescr": "仅限 Palisade(其他车型不发送任何报文)。0: 关闭, 1: 左, 2: 右。\n在P挡、停车且未接管时, 最多发送3秒CGW1(0x541)转向灯状态(拨杆方向 + 原厂0.35秒闪烁), 方式与行驶中的 CanfdBlinkerKick 相同: 紧跟在原厂CGW1之后发送(开启 CanfdBlinkerKick 且发送方式为2/3时直接发送)。再次测试前请先改回0。\n- 已知结果: 10-27 外部转向灯未点亮, 11-03 视频中点亮。直接20Hz发送会增加总线错误, 自11-09起改为跟随发送。重启后恢复为0。",
+      "ctitle": "普通CAN转向灯状态测试",
+      "cdescr": "仅限带 CGW1 0x541 的普通CAN车型(11-14 之前仅 Palisade; CAN-FD 车型不发送任何报文)。0: 关闭, 1: 左, 2: 右。\n在P挡、停车且未接管时, 最多发送3秒CGW1(0x541)转向灯状态(拨杆方向 + 原厂0.35秒闪烁), 方式与行驶中的 CanfdBlinkerKick 相同: 紧跟在原厂CGW1之后发送(开启 CanfdBlinkerKick 且发送方式为2/3时直接发送)。再次测试前请先改回0。\n- 已知结果(Palisade): 10-27 外部转向灯未点亮, 11-03 视频中点亮。直接20Hz发送会增加总线错误, 自11-09起改为跟随发送。重启后恢复为0。",
       "min": 0,
       "max": 2,
       "default": 0,

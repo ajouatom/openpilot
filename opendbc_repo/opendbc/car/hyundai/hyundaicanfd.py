@@ -1094,12 +1094,13 @@ def _set_raw_bits(msg, bits, value):
   return addr, bytes(d), bus
 
 
-# Clusters that draw no line for the dashed codes (owner reports 10-28~30) keep the solid colour
-NO_DASHED_LANE_CARS = (CAR.HYUNDAI_IONIQ_9, CAR.KIA_EV9)
 # Every CAN-FD car shares one DBC, so a value its VAL_ table names goes to every CCNC cluster. The cluster-test values
 # it does not name (ALERTS_5 9, ALERTS_4 215, 0x162 bit 188) go only to clusters seen to draw them: Ioniq 5 PE (cluster
-# tests 10-29), GN7 / EV4 (owner report 11-12, no log). Older non-DBC values (lane 8/10/14, background 5/8) are unchanged.
+# tests 10-29), GN7 / EV4 (owner report 11-12, no log). Older non-DBC values: lane 14, background 5/8 are unchanged.
 NON_DBC_CLUSTER_VALUE_CARS = (CAR.HYUNDAI_IONIQ_5_PE, CAR.HYUNDAI_AZERA_7TH_GEN, CAR.KIA_EV4)
+# The dashed codes 8/10 only on the clusters above (an allow list since 11-14; Ioniq 5 PE seen 10-18, GN7 / EV4 by the
+# same 11-12 owner report, no log). IONIQ 9 / EV9 drew no line for them (owner reports 10-28~30); others stay solid
+DASHED_LANE_CARS = NON_DBC_CLUSTER_VALUE_CARS
 
 
 def _dbc_listed(field, value):
@@ -1111,7 +1112,7 @@ def _dbc_listed(field, value):
 
 def _dashed_lane_line(color, lane_line, car=None):
   # 0x161 dashed codes seen on the Ioniq 5 PE cluster: 8 white, 10 green (no orange dashed)
-  if car not in NO_DASHED_LANE_CARS and lane_line // 10 > 0 and lane_line % 10 in (0, 5):  # camera: dashed / DLM inner dashed (color 0 = no lane info)
+  if car in DASHED_LANE_CARS and lane_line // 10 > 0 and lane_line % 10 in (0, 5):  # camera: dashed / DLM inner dashed (color 0 = no lane info)
     return {2: 8, 6: 10}.get(color, color)
   return color
 
@@ -1592,7 +1593,9 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
           values["AUTOLANECHANGE_MSG"] = 3
 
         msg = _cluster_test_msg(packer, "ADRV_0x1ea", CAN.ECAN, values, rx_counter, test_field, test_value)
-        if HAZARD_REQUEST_BIT not in CLUSTER_TEST_BITS_1EA.get(test_field, ()) and _hazard_test():
+        # bit 104 (no DBC name) was seen to work on the Ioniq 5 PE only (cluster test 129, 10-29)
+        if (HAZARD_REQUEST_BIT not in CLUSTER_TEST_BITS_1EA.get(test_field, ()) and
+            getattr(CP, "carFingerprint", None) == CAR.HYUNDAI_IONIQ_5_PE and _hazard_test()):
           msg = _set_raw_bits(msg, (HAZARD_REQUEST_BIT,), 1)
         ret.append(msg)
 

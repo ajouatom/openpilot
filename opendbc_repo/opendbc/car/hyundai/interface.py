@@ -199,11 +199,6 @@ class CarInterface(CarInterfaceBase):
         ret.safetyConfigs[0].safetyParam |= HyundaiSafetyFlags.CAMERA_SCC.value
         print("$$$CAMERA_SCC")
 
-      if candidate == CAR.HYUNDAI_PALISADE:
-        ret.safetyConfigs[0].safetyParam |= HyundaiSafetyFlags.PALISADE_CGW_TEST.value
-        # CanfdBlinkerKick on the Palisade forges CGW1 (carcontroller.cgw_blinkers); modes 2/3 send it directly
-        if params.get_bool("CanfdBlinkerKick") and params.get_int("CanfdBlinkerKickMode") in (2, 3):
-          ret.safetyConfigs[0].safetyParam |= HyundaiSafetyFlags.CANFD_SPAS_DIRECT.value
 
     # Common lateral control setup
 
@@ -294,6 +289,14 @@ class CarInterface(CarInterfaceBase):
       ret.minEnableSpeed = pedal_interceptor_params.min_enable_speed
       ret.safetyConfigs[-1].safetyParam |= (HyundaiSafetyFlags.LONG | HyundaiSafetyFlags.PEDAL_INTERCEPTOR).value
       ret.safetyConfigs[-1].safetyParam |= pedal_interceptor_params.safety_profile
+
+    # Every classic model with a stock CGW1 (Palisade only until 11-14): PalisadeBlinkerTest and CanfdBlinkerKick forge
+    # CGW1 (carcontroller.cgw_blinkers), panda sends it behind the stock frame; modes 2/3 send it directly. Not with the
+    # pedal interceptor: its panda branch takes one exact safetyParam and would refuse every TX with an extra flag
+    if (not ret.flags & (HyundaiFlags.CANFD | HyundaiFlags.PEDAL_INTERCEPTOR) and 0x541 in fingerprint[0]):
+      ret.safetyConfigs[-1].safetyParam |= HyundaiSafetyFlags.PALISADE_CGW_TEST.value
+      if params.get_bool("CanfdBlinkerKick") and params.get_int("CanfdBlinkerKickMode") in (2, 3):
+        ret.safetyConfigs[-1].safetyParam |= HyundaiSafetyFlags.CANFD_SPAS_DIRECT.value
 
     # Car specific configuration overrides
 

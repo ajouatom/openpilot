@@ -245,8 +245,8 @@ def test_registered_key_and_lab_menu():
     elif isinstance(value, list):
       for child in value:
         yield from objects(child)
-  lab = next(o for o in objects(catalog) if o.get('id') == 'VEH_TEST')
-  assert lab['ko'] == 'Joongyu Lab' and KEY in lab['params']
+  lab = next(o for o in objects(catalog) if o.get('id') == 'LAB')
+  assert lab['ko'] == 'Joongyu Lab' and any(KEY in o.get('params', ()) for o in objects(lab))  # in a Joongyu Lab subgroup
   setting = next(o for o in objects(catalog) if o.get('name') == KEY)
   assert setting['group'] == 'Joongyu Lab' and setting['default'] == 0
 

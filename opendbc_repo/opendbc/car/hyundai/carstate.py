@@ -560,10 +560,14 @@ class CarState(CarStateBase):
     if self.CP.flags & HyundaiFlags.CANFD:
       return self.update_canfd(can_parsers)
 
-    if self.CP.carFingerprint == CAR.HYUNDAI_PALISADE:
-      self.cgw_test_raw = cp.dat.get(0x541, b"")
-      self.cgw_test_timestamps = tuple(max(cp.ts_nanos.get(name, {}).values(), default=0)
-                                       for name in ("CGW1", "LVR12", "WHL_SPD11"))
+    # every classic CAN model: CGW1 is in the common DBC (PalisadeBlinkerTest, CGW1 kick; Palisade only until 11-14).
+    # The parked check needs the message the gear really comes from (same choice as the gear selection below)
+    flags = self.CP.flags
+    gear_msg = ("ELECT_GEAR" if flags & (HyundaiFlags.HYBRID | HyundaiFlags.EV) else "EMS20" if flags & HyundaiFlags.FCEV else
+                "CLU15" if flags & HyundaiFlags.CLUSTER_GEARS else "TCU12" if flags & HyundaiFlags.TCU_GEARS else "LVR12")
+    self.cgw_test_raw = cp.dat.get(0x541, b"")
+    self.cgw_test_timestamps = tuple(max(cp.ts_nanos.get(name, {}).values(), default=0)
+                                     for name in ("CGW1", gear_msg, "WHL_SPD11"))
 
     ret = structs.CarState()
     cp_cruise = cp_cam if self.CP.flags & HyundaiFlags.CAMERA_SCC else cp

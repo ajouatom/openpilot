@@ -126,7 +126,7 @@ class DesireHelper:
     self.laneChangeDelay = 0.0
     self.blinkerLatchedTurn = 0.0  # m/s, 0 = off
     self.laneChangeLeverWait = False
-    self.kick_model = False  # CanfdBlinkerKick + CanfdBlinkerKickModel: carcontroller kicks the lamp on a model start
+    self.kick_model = False  # CanfdBlinkerKick + CanfdBlinkerKickModelMode != 1: carcontroller kicks the lamp on a model start
 
     # misc
     self.prev_desire_enabled = False
@@ -163,7 +163,7 @@ class DesireHelper:
       self.laneChangeDelay = self.params.get_float("LaneChangeDelay") * 0.1
       self.blinkerLatchedTurn = self.params.get_int("BlinkerLatchedTurn") * CV.KPH_TO_MS
       self.laneChangeLeverWait = self.params.get_bool("LaneChangeLeverWait")
-      self.kick_model = self.params.get_bool("CanfdBlinkerKick") and self.params.get_bool("CanfdBlinkerKickModel")
+      self.kick_model = self.params.get_bool("CanfdBlinkerKick") and self.params.get_int("CanfdBlinkerKickModelMode") != 1
 
   def _check_desire_state(self, modeldata, carstate, maneuver_type):
     desire_state = modeldata.meta.desireState

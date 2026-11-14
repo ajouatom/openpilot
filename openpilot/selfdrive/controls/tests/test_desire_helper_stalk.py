@@ -468,7 +468,7 @@ class TestAtcPhysicalIndicator:
 
 
 class TestKickModelOwnership:
-  """CanfdBlinkerKickModel: a lane change the driver's lamp did not start owns its lamp side on the Starting frame
+  """CanfdBlinkerKickModelMode (not 1): a lane change the driver's lamp did not start owns its lamp side on the Starting frame
   (indicatorIsolationMask), so carcontroller.kick_pulse may light it without the lamp reading back as driver input."""
   def setup_method(self):
     TestDesireHelperStalkRequest.setup_method(self)
@@ -510,10 +510,12 @@ class TestKickModelOwnership:
     self.step('laneLeft')
     assert self.step() == LCS.laneChangeStarting and self.helper.boundary_indicator.blocked == 0
 
-  def test_needs_both_keys(self):
-    for on, want in (((), False), (('CanfdBlinkerKick',), False), (('CanfdBlinkerKickModel',), False),
-                     (('CanfdBlinkerKick', 'CanfdBlinkerKickModel'), True)):
-      self.helper.params = SimpleNamespace(get_bool=lambda key, on=on: key in on, get_int=lambda key: 0, get_float=lambda key: 0.)
+  def test_needs_kick_and_a_mode_other_than_off(self):
+    # CanfdBlinkerKickModelMode: 0 hold, 1 off, 2/3/4 counted flashes
+    for kick, mode, want in ((False, 0, False), (False, 2, False), (True, 1, False), (True, 0, True), (True, 2, True), (True, 4, True)):
+      self.helper.params = SimpleNamespace(get_bool=lambda key, kick=kick: kick and key == 'CanfdBlinkerKick',
+                                           get_int=lambda key, mode=mode: mode if key == 'CanfdBlinkerKickModelMode' else 0,
+                                           get_float=lambda key: 0.)
       self.helper.frame = 100
       DesireHelper._update_params_periodic(self.helper)
       assert self.helper.kick_model == want
@@ -526,7 +528,7 @@ class TestKickModelOwnership:
     from opendbc.car.hyundai.lane_crossing import LaneCrossing
     cc = self.cc = self.cc or SimpleNamespace(
       blinker_control=True, blinker_kick_model=True, lane_crossing=LaneCrossing(), blinker_side=0, blinker_pulse_end=0,
-      frame=0, yellow_until=[0, 0], lane_change_prev='off', model_pulse=False, blinker_pulse_start=0, model_hold={}, params=SimpleNamespace(STEER_THRESHOLD=250))
+      frame=0, yellow_until=[0, 0], lane_change_prev='off', model_pulse=False, blinker_pulse_start=0, model_hold={}, model_flashes=0, params=SimpleNamespace(STEER_THRESHOLD=250))
     md, kicks, start = self.md, [], cc.frame
     for j in range(start, start + frames):
       new = None

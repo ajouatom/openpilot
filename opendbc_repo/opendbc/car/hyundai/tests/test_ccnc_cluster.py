@@ -8,7 +8,7 @@ from opendbc.can.parser import get_raw_value
 from opendbc.car import structs
 from opendbc.car.hyundai import hyundaicanfd
 from opendbc.car.hyundai.hyundaicanfd import _select_cluster_background, _traffic_display_state
-from opendbc.car.hyundai.values import HyundaiFlags
+from opendbc.car.hyundai.values import CAR, HyundaiFlags
 
 
 @pytest.mark.parametrize(
@@ -245,8 +245,10 @@ def test_engaged_standstill_keeps_steering_and_lane_change_icons(monkeypatch, st
   (2, 11, 2), (4, 10, 4), (6, 0, 6),     # solid line, orange warning, no lane info stay as they were
 ))
 def test_dashed_lane_line_codes(color, lane_line, expected):
-  assert hyundaicanfd._dashed_lane_line(color, lane_line) == expected
-  for car in hyundaicanfd.NO_DASHED_LANE_CARS:  # Ioniq 9 / EV9 clusters draw nothing for dashed codes
+  for car in hyundaicanfd.DASHED_LANE_CARS:  # clusters seen drawing the dashed codes
+    assert hyundaicanfd._dashed_lane_line(color, lane_line, car) == expected
+  # an allow list: Ioniq 9 / EV9 drew nothing for them, unchecked clusters keep the solid colour
+  for car in (CAR.HYUNDAI_IONIQ_9, CAR.KIA_EV9, CAR.HYUNDAI_IONIQ_6, None):
     assert hyundaicanfd._dashed_lane_line(color, lane_line, car) == color
 
 
@@ -289,7 +291,7 @@ def test_lane_hidden_only_when_model_and_camera_miss(monkeypatch, lane_change, c
   control = structs.CarControl(latActive=True, enabled=True)
   control.hudControl.leftLaneVisible = control.hudControl.rightLaneVisible = True
   msg = hyundaicanfd.create_ccnc_messages(
-    SimpleNamespace(flags=HyundaiFlags.CAMERA_SCC), packer, SimpleNamespace(ECAN=0, CAM=2), 5, control, state,
+    SimpleNamespace(flags=HyundaiFlags.CAMERA_SCC, carFingerprint=CAR.HYUNDAI_IONIQ_5_PE), packer, SimpleNamespace(ECAN=0, CAM=2), 5, control, state,
     control.hudControl, 0, False, False, 0, False, 0, 0)[0]
   assert get_raw_value(msg[1], definition.sigs['LANELINE_LEFT']) == expected
   assert get_raw_value(msg[1], definition.sigs['LANELINE_RIGHT']) == expected
@@ -552,11 +554,13 @@ def test_hazard_test_sets_0x1ea_bit_104(monkeypatch, hazard, test_field, test_va
   )
   control = SimpleNamespace(latActive=False, enabled=False)
   hud = SimpleNamespace(leadDistance=0, leadRadar=0, leadRelSpeed=0)
-  (address, data, bus), = hyundaicanfd.create_ccnc_messages(SimpleNamespace(flags=HyundaiFlags.CAMERA_SCC.value), packer,
-                                                            SimpleNamespace(ECAN=0, CAM=2), 0, control, state, hud,
-                                                            0, False, False, 0, False, 0, 0)
-  assert (data[13] >> 0) & 1 == expected  # bit 104 = byte 13 bit 0
-  assert get_raw_value(data, definition.sigs['CHECKSUM']) == hyundaicanfd.hkg_can_fd_checksum(address, None, bytearray(data))
+  # CanfdHazardTest only on the Ioniq 5 PE (the only cluster seen to take bit 104); the cluster test sets it on any car
+  for car, want in ((CAR.HYUNDAI_IONIQ_5_PE, expected), (CAR.KIA_EV9, expected if test_field == 129 else 0)):
+    (address, data, bus), = hyundaicanfd.create_ccnc_messages(SimpleNamespace(flags=HyundaiFlags.CAMERA_SCC.value, carFingerprint=car),
+                                                              packer, SimpleNamespace(ECAN=0, CAM=2), 0, control, state, hud,
+                                                              0, False, False, 0, False, 0, 0)
+    assert (data[13] >> 0) & 1 == want, car  # bit 104 = byte 13 bit 0
+    assert get_raw_value(data, definition.sigs['CHECKSUM']) == hyundaicanfd.hkg_can_fd_checksum(address, None, bytearray(data))
 
 
 @pytest.mark.parametrize(("car", "alert_type", "enabled", "field", "expected"), (
