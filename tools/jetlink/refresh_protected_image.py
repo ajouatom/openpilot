@@ -51,9 +51,10 @@ def rebuild(work, manifest, cached=None):
   work.mkdir(parents=True)
   image = unpack_base(work, cached)
   bundle = work / 'runtime.tar.gz'
-  fetch(manifest['bundle']['url'], bundle, manifest['bundle']['sha256'], manifest['bundle']['size'], None)
   model = work / 'model.onnx'
-  fetch(manifest['model']['url'], model, manifest['model']['sha256'], manifest['model']['size'], None)
+  if cached is None:
+    fetch(manifest['bundle']['url'], bundle, manifest['bundle']['sha256'], manifest['bundle']['size'], None)
+    fetch(manifest['model']['url'], model, manifest['model']['sha256'], manifest['model']['size'], None)
   layout = json.loads(subprocess.check_output(['sfdisk', '--json', str(image)]))['partitiontable']
   parts = layout['partitions']
   if (layout['label'] != 'gpt' or len(parts) != 17 or parts[0]['start'] != 3188736
@@ -80,6 +81,10 @@ def rebuild(work, manifest, cached=None):
       marker = json.loads((root / 'etc/carrot-jetlink-image.json').read_text())
       if marker['source_commit'] != manifest['source_commit']:
         raise ValueError('Cached image runtime differs from the signed manifest')
+      cached_model = root / 'opt/carrot-jetlink/cache/models' / (manifest['model']['sha256'][:16] + '.onnx')
+      if cached_model.stat().st_size != manifest['model']['size'] or digest(cached_model) != manifest['model']['sha256']:
+        raise ValueError('Cached model differs from the signed manifest')
+      shutil.copyfile(cached_model, model)
     source = Path(__file__).resolve().parent
     from portable_initrd import configure as configure_portable, APP_UUID
     if parts[0]['uuid'].lower() != APP_UUID:
