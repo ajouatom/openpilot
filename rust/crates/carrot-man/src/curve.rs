@@ -3,6 +3,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 
 pub const NO_LIMIT_KPH: f64 = 250.;
+/// Fastest descent (m/s2) of the published curve target.
+pub const FALL_RATE: f64 = 1.5;
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 pub struct ModelPath {
@@ -104,7 +106,12 @@ pub fn curve_speed(model: &ModelPath, input: CurveInput) -> Option<CurveSpeed> {
         })
         .collect();
     let max_distance = 180_f64.min(30_f64.max(v_ego * 6.));
-    let response_distance = v_ego * (1. + (a_ego.max(0.) + 1.) / 1.6);
+    // carrot reserved 1.6-2.4 s of travel (v * (1 + (a + 1) / 1.6)) before
+    // the 1 m/s2 approach: at 76 km/h it ignored the first ~36 m of a curve
+    // it already saw and left the rest to a late, steep drop. One second
+    // covers the planner's response.
+    let _ = a_ego;
+    let response_distance = v_ego;
     let floor = lower_limit_kph.max(5.) * ratio / 3.6;
     let lateral_budget = 1.9 / sensitivity.clamp(0.5, 3.);
     let mut best = CurveSpeed::default();
@@ -147,6 +154,11 @@ pub struct VisionCurveSpeed {
     pub release_since: Option<f64>,
     pub geometry: VecDeque<(f64, f64)>,
     pub last_model_time: Option<f64>,
+    /// Published target after the fall-rate limit.
+    pub output: f64,
+    /// Current speed (km/h) the limited target descends from; None skips it.
+    #[serde(skip)]
+    pub ego_kph: Option<f64>,
     #[serde(skip)]
     last_model_nanos: Option<u64>,
 }
@@ -160,6 +172,8 @@ impl Default for VisionCurveSpeed {
             release_since: None,
             geometry: VecDeque::new(),
             last_model_time: None,
+            output: NO_LIMIT_KPH,
+            ego_kph: None,
             last_model_nanos: None,
         }
     }
@@ -193,7 +207,31 @@ impl VisionCurveSpeed {
         }
         self.update_frame(result, now, fresh)
     }
+    /// The model sees a far curve as gentler than it is and sharpens it as the
+    /// car closes in, so the raw target fell in steps of 7-10 m/s2 just before
+    /// the curve (route 00000cb1), which the planner followed as a hard, late
+    /// brake. The published target descends from the current speed at most
+    /// FALL_RATE; it still rises at once.
     fn update_frame(&mut self, result: Option<CurveSpeed>, now: f64, fresh: bool) -> f64 {
+        let previous = self.last_time;
+        self.target_frame(result, now, fresh);
+        let target = self.speed;
+        let dt = previous.map_or(0., |p| (now - p).clamp(0., 0.2));
+        self.output = match self.ego_kph.filter(|v| v.is_finite()) {
+            Some(ego) if now.is_finite() => {
+                let from = self.output.min(ego + 3.);
+                if target >= from {
+                    target
+                } else {
+                    target.max(from - FALL_RATE * 3.6 * dt)
+                }
+            }
+            _ => target,
+        };
+        self.output * self.direction
+    }
+
+    fn target_frame(&mut self, result: Option<CurveSpeed>, now: f64, fresh: bool) -> f64 {
         if !now.is_finite() {
             return self.speed * self.direction;
         }
@@ -250,5 +288,41 @@ impl VisionCurveSpeed {
             }
         }
         self.speed * self.direction
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{CurveSpeed, VisionCurveSpeed, FALL_RATE, NO_LIMIT_KPH};
+
+    fn curve(kph: f64) -> Option<CurveSpeed> {
+        Some(CurveSpeed {
+            approach_kph: kph,
+            curve_kph: kph,
+            distance: 50.,
+            direction: 1.,
+        })
+    }
+
+    #[test]
+    fn the_published_target_descends_from_the_current_speed_at_the_fall_rate() {
+        let mut vision = VisionCurveSpeed::default();
+        vision.ego_kph = Some(76.);
+        // A step from no limit to 60 km/h starts at the current speed (+3).
+        let first = vision.update_nanos(curve(60.), 0.0, Some(1));
+        assert!((first - 79.).abs() < 1e-9, "{first}");
+        let second = vision.update_nanos(curve(60.), 0.05, Some(2));
+        assert!((second - (79. - FALL_RATE * 3.6 * 0.05)).abs() < 1e-9, "{second}");
+        // It never falls below the raw target and rises again at once.
+        for i in 3..200 {
+            vision.update_nanos(curve(60.), f64::from(i) * 0.05, Some(i as u64));
+        }
+        assert!((vision.output - 60.).abs() < 1e-9);
+        let up = vision.update_nanos(None, 10.0, Some(300));
+        assert!(up >= 60.);
+        // Without a current speed the raw target is published unchanged.
+        let mut raw = VisionCurveSpeed::default();
+        assert_eq!(raw.update_nanos(curve(60.), 0.0, Some(1)), 60.);
+        assert_eq!(VisionCurveSpeed::default().output, NO_LIMIT_KPH);
     }
 }

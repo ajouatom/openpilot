@@ -98,6 +98,15 @@ pub(super) fn tick(context: Tick<'_>) -> Result<(), Error> {
     } else {
         None
     };
+    // In the target's units (cluster speed): see curve_speed's ratio.
+    vision.ego_kph = inputs.car.as_ref().map(|car| {
+        let ratio = if car.v_clu_ratio > 0.5 && car.v_clu_ratio <= 1.2 {
+            car.v_clu_ratio
+        } else {
+            1.
+        };
+        car.v_ego * 3.6 / ratio
+    });
     let vturn = vision.update_nanos(
         curve,
         mono,
