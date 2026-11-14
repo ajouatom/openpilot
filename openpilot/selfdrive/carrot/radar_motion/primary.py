@@ -11,6 +11,7 @@ from typing import Any
 
 from openpilot.selfdrive.carrot.radar_motion.predictor import (
   MIN_PREDICTED_PATH_OVERLAP_S,
+  PATH_OVERLAP_HALF_WIDTH_M,
   RadarMotionPrediction,
   project_to_model_path,
   turning_corner_path_entry_allowed,
@@ -170,6 +171,12 @@ STATIONARY_CLOSER_HANDOFF_MIN_VISION_RANGE_GAIN_M = 0.75
 STATIONARY_DISTINCT_HANDOFF_MAX_VISION_ERROR_M = 2.5
 STATIONARY_DISTINCT_HANDOFF_MAX_ERROR_RATIO = 0.5
 STATIONARY_DISTINCT_HANDOFF_CONFIRMATION_S = 0.50
+# Close-range queue handoff. A front return on the near side of a merging
+# vehicle can be offset from the visual center even while their bodies overlap.
+CLOSE_XYV_HANDOFF_MAX_DREL_M = 8.0
+CLOSE_XYV_HANDOFF_MAX_EGO_SPEED_MPS = 5.0
+CLOSE_XYV_HANDOFF_CONFIRMATION_S = 0.20
+CLOSE_XYV_HANDOFF_MAX_FRAME_GAP_S = 0.10
 STATIONARY_CLOSER_THAN_MOVING_MIN_DREL_GAIN_M = 3.0
 # Keep radar-only moving promotion disjoint from the stationary fallback.
 # A front-only point in this band needs vision, corner, or permitted SCC
@@ -856,6 +863,8 @@ class VisionRadarMatcher:
       tuple[str, int] | None
     ) = None
     self._stationary_closer_challenger_since_s: float | None = None
+    self._close_xyv_since_s: float | None = None
+    self._close_xyv_previous: tuple[int, RadarPointSnapshot, float] | None = None
     self._stationary_closer_challenger_last_point: (
       RadarPointSnapshot | None
     ) = None
@@ -924,6 +933,8 @@ class VisionRadarMatcher:
     self._stationary_weak_pair_identity = None
     self._stationary_weak_pair_last_vision_time_s = None
     self._stationary_pending_weak_pair_supported = False
+    self._close_xyv_previous = None
+    self._close_xyv_since_s = None
     self._reset_stationary_closer_challenger()
 
   def _reset_stationary_closer_challenger(self) -> None:
@@ -3645,6 +3656,42 @@ class VisionRadarMatcher:
       d_path=selected[2],
     )
 
+  def _close_xyv_handoff_ready(
+    self, stationary: VisionRadarMatch | None, moving: VisionRadarMatch | None,
+    vision: VisionLead | None, time_s: float | None,
+  ) -> bool:
+    """Confirm repeated fresh x/y/v matches to a nearby overlapping body in a slow queue."""
+    close_xyv = (
+      stationary is not None and moving is not None and vision is not None and time_s is not None and math.isfinite(time_s)
+      and stationary.point.source == moving.point.source == "frontRadar"
+      and stationary.point.measured and moving.point.measured
+      and stationary.point.track_id != moving.point.track_id
+      and vision.probability >= STATIONARY_CLOSER_HANDOFF_MIN_VISION_PROB
+      and moving.point.radar_track_state >= STATIONARY_RADAR_ONLY_FRONT_MIN_TRACK_STATE
+      and moving.score >= VISION_MATCH_FRESH_MIN_SCORE
+      and 0.5 < moving.point.d_rel <= CLOSE_XYV_HANDOFF_MAX_DREL_M
+      and abs(moving.point.v_lead - moving.point.v_rel) <= CLOSE_XYV_HANDOFF_MAX_EGO_SPEED_MPS
+      and max(abs(stationary.point.v_lead), abs(moving.point.v_lead)) <= STATIONARY_MAX_ABS_VLEAD_MPS
+      and STATIONARY_CLOSER_HANDOFF_MIN_DREL_GAIN_M <= stationary.point.d_rel - moving.point.d_rel <= VISION_RADAR_MAX_DISTANCE_ERROR_M
+      and abs(moving.d_path) < PATH_OVERLAP_HALF_WIDTH_M
+      and abs(moving.point.y_rel - vision.y_rel) <= STATIONARY_CLOSER_HANDOFF_MAX_VISION_YREL_ERROR_M
+      and abs(moving.point.d_rel - vision.d_rel) + STATIONARY_CLOSER_HANDOFF_MIN_VISION_RANGE_GAIN_M
+      <= abs(stationary.point.d_rel - vision.d_rel)
+    )
+    if not close_xyv:
+      self._close_xyv_previous = None
+      self._close_xyv_since_s = None
+      return False
+    assert stationary is not None and moving is not None and time_s is not None
+    previous = self._close_xyv_previous
+    if (previous is None or previous[0] != stationary.point.track_id or previous[1].track_id != moving.point.track_id
+        or not 0.0 < time_s - previous[2] <= CLOSE_XYV_HANDOFF_MAX_FRAME_GAP_S
+        or not self._stationary_position_continuous(previous[1], previous[2], moving.point, time_s)):
+      self._close_xyv_since_s = time_s
+    self._close_xyv_previous = stationary.point.track_id, moving.point, time_s
+    assert self._close_xyv_since_s is not None
+    return time_s - self._close_xyv_since_s >= CLOSE_XYV_HANDOFF_CONFIRMATION_S - 1e-6
+
   def _stationary_closer_handoff_ready(
     self,
     stationary: VisionRadarMatch | None,
@@ -3653,6 +3700,8 @@ class VisionRadarMatcher:
     time_s: float | None,
   ) -> bool:
     """Confirm a nearer vision-range match before replacing a held radar ID."""
+    if self._close_xyv_handoff_ready(stationary, moving, vision, time_s):
+      return True
     continuing = (
       moving is not None
       and time_s is not None
