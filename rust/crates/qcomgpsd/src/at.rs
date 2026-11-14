@@ -22,7 +22,8 @@ fn unsupported_line_control(error: &serialport::Error) -> bool {
     )
 }
 impl AtPort {
-    fn exchange(&self, command: &str, stop: &AtomicBool) -> Result<String, Error> {
+    /// Hold the modem lock and open the port with DTR/RTS raised.
+    fn open(&self, stop: &AtomicBool) -> Result<(std::fs::File, serialport::TTYPort), Error> {
         let lock = OpenOptions::new()
             .create(true)
             .truncate(false)
@@ -56,6 +57,11 @@ impl AtPort {
             Err(error) => return Err(error.into()),
         }
         port.clear(serialport::ClearBuffer::Input)?;
+        Ok((lock, port))
+    }
+
+    fn exchange(&self, command: &str, stop: &AtomicBool) -> Result<String, Error> {
+        let (_lock, mut port) = self.open(stop)?;
         port.write_all(format!("{command}\r").as_bytes())?;
         let mut lines = Vec::new();
         loop {
@@ -98,6 +104,56 @@ impl AtPort {
             }
         }
     }
+    /// Read until a line starting with one of `ends`, or the deadline.
+    fn read_until(
+        port: &mut serialport::TTYPort,
+        ends: &[&str],
+        timeout: Duration,
+        stop: &AtomicBool,
+    ) -> Result<String, Error> {
+        let deadline = Instant::now() + timeout;
+        let mut text = String::new();
+        let mut buffer = [0; 256];
+        while Instant::now() < deadline {
+            if stop.load(Ordering::Relaxed) {
+                return Err(Error::Stopped);
+            }
+            match port.read(&mut buffer) {
+                Ok(n) => text.push_str(&String::from_utf8_lossy(&buffer[..n])),
+                Err(error)
+                    if matches!(error.kind(), io::ErrorKind::TimedOut | io::ErrorKind::Interrupted) => {}
+                Err(error) => return Err(error.into()),
+            }
+            if text
+                .lines()
+                .any(|line| ends.iter().any(|end| line.trim().starts_with(end)))
+            {
+                return Ok(text);
+            }
+        }
+        Err(Error::AtTimeout(ends.join("|")))
+    }
+
+    /// `AT+QFUPL` a file to the modem's UFS. ModemManager is masked by the
+    /// modem daemon, so `mmcli --location-inject-assistance-data` cannot work.
+    pub fn upload(&self, name: &str, data: &[u8], stop: &AtomicBool) -> Result<(), Error> {
+        let (_lock, mut port) = self.open(stop)?;
+        port.write_all(format!("AT+QFUPL=\"UFS:{name}\",{},60\r", data.len()).as_bytes())?;
+        let reply = Self::read_until(&mut port, &["CONNECT", "ERROR", "+CME ERROR"], Duration::from_secs(5), stop)?;
+        if !reply.contains("CONNECT") {
+            return Err(Error::Protocol("modem refused the XTRA upload"));
+        }
+        for chunk in data.chunks(1024) {
+            port.write_all(chunk)?;
+        }
+        port.flush()?;
+        let reply = Self::read_until(&mut port, &["OK", "ERROR", "+CME ERROR"], Duration::from_secs(20), stop)?;
+        if !reply.contains(&format!("+QFUPL: {},", data.len())) || !reply.lines().any(|l| l.trim() == "OK") {
+            return Err(Error::Protocol("XTRA upload incomplete"));
+        }
+        Ok(())
+    }
+
     pub fn command(&self, command: &str, stop: &AtomicBool) -> Result<String, Error> {
         for attempt in 0..5 {
             match self.exchange(command, stop) {

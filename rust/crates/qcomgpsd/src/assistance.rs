@@ -121,24 +121,40 @@ pub fn run(config: &Config, stop: &AtomicBool) -> Result<(), Error> {
     }
     Ok(())
 }
+/// Load XTRA data over AT (Quectel GNSS app note: upload to UFS, set the
+/// reference time, apply, delete). carrot/openpilot's `mmcli` injection fails
+/// on every start since its own modem daemon masks ModemManager; the modem's
+/// XTRA data then stays expired. Failures stay non-fatal like the source.
 pub fn inject(config: &Config, stop: &AtomicBool) -> Result<(), Error> {
+    const NAME: &str = "xtra3grc.bin";
+    let data = fs::read(&config.assistance)?;
     for _ in 0..5 {
-        let result = Command::new(&config.mmcli)
-            .args(["-m", "any", "--timeout", "30"])
-            .arg(format!(
-                "--location-inject-assistance-data={}",
-                config.assistance.display()
-            ))
-            .output();
-        if result.is_ok_and(|output| output.status.success()) {
-            Factory::for_runtime()?.logger().emit(
-                openpilot_logging::log_site!(),
-                Record::text(Level::Info, "successfully loaded assistance data".into()),
-            )?;
-            return Ok(());
+        let at = &config.at;
+        let _ = at.command(&format!("AT+QFDEL=\"UFS:{NAME}\""), stop);
+        let result = at.upload(NAME, &data, stop).and_then(|()| {
+            if openpilot_timed::clock::valid(&openpilot_timed::clock::SystemClock, &config.systemd)? {
+                at.command(
+                    &format!(
+                        "AT+QGPSXTRATIME=0,\"{}\",1,1,5",
+                        chrono::Utc::now().format("%Y/%m/%d,%H:%M:%S")
+                    ),
+                    stop,
+                )?;
+            }
+            at.command(&format!("AT+QGPSXTRADATA=\"UFS:{NAME}\""), stop)
+        });
+        let _ = at.command(&format!("AT+QFDEL=\"UFS:{NAME}\""), stop);
+        match result {
+            Ok(_) => {
+                Factory::for_runtime()?.logger().emit(
+                    openpilot_logging::log_site!(),
+                    Record::text(Level::Info, "successfully loaded assistance data".into()),
+                )?;
+                return Ok(());
+            }
+            Err(Error::Stopped) => return Err(Error::Stopped),
+            Err(error) => println!("inject_assistance failed ({error}), trying again"),
         }
-        // The source intentionally ignores all five injection failures.
-        println!("inject_assistance failed, trying again");
         pause(Duration::from_millis(200), stop)?;
     }
     println!("inject_assistance failed after retry");
