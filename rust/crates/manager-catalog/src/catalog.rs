@@ -125,6 +125,7 @@ fn availability(name: &str) -> RustAvailability {
         "micd" => ("openpilot-micd", "openpilot-micd"),
         "modeld" => ("openpilot-driving-modeld", "openpilot-driving-modeld"),
         "modem" => ("openpilot-modem", "openpilot-modem"),
+        "mapsd" => ("openpilot-mapsd", "openpilot-mapsd"),
         "navd" => ("openpilot-navd", "openpilot-navd"),
         "pandad" => ("openpilot-pandad", "openpilot-pandad-supervisor"),
         "paramsd" => ("openpilot-paramsd", "openpilot-paramsd"),
@@ -433,6 +434,16 @@ pub fn catalog(config: ImportConfig) -> Vec<Descriptor> {
             "navd",
             Python {
                 module: "openpilot.selfdrive.navd.navd",
+            },
+            Onroad,
+            true,
+            false,
+        ),
+        // carrot's route-map renderer for N16 (NOO); idle without demand.
+        Descriptor::new(
+            "mapsd",
+            Python {
+                module: "openpilot.selfdrive.navigation.mapsd",
             },
             Onroad,
             true,

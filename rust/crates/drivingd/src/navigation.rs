@@ -11,7 +11,11 @@ use std::time::Duration;
 #[derive(Default)]
 pub struct NavigationInput {
     subscriber: Option<SubMaster>,
+    demand_at: f64,
 }
+
+/// mapsd renders the route map only while a navigation graph asks for it.
+const DEMAND_PATH: &str = "/dev/shm/carrot-nav-map-demand";
 
 impl NavigationInput {
     /// Zeros unless `wanted` and a fresh (< 2 s) valid instruction exists.
@@ -19,6 +23,10 @@ impl NavigationInput {
         if !wanted {
             self.subscriber = None;
             return Ok([0.; NAVIGATION_LEN]);
+        }
+        if now - self.demand_at >= 1. {
+            self.demand_at = now;
+            let _ = std::fs::write(DEMAND_PATH, b"1");
         }
         let subscriber = match &mut self.subscriber {
             Some(subscriber) => subscriber,

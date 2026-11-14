@@ -84,6 +84,8 @@
   "-p",
   "openpilot-navd",
   "-p",
+  "openpilot-mapsd",
+  "-p",
   "openpilot-pandad",
   "-p",
   "openpilot-paramsd",
@@ -236,6 +238,8 @@
   "--bin",
   "openpilot-navd",
   "--bin",
+  "openpilot-mapsd",
+  "--bin",
   "openpilot-pandad",
   "--bin",
   "openpilot-pandad-supervisor",
@@ -316,5 +320,5 @@
   "--bin",
   "statsd-rs",
   "--features",
-  "openpilot-calibrationd/native-skip-miri,openpilot-camerad-runtime/native-skip-miri,openpilot-camerad-runtime/visionipc-ion,openpilot-card/native,openpilot-carrot-man/native-skip-miri,openpilot-carrot-navi/native,openpilot-cluster/native-media,openpilot-control-tools/native,openpilot-controlsd/native,openpilot-dmonitoringmodeld/visionipc-ion,openpilot-driving-modeld/visionipc-ion,openpilot-encoderd/native,openpilot-locationd/native,openpilot-model-runtime/native-skip-miri,openpilot-navd/native,openpilot-pandad/native-skip-miri,openpilot-paramsd/native,openpilot-plannerd/native-skip-miri,openpilot-radard/native-skip-miri,openpilot-sensord/native,openpilot-signal-observer/daemon,openpilot-signal-observer/neural-ort,openpilot-signal-observer/neural-qcom,openpilot-startup-ui/native,openpilot-torqued/native-skip-miri,openpilot-ublox/native,openpilot-usbgpu/native-skip-miri,openpilot-webrtc/native,openpilot-webcam/native,openpilot-xiaoge/native-skip-miri"
+  "openpilot-calibrationd/native-skip-miri,openpilot-camerad-runtime/native-skip-miri,openpilot-camerad-runtime/visionipc-ion,openpilot-card/native,openpilot-carrot-man/native-skip-miri,openpilot-carrot-navi/native,openpilot-cluster/native-media,openpilot-control-tools/native,openpilot-controlsd/native,openpilot-dmonitoringmodeld/visionipc-ion,openpilot-driving-modeld/visionipc-ion,openpilot-encoderd/native,openpilot-locationd/native,openpilot-mapsd/native,openpilot-model-runtime/native-skip-miri,openpilot-navd/native,openpilot-pandad/native-skip-miri,openpilot-paramsd/native,openpilot-plannerd/native-skip-miri,openpilot-radard/native-skip-miri,openpilot-sensord/native,openpilot-signal-observer/daemon,openpilot-signal-observer/neural-ort,openpilot-signal-observer/neural-qcom,openpilot-startup-ui/native,openpilot-torqued/native-skip-miri,openpilot-ublox/native,openpilot-usbgpu/native-skip-miri,openpilot-webrtc/native,openpilot-webcam/native,openpilot-xiaoge/native-skip-miri"
 ]

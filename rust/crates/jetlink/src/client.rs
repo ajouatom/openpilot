@@ -46,6 +46,11 @@ impl<T: Transport + ?Sized> Transport for Box<T> {
     }
 }
 type HelloCheck = Box<dyn Fn(&Value) -> Result<(), Error> + Send>;
+/// INFER_REQ flag: a uint8 256x256 route map follows the packed floats
+/// (the modified Jetlink app; the server keeps it until the next one).
+pub const NAV_MAP_FLAG: u32 = 1 << 3;
+/// carrot's map freshness gate (map_client.py).
+const MAP_FRESH_NS: u64 = 500_000_000;
 pub struct Client<T: Transport> {
     transport: T,
     sequence: u32,
@@ -55,6 +60,10 @@ pub struct Client<T: Transport> {
     session: Option<crate::session_contract::SessionContract>,
     app: Option<AppSelection>,
     telemetry_at: u64,
+    /// rendered_ns of the last route map sent to a navigation graph; Some(0)
+    /// after a blank one; None when the server's copy is unknown (new
+    /// session or a reset), so the next frame sends the current map.
+    map_sent: Option<u64>,
     idle_at: u64,
     hello_timeout: Duration,
     hello_check: Option<HelloCheck>,
@@ -82,6 +91,26 @@ fn parked() -> bool {
         && !read("IsOnroad").is_ok_and(|value| value.trim() == "1")
 }
 impl<T: Transport> Client<T> {
+    /// A new, fresh, valid route map to send, or one blank map when it went
+    /// stale so the server stops using the last one; None when unchanged.
+    fn next_map(&mut self) -> Option<Vec<u8>> {
+        let now = crate::now_ns();
+        let map = openpilot_mapsd::output::read(std::path::Path::new(openpilot_mapsd::output::PATH))
+            .filter(|m| m.valid && m.rendered_ns <= now && now - m.rendered_ns < MAP_FRESH_NS);
+        match map {
+            Some(map) if self.map_sent != Some(map.rendered_ns) => {
+                self.map_sent = Some(map.rendered_ns);
+                Some(map.image)
+            }
+            Some(_) => None,
+            None if self.map_sent != Some(0) => {
+                self.map_sent = Some(0);
+                Some(vec![0; openpilot_mapsd::output::MAP_BYTES])
+            }
+            None => None,
+        }
+    }
+
     pub fn new(transport: T) -> Self {
         Self {
             transport,
@@ -92,6 +121,7 @@ impl<T: Transport> Client<T> {
             session: None,
             app: None,
             telemetry_at: 0,
+            map_sent: None,
             idle_at: 0,
             hello_timeout: Duration::from_secs(5),
             hello_check: None,
@@ -726,17 +756,29 @@ impl<T: Transport> Client<T> {
         if want_state {
             self.telemetry_at = crate::now_ns().saturating_add(1_000_000_000);
         }
+        let map = if self.session_contract().spec.navigation() {
+            if reset {
+                self.map_sent = None; // RESET_QUEUES clears the server's map
+            }
+            self.next_map()
+        } else {
+            None
+        };
         let flags = u32::from(reset)
             | if self.transport.version() == wire::Version::V3 {
                 4
             } else {
                 0
             }
-            | if want_state { 2 } else { 0 };
+            | if want_state { 2 } else { 0 }
+            | if map.is_some() { NAV_MAP_FLAG } else { 0 };
         payload.extend(flags.to_le_bytes());
         payload.extend(warped);
         for value in packed {
             payload.extend(value.to_le_bytes());
+        }
+        if let Some(map) = map {
+            payload.extend_from_slice(&map);
         }
         let seq = self.send(8, &payload, deadline)?;
         if self.phase_enabled {

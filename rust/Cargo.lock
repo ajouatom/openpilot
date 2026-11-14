@@ -2938,6 +2938,7 @@ dependencies = [
  "openpilot-http-transport",
  "openpilot-logging",
  "openpilot-managed-entry",
+ "openpilot-mapsd",
  "openpilot-modeld",
  "openpilot-params",
  "openpilot-runtime-core",
@@ -3175,10 +3176,12 @@ dependencies = [
 name = "openpilot-mapsd"
 version = "0.1.0"
 dependencies = [
+ "capnp",
  "flate2",
  "openpilot-cereal",
  "openpilot-messaging",
  "openpilot-params",
+ "rustix",
  "serde",
  "serde_json",
  "signal-hook",

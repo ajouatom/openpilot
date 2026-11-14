@@ -13,6 +13,7 @@ unsafe_op_in_unsafe_fn = "deny"
 openpilot-runtime-core = { path = "../runtime-core" }
 openpilot-managed-entry = { path = "../managed-entry" }
 openpilot-modeld = { path = "../modeld" }
+openpilot-mapsd = { path = "../mapsd" }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["float_roundtrip"] }
 thiserror = "2"

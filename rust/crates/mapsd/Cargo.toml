@@ -8,18 +8,20 @@ license.workspace = true
 workspace = true
 
 [features]
-native = ["dep:ureq", "dep:openpilot-messaging", "dep:openpilot-cereal", "dep:openpilot-params", "dep:signal-hook"]
+native = ["dep:ureq", "dep:openpilot-messaging", "dep:openpilot-cereal", "dep:openpilot-params", "dep:signal-hook", "dep:capnp", "dep:rustix"]
 
 [dependencies]
 flate2 = "1"
 thiserror = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-ureq = { version = "=3.4.2", features = ["rustls"], optional = true }
+ureq = { version = "=3.4.2", features = ["rustls", "gzip"], optional = true }
 openpilot-messaging = { path = "../messaging", optional = true }
 openpilot-cereal = { path = "../cereal", optional = true }
 openpilot-params = { path = "../params", optional = true }
 signal-hook = { version = "0.3", optional = true }
+capnp = { version = "=0.27.2", optional = true }
+rustix = { version = "1", features = ["time", "process"], optional = true }
 
 [[bin]]
 name = "openpilot-mapsd"
