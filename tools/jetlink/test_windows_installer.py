@@ -45,6 +45,19 @@ def test_prepare_patch_and_repeat_without_touching_original(package):
   prepare.prepare(root, lambda *_: pytest.fail('Valid prepared file decompressed again'))
 
 
+@pytest.mark.parametrize('storage_format,command', [(1, '02_SD카드설치.cmd'), (2, '02_SD_SSD설치.cmd')])
+def test_preparation_points_to_the_packaged_install_command(package, capsys, storage_format, command):
+  root, *_ = package
+  manifest = root / 'support/release.json'
+  release = json.loads(manifest.read_text())
+  release['storage_format'] = storage_format
+  manifest.write_text(json.dumps(release))
+  prepare.prepare(root, open)
+  assert command in capsys.readouterr().out
+  prepare.prepare(root, lambda *_: pytest.fail('Valid image decompressed again'))
+  assert command in capsys.readouterr().out
+
+
 @pytest.mark.parametrize('name', ['carrot-jetson.img.zst', 'offline-usbc.json'])
 def test_bad_input_never_produces_ready_image(package, name):
   root, *_ = package
