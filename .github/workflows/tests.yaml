@@ -203,6 +203,7 @@ jobs:
             openpilot/selfdrive/carrot/tests/test_cluster_performance_safeguards.py \
             openpilot/selfdrive/carrot/tests/test_cluster_autorun.py \
             openpilot/selfdrive/carrot/bluetooth/tests \
+            tools/carrot_b1 \
             openpilot/selfdrive/car/tests/test_carrot_cruise_buttons.py \
             opendbc_repo/opendbc/car/volkswagen/tests/test_carstate_buttons.py \
             opendbc_repo/opendbc/car/volkswagen/tests/test_volkswagen.py::test_golf_mk7_wheel_speed_update \

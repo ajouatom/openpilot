@@ -170,6 +170,35 @@ def test_recognized_road_bend_is_excluded():
   assert detector.reason == 'road_curve'
 
 
+def test_turn_promotes_manual_lane_observation_without_another_request():
+  cs, md = scene()
+  cs.vEgo = 5.
+  md.laneLineProbs = [0.] * 4
+  detector, isolation = ModelIndicator(), BoundaryIndicator()
+  request = None
+  sources = []
+  for i in range(65):
+    now = 10 + i * .05
+    md.frameId = i
+    cs.steeringPressed = i >= 25
+    cs.steeringTorque = 400. if cs.steeringPressed else 0.
+    cs.steeringAngleDeg = min(150., max(0, i - 25) * 8.)
+    yaw = -.22 if i >= 29 else 0.
+    isolation.update(now, cs, md, enabled=False, valid=True, busy=False)
+    edge = 1 if i == 28 else 0
+    if edge:
+      isolation.request_time = now
+      isolation.own(now, edge)
+    detector.update(now, cs, md, valid=True, lateral_active=False, desire_enabled=False,
+      path_enabled=False, busy=False, isolation=isolation, manual_edge=edge,
+      manual_turn_enabled=True, yaw_rate=yaw)
+    if detector.active:
+      request = detector.request_time if request is None else request
+      assert detector.request_time == request
+      sources.append(detector.active.source)
+  assert sources[0] == 'manual' and sources[-1] == 'manual_turn'
+
+
 @pytest.mark.parametrize('reason', ['disabled', 'invalid', 'opposite_lamp', 'stalk', 'pose'])
 def test_active_turn_revokes_on_new_input(reason):
   detector, isolation, cs, md, history = drive()

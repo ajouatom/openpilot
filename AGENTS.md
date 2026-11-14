@@ -1,5 +1,25 @@
 # Repository memory
 
+- 2026-11-14: I5PE Nov13/14 six drives,60 hash-matched full rlogs on162da468cc,
+  show31/33 manual turns with physical onset all2.48..2.50s and60/63 B1 requests
+  reporting driver_override. Release4 rejects its persistent0x413 tap echo during
+  dark flashes. Release5 remembers confirmed same-side echo first seen during tap,
+  closes allowance on post-tap neutral, preserves raw0x3C1/lease/opposite guards.
+  Isolated native predicate replay62 captured taps/1820frames rejects62 before,
+  zero after; confirmed delivery assumed, running historical ELF/subreason unknown.
+  Diagnostic read before STOP logs one b1TapDiagnostic per failed request.
+  Manual boundary transient retreat150ms and paired bounded shift tolerance recover
+  11d9/2+44.458 and4+21.688. Manual-to-turn promotion preserves request identity
+  in11d4/9 and11d5/0. Model-turn requires same-side15deg and3deg/s, blocking false
+  left11d9/5+30.346(frame6609). Fixed-input68873frames yields61->62 requests,
+  other60 exact starts/sides retained. Below5kmh intent experiment reverted after
+  adding a parking indication suppressed the following left turn. Local878pass,
+  2platform skips; native MSVC and ESP32 core3.3.5 build pass. B1 release5 app651488B,
+  SHA256bf60f950cf3f1334fd9e4fe932a55b45a1e2cf2a2d521207196a6884b79a3b4b.
+  Normal GitPull/restart plus existing authenticated idle B1 OTA. No live writes
+  or physical hold proof. Details docs/indicator_replay_20261114.md and private
+  .analysis/archive/2026-11-14/indicators.
+
 - 2026-11-12: Owner requests SD-only automatic Super firmware provisioning.
   Official NVIDIA capsule path is available. R2 excluded /opt/ota_package and
   mounted EFI read-only; restore official36.4.7 Super capsule from pinned deb
