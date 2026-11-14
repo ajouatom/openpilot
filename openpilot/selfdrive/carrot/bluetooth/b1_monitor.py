@@ -235,7 +235,7 @@ class Monitor:
     # Ownership can disappear while the board still reports Waiting. Capture
     # that first loss before Stop replaces the receiver's diagnostic reason.
     if (authenticated and (state in ('driver_override', 'error') or lost_ack) and self.report and self.last_command and TRACE in self.attrs and
-        self.diagnostic_request != self.last_command['id'] and 0 <= now-self.last_command['time'] < 300):
+        self.diagnostic_request != self.last_command['id'] and 0 <= now-self.last_command['time'] < (300 if lost_ack else 5)):
       self.diagnostic_request = self.last_command['id']
       with suppress(Exception):
         diagnostic = await self.client.call(self.attrs[TRACE], GATT, 'ReadValue', 'a{sv}', ({},), reply_timeout=.15)
