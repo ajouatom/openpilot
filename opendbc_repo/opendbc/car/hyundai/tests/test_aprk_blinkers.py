@@ -450,6 +450,56 @@ def test_classic_back_to_back_kicks_wait_for_panda_to_rearm():
   assert not panda_accepts([f for f, *_ in first] + [500 + f for f in range(0, 490, carcontroller.CGW_TX_FRAMES)])
 
 
+def runs(sent):
+  """[(first, last)] frames of each TX run (a gap over 2 TX periods splits runs)"""
+  out = []
+  for f, *_ in sent:
+    if out and f - out[-1][1] <= 2 * carcontroller.CGW_TX_FRAMES:
+      out[-1][1] = f
+    else:
+      out.append([f, f])
+  return out
+
+
+def test_classic_kick_inside_a_running_trial_is_never_split():
+  # mode 3: the 2nd change starts 4.3 s into the 1st one's trial; it would not end inside it -> waits, then whole
+  cc = make_cc()
+  cc.model_flashes, cc.cgw_kick = 5, True
+  cgw_step(cc, 20, md=OFF)
+  first = cgw_step(cc, 430, md=RIGHT)
+  assert cgw_step(cc, 1, md=OFF) == []
+  second = cgw_step(cc, 600, md=lc("laneChangeStarting", "left", 1))
+  assert second and len(runs(second)) == 1 and lamp_edges(second) == 5
+  assert panda_accepts([f for f, *_ in first + second])
+  # a short pulse that fits in the rest of the trial rides along at once
+  cc = make_cc()
+  cc.model_flashes, cc.cgw_kick = 3, True
+  a = cgw_step(cc, 50, cross=3)
+  b = cgw_step(cc, 300, cross=4)  # 2.1 s from 0.5 s: ends inside the trial
+  assert b and b[0][0] - a[-1][0] <= carcontroller.CGW_TX_FRAMES and len(runs(b)) == 1 and lamp_edges(b, 7, 0x40) == 3
+
+
+def test_classic_mode0_hold_inside_a_running_trial():
+  # driver kick, then a model hold 1.5 s later: waits for its own trial, stays within 5 s and in one piece
+  cc = make_cc()
+  cc.cgw_kick = True
+  a = cgw_step(cc, 150, cross=3, md=OFF)
+  hold = cgw_step(cc, 900, md=RIGHT)
+  assert len(runs(hold)) == 1 and hold[-1][0] - hold[0][0] < int(5.0 / DT_CTRL)
+  assert panda_accepts([f for f, *_ in a + hold])
+  # the change ends while the hold still waits: nothing is sent late
+  cc = make_cc()
+  cc.cgw_kick = True
+  cgw_step(cc, 100, cross=3, md=OFF)
+  assert cgw_step(cc, 50, md=RIGHT) == [] and cgw_step(cc, 300, md=OFF) == []
+  # ... or the car gets 60 % into the new lane while it waits (Starting goes on): no late flash either
+  cc = make_cc()
+  cc.cgw_kick = True
+  cgw_step(cc, 100, cross=3, md=OFF)
+  waiting = [cgw_step(cc, n, md=lines(*y)) for n, y in ((20, (1.8, 1.8)), (10, (0.5, 3.1)), (10, (3.5, 0.3)))]  # crossing
+  assert waiting == [[], [], []] and cgw_step(cc, 300, md=lines(3.3, 0.5)) == []  # 60 % in before panda rearmed
+
+
 def test_classic_mode0_hold_ends_with_its_panda_trial():
   cc = make_cc()
   cc.cgw_kick = True

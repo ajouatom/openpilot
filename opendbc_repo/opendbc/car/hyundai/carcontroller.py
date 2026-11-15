@@ -487,14 +487,17 @@ class CarController(CarControllerBase):
     if raw[4] & 0x06 or raw[5] & 0x06:  # hazard or the driver's own lever: theirs, not ours
       self.blinker_pulse_end = 0
       return []
+    hold = self.model_pulse and not self.model_flashes  # mode 0: the end follows the change, unknown up front
     if self.frame - self.cgw_last_tx >= CGW_REARM_FRAMES:
       self.cgw_trial = self.frame  # panda rearmed: this pulse opens a new 5 s trial
+    elif self.cgw_trial < self.blinker_pulse_start and (hold or self.blinker_pulse_end > self.cgw_trial + CGW_TRIAL_FRAMES):
+      # started inside an earlier pulse's trial and would not end there: dark from its start until panda rearms, then
+      # in full - never split mid-way. A hold keeps its end, so a change that ends meanwhile leaves no late flash.
+      self.blinker_pulse_start += 1
+      self.blinker_pulse_end += 0 if hold else 1
+      return []
     elif self.frame - self.cgw_trial >= CGW_TRIAL_FRAMES:
-      if self.cgw_trial >= self.blinker_pulse_start:
-        self.blinker_pulse_end = self.frame  # this pulse used its whole trial (the mode 0 hold): it ends here
-      else:  # started < 1 s after an earlier pulse whose trial is spent: paused until panda rearms, then runs in full
-        self.blinker_pulse_start += 1
-        self.blinker_pulse_end += 1
+      self.blinker_pulse_end = self.frame  # this pulse used its whole trial (the mode 0 hold): it ends here
       return []
     if self.frame % CGW_TX_FRAMES:
       return []
