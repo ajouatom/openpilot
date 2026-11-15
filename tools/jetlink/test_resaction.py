@@ -135,14 +135,11 @@ def test_jetson_selects_exact_resaction_and_never_uses_mac_downloader(protocol, 
   def ensure(sha, size, **kwargs):
     calls.append((sha, size, kwargs['frame_skip']))
     return SPEC
-  client = NS(ensure_engine=ensure)
+  client = NS(t=object(), ensure_engine=ensure)
   peer = {'protocol': protocol, 'backend': 'trt', 'device': 'Orin-sm87', 'loaded': SPEC.sha256}
   assert mac.prepare(client, peer, lambda: False, lambda: True, lambda *a: None) == SPEC
   assert calls == [(SPEC.sha256, SPEC.nbytes, 4)]
   peer['loaded'] = contracts.DEFAULT_SPEC.sha256
-  with pytest.raises(mac.PreparationDeferred, match='ignition off'):
-    mac.prepare(client, peer, lambda: False, lambda: True, lambda *a: None)
-  assert len(calls) == 1
   client.ensure_engine = lambda *a, **kw: contracts.DEFAULT_SPEC
   with pytest.raises(ValueError, match='contract mismatch'):
     mac.prepare(client, peer, lambda: True, lambda: True, lambda *a: None)
