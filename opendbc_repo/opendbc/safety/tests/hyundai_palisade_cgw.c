@@ -154,6 +154,19 @@ int main(void) {
     ready(start + 6999999U, stock, 6); CHECK(held(start + 6999999U, stock | right));
     init(32768); ready(0, stock, 0); CHECK(held(0, stock | left));
   }
+  // Driving kick (not parked): exactly 100 accepted 20-Hz frames (5 s, 7 flashes), then latched cutoff; rearm after 1 s quiet.
+  for (int wrap = 0; wrap < 2; wrap++) {
+    init(32768);
+    uint32_t start = wrap ? 0xFFFF0000U : 0U;
+    for (int i = 0; i <= 140; i++) {
+      uint32_t now = start + i * 50000U;
+      ready(now, stock, i % 16);
+      CANPacket_t d = msg(0x367, 5ULL << 32); CHECK(safety_rx_hook(&d));  // D
+      CHECK(held(now, stock | left) == (i < 100));
+    }
+    ready(start + 7999999U, stock, 5); CHECK(rejected(start + 7999999U, stock | left));
+    ready(start + 8999999U, stock, 6); CHECK(held(start + 8999999U, stock | right));
+  }
   // Bad checksums cannot supply a wheel sample.
   init(32768);
   CANPacket_t c = msg(0x541, stock), g = msg(0x367, 0), w = wheels(-1, 0, 0);

@@ -133,15 +133,17 @@ static bool hyundai_cgw_test_tx(const CANPacket_t *msg) {
   }
   hyundai_cgw_test.attempted = true;
   hyundai_cgw_test.attempt_ts = now;
-  if (hyundai_cgw_test.trial_active && (get_ts_elapsed(now, hyundai_cgw_test.trial_ts) >= 3000000U)) {
-    hyundai_cgw_test.cutoff = true;
-  }
   // Parked test (PalisadeBlinkerTest): P, wheels still, not engaged - the stock lamps must be off too. The test and
   // the driving kick are both held and sent behind the stock frame unless CANFD_SPAS_DIRECT.
   bool parked = !controls_allowed && hyundai_cgw_test.wheels_valid && hyundai_cgw_test.gear_valid &&
                 hyundai_cgw_test.stationary && hyundai_cgw_test.park &&
                 (get_ts_elapsed(now, hyundai_cgw_test.wheels_ts) <= 250000U) &&
                 (get_ts_elapsed(now, hyundai_cgw_test.gear_ts) <= 250000U);
+  // one trial: the parked test 3 s, the driving kick 5 s (7 flashes of 0.7 s, CanfdBlinkerKickModelMode 4)
+  uint32_t trial_us = parked ? 3000000U : 5000000U;
+  if (hyundai_cgw_test.trial_active && (get_ts_elapsed(now, hyundai_cgw_test.trial_ts) >= trial_us)) {
+    hyundai_cgw_test.cutoff = true;
+  }
   bool allowed = hyundai_cgw_test.enabled && !relay_malfunction &&
                  (GET_BUS(msg) == 0) && (GET_LEN(msg) == 8) && !msg->extended && !msg->fd &&
                  hyundai_cgw_test.template_valid && !hyundai_cgw_test.cutoff &&

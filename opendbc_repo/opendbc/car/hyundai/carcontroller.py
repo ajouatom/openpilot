@@ -88,6 +88,10 @@ YELLOW_HOLD_FRAMES = int(2.0 / DT_CTRL)
 # panda's 50 ms rate limit would bounce every frame that arrives a little early (4 of 49 even at 50 ms, 00000e46)
 CGW_TX_FRAMES = 6
 CGW_FLASH_HALF_FRAMES = int(0.35 / DT_CTRL)
+# panda lets one driving CGW1 trial run 5 s (7 flashes) and rearms only after 1 s with no request at all, rejected ones
+# included (safety_hyundai.h hyundai_cgw_test_tx): the host stays inside both so a later kick is never refused whole
+CGW_TRIAL_FRAMES = int(4.9 / DT_CTRL)
+CGW_REARM_FRAMES = int(1.05 / DT_CTRL)
 # CanfdBlinkerKickModelMode 2/3/4: 3/5/7 flashes like the stock one-touch setting, one stock flash cycle (0.7 s) each
 MODEL_FLASH_FRAMES = 2 * CGW_FLASH_HALF_FRAMES
 MODEL_FLASH_COUNTS = {2: 3, 3: 5, 4: 7}
@@ -310,6 +314,7 @@ class CarController(CarControllerBase):
     self.blinker_pulse_start, self.model_hold = 0, {}  # pulse start frame (Palisade flash phase); _blink_hold_change state
     # classic CAN with a stock CGW1 (0x541), any model since 11-14: panda only lets CGW1 out with this flag (interface)
     self.cgw_kick = bool(CP.safetyConfigs) and bool(CP.safetyConfigs[-1].safetyParam & HyundaiSafetyFlags.PALISADE_CGW_TEST)
+    self.cgw_trial, self.cgw_last_tx = 0, -CGW_REARM_FRAMES  # frames: our panda CGW1 trial start, last CGW1 request
     self.yellow_until = [0, 0]  # left, right
     self.standstill_frame = -1e6
 
@@ -416,7 +421,8 @@ class CarController(CarControllerBase):
       the kicked lamp cannot read back as the driver's blinker (EV4 10-26: a lamp held through the change never went off,
       measurements 31: a kick lamp started a change). Not in a cruise CANCEL latch; cut when the change is cancelled.
       Mode 0: held through Starting / Finishing like the I5 PE cluster blink hold: until the car centre is 60 % of a lane
-      width into the new lane (no crossing seen: the end of the change), at most MODEL_HOLD_MAX_FRAMES.
+      width into the new lane (no crossing seen: the end of the change), at most MODEL_HOLD_MAX_FRAMES (classic CAN: the
+      5 s panda trial, cgw_blinkers).
       Modes 2/3/4: a fixed 3/5/7 flashes (MODEL_FLASH_FRAMES each) that also run past a completed change, like the stock
       one-touch; a cancelled change still cuts them.
     - Modes 2/3/4 also count the driver-crossing pulse on classic CAN (cgw_kick) only: there carState reads the stock CGW1,
@@ -476,11 +482,23 @@ class CarController(CarControllerBase):
     No yellow-line / tunnel guard here: classic carstate has no lane colour or navi events."""
     pulse = self.kick_pulse(CS)
     raw = getattr(CS, "cgw_test_raw", b"")
-    if not pulse or CS.out.gearShifter != structs.CarState.GearShifter.drive or len(raw) != 8 or self.frame % CGW_TX_FRAMES:
+    if not pulse or CS.out.gearShifter != structs.CarState.GearShifter.drive or len(raw) != 8:
       return []
     if raw[4] & 0x06 or raw[5] & 0x06:  # hazard or the driver's own lever: theirs, not ours
       self.blinker_pulse_end = 0
       return []
+    if self.frame - self.cgw_last_tx >= CGW_REARM_FRAMES:
+      self.cgw_trial = self.frame  # panda rearmed: this pulse opens a new 5 s trial
+    elif self.frame - self.cgw_trial >= CGW_TRIAL_FRAMES:
+      if self.cgw_trial >= self.blinker_pulse_start:
+        self.blinker_pulse_end = self.frame  # this pulse used its whole trial (the mode 0 hold): it ends here
+      else:  # started < 1 s after an earlier pulse whose trial is spent: paused until panda rearms, then runs in full
+        self.blinker_pulse_start += 1
+        self.blinker_pulse_end += 1
+      return []
+    if self.frame % CGW_TX_FRAMES:
+      return []
+    self.cgw_last_tx = self.frame
     lamp = (self.frame - self.blinker_pulse_start) // CGW_FLASH_HALF_FRAMES % 2 == 0
     return [CanData(*cgw_frame(raw, self.blinker_side - 2, lamp))]
 
