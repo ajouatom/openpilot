@@ -106,9 +106,85 @@ impl RouteTracker {
     }
 }
 
+/// Which `navRoute` the map follows.
+///
+/// carrot-nav's carrot_man stamps every navRoute with a `carrotRouteId` that
+/// changes only when the selected route is replaced, and mapsd.py follows
+/// that id. Our carrot_man is carrot-wip's: it never sets the id (always 0)
+/// and interleaves the navd route (empty every ~5 s without a Mapbox route)
+/// with the external navigation's route (~1 Hz, with gaps up to ~20 s).
+/// Without an id the geometry is the identity and an empty route is ignored;
+/// the fresh-instruction gate and the 50 m on-route check already turn the
+/// map black when guidance ends or the car leaves the route.
+#[derive(Default)]
+pub struct RouteSelection {
+    id: u64,
+    stamped: bool,
+}
+
+impl RouteSelection {
+    /// The route to switch to, if this message replaces the current one.
+    pub fn update(&mut self, carrot_route_id: u64, route: &[[f64; 2]]) -> Option<(u64, Vec<[f64; 2]>)> {
+        if carrot_route_id != 0 {
+            self.stamped = true;
+            if carrot_route_id == self.id {
+                return None;
+            }
+            self.id = carrot_route_id;
+            return Some((carrot_route_id, route.to_vec()));
+        }
+        if self.stamped || route.is_empty() {
+            return None;
+        }
+        let id = geometry_id(route);
+        if id == self.id {
+            return None;
+        }
+        self.id = id;
+        Some((id, route.to_vec()))
+    }
+}
+
+/// A nonzero identity of a route geometry.
+fn geometry_id(route: &[[f64; 2]]) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    for point in route {
+        point[0].to_bits().hash(&mut hasher);
+        point[1].to_bits().hash(&mut hasher);
+    }
+    hasher.finish() | 1
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn unstamped_routes_follow_geometry_and_ignore_empty_heartbeats() {
+        let a = [[127.0, 37.0], [127.0, 37.01]];
+        let b = [[127.0, 37.0], [127.01, 37.0]];
+        let mut selection = RouteSelection::default();
+        let (id_a, route) = selection.update(0, &a).unwrap();
+        assert!(id_a != 0 && route == a);
+        assert!(selection.update(0, &a).is_none(), "same geometry");
+        assert!(selection.update(0, &[]).is_none(), "navd's empty route");
+        assert!(selection.update(0, &a).is_none());
+        let (id_b, _) = selection.update(0, &b).unwrap();
+        assert_ne!(id_a, id_b);
+    }
+
+    #[test]
+    fn stamped_routes_follow_the_id_as_carrot_nav() {
+        let a = [[127.0, 37.0], [127.0, 37.01]];
+        let mut selection = RouteSelection::default();
+        assert_eq!(selection.update(7, &a).unwrap().0, 7);
+        assert!(selection.update(7, &a).is_none());
+        // A new id replaces the route, an empty one too (carrot-nav clears).
+        assert!(selection.update(8, &[]).unwrap().1.is_empty());
+        // Once stamped, unstamped messages do not take over.
+        assert!(selection.update(0, &a).is_none());
+    }
 
     #[test]
     fn tracks_progress_along_a_northbound_route() {

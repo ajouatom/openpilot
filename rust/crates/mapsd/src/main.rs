@@ -9,10 +9,11 @@ use openpilot_mapsd::{
     preview,
     remote::{Archive, Mapbox},
     renderer::{MapRenderer, Position},
-    route::RouteTracker,
+    route::{RouteSelection, RouteTracker},
     tiles::{HybridTiles, Remote},
     Error,
 };
+use openpilot_logging::{log_site, producer::{Factory, Logger}, record::Record, Fields, Value};
 use openpilot_navd::position::{CarPark, CarrotFix, GpsFix, ParkedPosition, Sample};
 use openpilot_messaging::{runtime::SubMaster, state::Options};
 use std::{
@@ -45,6 +46,47 @@ impl Remote for Source {
             Self::Mapbox(r) => r.fetch(z, x, y),
             Self::Archive(r) => r.fetch(z, x, y),
         }
+    }
+}
+
+/// Why the route map was or was not drawn, summarised every 30 s while
+/// something wants the map: a `mapsdStatus` event in the rlog and a line on
+/// the console. Without it a drive cannot tell a black map from a real one.
+#[derive(Default)]
+struct Status {
+    since: f64,
+    counts: Vec<(&'static str, i128)>,
+}
+
+impl Status {
+    const INTERVAL: f64 = 30.;
+
+    fn count(&mut self, reason: &'static str, tiles: &str, now: f64, logger: Option<&mut Logger>) {
+        if self.counts.is_empty() {
+            self.since = now;
+        }
+        match self.counts.iter_mut().find(|(name, _)| *name == reason) {
+            Some((_, n)) => *n += 1,
+            None => self.counts.push((reason, 1)),
+        }
+        if now - self.since < Self::INTERVAL {
+            return;
+        }
+        let summary: Vec<String> = self.counts.iter().map(|(name, n)| format!("{name}={n}")).collect();
+        eprintln!("mapsd: maps in the last {:.0} s (tiles from {tiles}): {}", now - self.since, summary.join(" "));
+        if let Some(logger) = logger {
+            let mut fields = Fields::default();
+            for (name, n) in &self.counts {
+                fields.insert((*name).to_owned(), Value::Integer(*n));
+            }
+            fields.insert("seconds".to_owned(), Value::Float(now - self.since));
+            fields.insert("tiles".to_owned(), Value::Text(tiles.to_owned()));
+            // Evidence only: a logging failure must not stop the map.
+            if let Ok(record) = Record::event("mapsdStatus", Vec::new(), fields) {
+                let _ = logger.emit(log_site!(), record);
+            }
+        }
+        self.counts.clear();
     }
 }
 
@@ -187,6 +229,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut tiles = HybridTiles::new(&store_root(), source, clock)?;
     let mut route: Vec<[f64; 2]> = Vec::new();
     let mut route_id = 0u64;
+    let mut selection = RouteSelection::default();
+    let mut status = Status::default();
+    let mut logger = Factory::for_runtime().ok().map(|factory| factory.logger());
     let mut tracker: Option<RouteTracker> = None;
     let mut position = ParkedPosition::default();
     let (mut next_render, mut next_config, mut was_ready) = (0f64, 0f64, false);
@@ -211,15 +256,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         if let Ok(topic) = sub.state.topic("navRoute") {
             if topic.updated {
                 if let Some(event::Which::NavRoute(Ok(r))) = topic.event().ok().and_then(|e| e.which().ok()) {
-                    let id = r.get_carrot_route_id();
-                    if id != route_id {
+                    let coordinates: Vec<[f64; 2]> = if topic.valid {
+                        r.get_coordinates().map(|c| c.iter().map(|p| [f64::from(p.get_longitude()), f64::from(p.get_latitude())]).collect()).unwrap_or_default()
+                    } else {
+                        Vec::new()
+                    };
+                    if let Some((id, selected)) = selection.update(r.get_carrot_route_id(), &coordinates) {
                         route_id = id;
-                        route = if topic.valid {
-                            r.get_coordinates().map(|c| c.iter().map(|p| [f64::from(p.get_longitude()), f64::from(p.get_latitude())]).collect()).unwrap_or_default()
-                        } else {
-                            Vec::new()
-                        };
-                        tracker = if id != 0 { RouteTracker::new(route.clone()) } else { None };
+                        route = selected;
+                        tracker = RouteTracker::new(route.clone());
                         next_render = 0.;
                     }
                 }
@@ -281,6 +326,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // At most 10 Hz, ~10% of one core (carrot render_interval).
         let interval = (elapsed * 10.).max(0.1);
         next_render = finished + if map.valid { interval } else { interval.max(1.) };
+        if wanted {
+            let tiles = if remote_key.starts_with("mapbox:") { "mapbox" } else if remote_key.is_empty() { "none" } else { "url" };
+            status.count(reason, tiles, finished, logger.as_mut());
+        }
         if wanted || ready {
             if let Err(error) = output::write(out, &map) {
                 eprintln!("mapsd: write map: {error}");
