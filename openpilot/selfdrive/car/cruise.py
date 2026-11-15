@@ -212,9 +212,12 @@ class VCruiseCarrot:
     self._steering_interlock_active = False
     self._lat_enabled = self.params.get_int("AutoEngage") > 0
     self._v_cruise_kph_at_brake = 0
+    self.stock_adopt_kph = 0.  # set by card from Hyundai CAN-FD carstate: stock SCC set speed while a restart hand-over waits
     self.cruise_state_available_last = False
 
     self._paddle_decel_active = False
+    self._paddle_resume_kph = 0  # PaddleMode 2: set speed to restore after a rolling hand-off to a stop (0 = none)
+    self._paddle_resume_cnt = 0
     self.carrot_cruise_active = False
 
     #self.events = []
@@ -396,6 +399,7 @@ class VCruiseCarrot:
       if not self.cruise_state_available_last:
         self._lat_enabled = True
         v_cruise_kph = self.v_ego_kph_set
+      v_cruise_kph = self._adopt_stock_cruise(CC, v_cruise_kph)
       if not self.CP.pcmCruise:
         # if stock cruise is completely disabled, then we can use our own set speed logic
         self.v_cruise_kph = np.clip(v_cruise_kph, self._cruise_speed_min, self._cruise_speed_max)
@@ -617,6 +621,7 @@ class VCruiseCarrot:
 
     if button_type in [ButtonType.accelCruise, ButtonType.decelCruise, ButtonType.setCruise, ButtonType.resumeCruise]:
       self._paddle_decel_active = False
+      self._paddle_resume_kph = 0
       if self.autoCruiseControl_cancel_timer > 0:
         self._add_log(f"AutoCruiseControl cancel timer RESET {button_type}")
         self.autoCruiseControl_cancel_timer = 0
@@ -837,6 +842,17 @@ class VCruiseCarrot:
     self.nRoadLimitSpeed_last = self.nRoadLimitSpeed
     return v_cruise_kph
 
+  def _adopt_stock_cruise(self, CC, v_cruise_kph):
+    # The device (re)started while the camera's stock SCC was cruising: take it over at the driver's stock set speed.
+    # Interlocks and the cancel latch in _cruise_control still apply (the latch starts False after a restart, so it
+    # only blocks a cancel the driver gave since). Re-request every 0.5 s: engage needs a rising edge, and an early one
+    # can fall on a no-entry frame (e.g. still initializing). carstate ends the wait on any cancel / off request.
+    if self.stock_adopt_kph <= 0 or CC.enabled:
+      return v_cruise_kph
+    if self.frame % 50 == 0:
+      self._cruise_control(1, -1, "Cruise on (stock SCC)", manual=True)
+    return self.stock_adopt_kph
+
   def _cruise_control(self, enable, cancel_timer, reason, allow_cancel_state=False, manual=False):
     # Explicit HID button requests bypass automatic-engage preferences only;
     # availability/interlocks below and selfdrived's normal no-entry checks remain.
@@ -890,6 +906,7 @@ class VCruiseCarrot:
 
   def _update_cruise_state(self, CS, CC, v_cruise_kph):
     if not CC.enabled:
+      self._paddle_resume_kph = 0
       #self._pause_auto_speed_up = False
       if self._brake_pressed_count == -1 and self._soft_hold_active > 0:
         #self.autoCruiseControl_cancel_timer = 0
@@ -968,6 +985,19 @@ class VCruiseCarrot:
               self._cruise_control(1, 0, "Cruise on (traffic sign)")
             elif self.d_rel > 0:
               self._cruise_control(1, 0, "Cruise on (lead car)")
+      elif self._paddle_decel_active and self._paddle_mode == 2:
+        # PaddleMode 2 paddle stop: hand it to the traffic-light stop (xState 3 slowing, 5 stopped) or to a lead that is
+        # (nearly) stopped, and keep the driver's set speed. The other paddle modes keep the hand-off below unchanged.
+        # The hand-off below sets the current speed, so a hand-off at a stop leaves the 5 km/h floor (Ioniq 5 PE drive,
+        # engaged at 30 km/h, paddle, stopped: set speed 5 km/h for 33 s until RES+), and any detected lead, even a
+        # moving one, cancels the stop request (a 60 km/h set speed synced to 36 behind a moving lead).
+        if self.xState in [3, 5] or (self.d_rel > 0 and CS.vEgo + self.v_rel < 1.0):
+          self._paddle_decel_active = False
+          if CS.vEgo > 0.5:
+            # Still rolling: hold the current speed into the stop; the set speed returns once stopped.
+            self._paddle_resume_kph = v_cruise_kph
+            self._paddle_resume_cnt = 0
+            v_cruise_kph = self.v_ego_kph_set
       elif self._paddle_decel_active:
         if self.xState in [3]:
           self._paddle_decel_active = False
@@ -975,6 +1005,13 @@ class VCruiseCarrot:
         elif self.d_rel > 0:
           self._paddle_decel_active = False
           v_cruise_kph = self.v_ego_kph_set
+      elif self._paddle_resume_kph > 0:
+        # PaddleMode 2 after a rolling hand-off: give the set speed back once stopped, or when the light stops asking
+        # for a stop for 1 s (green before we stopped); otherwise the speed at hand-off (e.g. 30 of 60) would stick.
+        self._paddle_resume_cnt = self._paddle_resume_cnt + 1 if self.xState not in [3, 5] else 0
+        if CS.vEgo < 0.1 or self._paddle_resume_cnt > int(1.0 / 0.01):
+          v_cruise_kph = max(v_cruise_kph, self._paddle_resume_kph)
+          self._paddle_resume_kph = 0
           
 
     if self._gas_pressed_count > self._gas_tok_timer:
@@ -997,6 +1034,7 @@ class VCruiseCarrot:
       gas_pressed_start = self._gas_pressed_count <= 0
       cancel_soft_hold = gas_pressed_start and self._soft_hold_active > 0 and self._cruise_cancel_state
       self._paddle_decel_active = False
+      self._paddle_resume_kph = 0
       self._gas_pressed_count = max(1, self._gas_pressed_count + 1)
       self._gas_pressed_count_last = self._gas_pressed_count
       self._gas_pressed_value = max(CS.gas, self._gas_pressed_value) if self._gas_pressed_count > 1 else CS.gas
@@ -1020,6 +1058,7 @@ class VCruiseCarrot:
     if CS.brakePressed:
       self._cruise_ready = False
       self._paddle_decel_active = False
+      self._paddle_resume_kph = 0
       self._brake_pressed_count = max(1, self._brake_pressed_count + 1)
       if self._brake_pressed_count == 1 and self.enabled_last:
         self._v_cruise_kph_at_brake = self.v_cruise_kph

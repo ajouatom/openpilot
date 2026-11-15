@@ -22,7 +22,7 @@ from opendbc.car.car_helpers import get_car
 from opendbc.car.interfaces import CarInterfaceBase
 from openpilot.selfdrive.pandad import can_capnp_to_list, can_list_to_can_capnp
 from openpilot.selfdrive.car.alternative_experience import get_alternative_experience
-from openpilot.selfdrive.car.card_diagnostics import should_log_card_diagnostics
+from openpilot.selfdrive.car.card_diagnostics import invalid_can_messages, should_log_card_diagnostics
 from openpilot.selfdrive.car.cruise import VCruiseCarrot
 from openpilot.selfdrive.car.car_specific import MockCarState
 from openpilot.selfdrive.car.openpilot_toggle import CruiseMainOpenpilotToggle
@@ -30,6 +30,7 @@ from openpilot.selfdrive.car.tesla_turn_signals import TeslaTurnSignals
 from openpilot.selfdrive.car.voice_indicator import NativeVoiceIndicator, native_indicator
 from openpilot.selfdrive.car.tesla_lane_signals import TeslaLaneSignals
 from openpilot.selfdrive.car.hyundai_spas import SpasSignals
+from openpilot.selfdrive.car.hyundai_kick import KickOutput
 from openpilot.selfdrive.controls.lib.lateral_readiness import LateralStartupGate
 from openpilot.selfdrive.controls.lib.desire_lib.tesla_turn import turn_signal_context
 from openpilot.selfdrive.carrot.xiaoge.xiaoge_vision import (
@@ -149,6 +150,7 @@ class Car:
     stock_signal = native_indicator(self.CP)
     self.native_voice_indicator = NativeVoiceIndicator(stock_signal) if stock_signal else None
     self.spas_signals = SpasSignals(self.CP, self.params)
+    self.kick_output = KickOutput(self.CP, self.params)
     self.spas_signal_status = None
     self.spas_signal_log_at = 0.
 
@@ -203,6 +205,7 @@ class Car:
     self.card_diag_slow_loop = 0
     self.card_diag_slow_process = 0
     self.card_diag_can_timeouts = 0
+    self.can_parser_result = ""
     self.xiaoge_vision_result: XiaogeVisionResult | None = None
     self.xiaoge_blindspot_sources = (False, False, False, False)
     self.xiaoge_blindspot_sources_published = None
@@ -249,6 +252,11 @@ class Car:
     if self.CP.brand == 'mock':
       CS = self.mock_carstate.update(CS)
     ci_done_ns = time.monotonic_ns()
+    # canError alert text2 (events.car_parser_result) names the timed-out messages
+    can_result = "" if CS.canValid else invalid_can_messages(self.CI.can_parsers.values())
+    if can_result != self.can_parser_result:
+      self.can_parser_result = can_result
+      self.params.put_nonblocking("CanParserResult", can_result)
 
     self.sm.update(0)
     sm_done_ns = time.monotonic_ns()
@@ -304,6 +312,9 @@ class Car:
     #self.v_cruise_helper.update_v_cruise(CS, self.sm['carControl'].enabled, self.is_metric)
     # A gas tap spent on a camera skip must not also raise the set speed by +10.
     self.v_cruise_helper.speedcam_gas_tok_consumed = getattr(self.CI.CS, "speedcam_gas_tok_consumed", False)
+    # Restart hand-over: Hyundai CAN-FD camera-SCC carstate reports the stock SCC set speed while it waits to take a
+    # cruising stock SCC over after a device restart (0 = nothing to adopt, and always 0 for other cars).
+    self.v_cruise_helper.stock_adopt_kph = getattr(self.CI.CS, "stock_adopt_kph", 0.)
     self.v_cruise_helper.update_v_cruise(CS, self.sm, self.is_metric)
     #self.t3 = time.monotonic()
     if self.sm['carControl'].enabled and not self.CC_prev.enabled:
@@ -445,7 +456,13 @@ class Car:
         CC.leftBlinker = CC.rightBlinker = False
         CC.assistantLaneSignalId = ''
         CC = CC.as_reader()
+      if self.kick_output.configured:
+        kick_valid = (CS.canValid and not impact_reboot and model_v2 is not None and
+                      all(self.sm.valid[k] and self.sm.alive[k] and 0 <= time.monotonic()-self.sm.recv_time[k] < .2
+                          for k in ('carControl', 'modelV2')))
+        self.CI.CC.kick_output_ready = self.kick_output.update(kick_valid, time.monotonic())
       self.last_actuators_output, can_sends = self.CI.apply(CC, now_nanos, model_v2, radar_state)
+      can_sends = self.kick_output.isolate(can_sends, model_v2, time.monotonic())
       if self.tesla_signals.configured:
         fresh = all(self.sm.seen[s] and self.sm.alive[s] and self.sm.valid[s] and
                     0 <= time.monotonic() - self.sm.recv_time[s] <= 0.2 for s in ('carControl', 'modelV2'))

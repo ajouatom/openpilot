@@ -89,6 +89,7 @@ class HyundaiSafetyFlags(IntFlag):
   CANFD_SPAS_BLINKERS = 4096
   PEDAL_INTERCEPTOR = 8192
   PEDAL_INTERCEPTOR_RAY = 16384
+  CANFD_BLINKER_KICK = 32768  # CAN-FD only: CanfdBlinkerKick on a KICK_CARS model with the camera-SCC harness
 
 
 class HyundaiFlags(IntFlag):
@@ -1042,6 +1043,12 @@ CAN_GEARS = {
 }
 
 CANFD_CAR = CAR.with_flags(HyundaiFlags.CANFD)
+# CanfdBlinkerKick (carcontroller.aprk_blinkers): the turn signal is lit through the parking ECU's SPAS2 BLINKER_CONTROL.
+# Only models whose lamp was seen lighting from a driving kick in user logs (Ioniq 5 PE, Ioniq 9, Azera GN7), and only on
+# the camera-SCC harness (APRK on ECAN bus 0 and ACAN bus 1, SPAS on ECAN bus 0). Only then does interface.py set
+# HyundaiSafetyFlags.CANFD_BLINKER_KICK. Without that flag the host sends no Kick frames and panda's CAN-FD TX allowlist
+# and checks for 0x7B1/0x165/0x16A are carrot-wip's (CANFD_SPAS_BLINKERS lease only); its SPAS piggyback never sends.
+KICK_CARS = {CAR.HYUNDAI_IONIQ_5_PE, CAR.HYUNDAI_IONIQ_9, CAR.HYUNDAI_AZERA_7TH_GEN}
 CANFD_RADAR_SCC_CAR = CAR.with_flags(HyundaiFlags.RADAR_SCC)  # TODO: merge with UNSUPPORTED_LONGITUDINAL_CAR
 
 CANFD_HYBRID_STATUS_ADDR = 0xFA

@@ -54,7 +54,7 @@ def test_acknowledged_turn_hold_survives_flash_cycles_and_stops_on_override():
 
 
 @pytest.mark.parametrize('blocked', [None, 'source_stale', 'offroad', 'override', 'old_report', 'wrong_ack', 'released',
-                                   'released_during_read', 'override_during_read'])
+                                   'released_during_read', 'override_during_read', 'CanfdBlinkerKick', 'CanfdBlinkerControl'])
 def test_owned_hold_renews_before_slow_metadata_read(monkeypatch, blocked):
   import asyncio
   import sys
@@ -64,7 +64,7 @@ def test_owned_hold_renews_before_slow_metadata_read(monkeypatch, blocked):
   clock = [10.]
   monkeypatch.setattr(b1.time, 'monotonic', lambda: clock[0])
   monitor = b1.Monitor()
-  monitor.params = SimpleNamespace(get_bool=lambda name: name == 'IsOnroad' and blocked != 'offroad')
+  monitor.params = SimpleNamespace(get_bool=lambda name: (name == 'IsOnroad' and blocked != 'offroad') or name == blocked)
   monkeypatch.setitem(sys.modules, 'openpilot.common.params', SimpleNamespace(Params=lambda: monitor.params))
   monitor.session = 71
   monitor.board_report = (71, 9900, 8 if blocked == 'wrong_ack' else 7,

@@ -62,7 +62,9 @@ std::string Panda::serial_read(int port_number) {
   std::string ret;
   char buffer[USBPACKET_MAX_SIZE] = {};
 
-  while (true) {
+  // At most one panda debug ring (0x400 bytes) per call. Unbounded, a panda printing faster than this drains
+  // kept the loop and the heartbeat behind it stuck for seconds -> panda SILENT (TUCSON 4TH GEN, 2026-11-11).
+  for (int i = 0; i < 0x400 / USBPACKET_MAX_SIZE; i++) {
     int bytes_read = handle->control_read(0xe0, port_number, 0, (unsigned char *)buffer, USBPACKET_MAX_SIZE);
     if (bytes_read <= 0) {
       break;

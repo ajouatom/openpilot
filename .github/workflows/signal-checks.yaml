@@ -69,6 +69,23 @@ jobs:
         env:
           CARROT_NATIVE_CPU: '0'
         run: python tools/signal_validation/run.py opendbc_repo/opendbc/car/hyundai/tests/test_pedal_interceptor.py
+      - name: CAN FD Kick ownership, stock handover and stop-go regressions
+        run: |
+          python tools/signal_validation/run.py \
+            openpilot/selfdrive/car/tests/test_hyundai_kick.py \
+            openpilot/selfdrive/car/tests/test_card_diagnostics.py \
+            opendbc_repo/opendbc/car/hyundai/tests/test_aprk_blinkers.py \
+            opendbc_repo/opendbc/car/hyundai/tests/test_camera_set_speed_sync.py \
+            opendbc_repo/opendbc/car/hyundai/tests/test_ccnc_cluster.py \
+            opendbc_repo/opendbc/car/hyundai/tests/test_lane_crossing.py \
+            opendbc_repo/opendbc/car/hyundai/tests/test_stock_cruise_adopt.py \
+            opendbc_repo/opendbc/safety/tests/test_hyundai_canfd_spas_piggyback.py \
+            openpilot/selfdrive/carrot/tests/test_radar_moving_lead_shield.py \
+            openpilot/selfdrive/carrot/tests/test_red_stop_hold.py \
+            openpilot/selfdrive/controls/tests/test_stop_go_assist.py \
+            openpilot/selfdrive/controls/tests/test_lead_close_brake.py
+          python tools/signal_validation/run.py \
+            openpilot/selfdrive/carrot/bluetooth/tests/test_b1.py tools/jetlink/test_blink_owner.py
       - name: Vehicle fault admission and CAN FD signal-stop object
         run: |
           python tools/signal_validation/run.py \

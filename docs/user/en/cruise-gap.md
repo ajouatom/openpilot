@@ -137,6 +137,7 @@ This experimental sequence applies to Hyundai/Kia CANFD openpilot longitudinal c
 - Initial entry requires the maximum absolute speed input to be at or below 0.7 m/s. After entry, speed rebound, loss of deceleration, time and distance do not release StopReq or trigger retry.
 - An increase in jerkUpper is blocked on the first StopReq frame; the ordinary value is allowed from the next frame. Decreases are immediate. InfoDisplay and byte7 remain zero, and the lower band remains the fixed experimental value 0.20.
 - Existing departure decisions, disengagement, pedal, CAN and gear interlocks remain. The brake-input exception requires an armed soft hold with every speed input at or below 0.10 m/s.
+- Exception, only with [`StopGoLongAssist`](settings.md#stop-go-assist) `1` or higher: if the car moves after a stop the SCC never confirmed as held, StopReq stays on and aReq is −0.5 m/s² until the SCC reports the hold.
 
 > [!CAUTION]
 > This trial adopts part of an observed stock sequence; complete stopping and prevention of rolling have not been validated on the vehicle.
