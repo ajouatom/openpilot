@@ -12,6 +12,11 @@ KEYS = {"id_rsa": "RS256",
         "id_ecdsa": "ES256"}
 
 
+def comma_connect_enabled() -> bool:
+  # Cloud access is opt-in; public software downloads use separate clients.
+  return os.getenv("COMMA_CONNECT_ENABLED") == "1"
+
+
 class Api:
   def __init__(self, dongle_id):
     self.dongle_id = dongle_id
@@ -43,6 +48,9 @@ class Api:
 
 
 def api_get(endpoint, method='GET', timeout=None, access_token=None, session=None, **params):
+  if not comma_connect_enabled():
+    raise requests.exceptions.ConnectionError("comma Connect is disabled")
+
   headers = {}
   if access_token is not None:
     headers['Authorization'] = "JWT " + access_token
