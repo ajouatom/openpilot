@@ -119,6 +119,13 @@ class BoundaryIndicator:
         # together as markings reappear beyond an intersection.
         episode = self.episode
         side = episode['direction'] - 1 if episode else 0
+        # Ignore a brief jump of only the far boundary. Keep the last accepted
+        # sample so its 150 ms age still bounds recovery, and do not emit here.
+        if (episode is not None and now - episode['intent'] <= .5 and
+            self.lane_admission(cs, md, side + 1, now) and
+            abs(prev_y[side] - y[side]) <= .1 and abs(prev_y[1-side] - y[1-side]) > .4):
+          self.previous = old
+          return
         paired_approach = (episode is not None and now - episode['intent'] <= .5 and
                            self.lane_admission(cs, md, side + 1, now) and
                            0 < prev_y[side] - y[side] <= .8 and

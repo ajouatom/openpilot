@@ -7,9 +7,10 @@ from openpilot.selfdrive.controls.lib.desire_lib.boundary_lane import MANUAL_IND
 
 def allowed(cs, cc, md, source, now, holding=False, tap_echo=False):
   try:
+    stopped_hold = holding and getattr(cs, 'standstill', False) and abs(cs.vEgo) < .1
     if (not cs.canValid or str(cs.gearShifter) != 'drive' or cs.trailerConnected or
         cs.steerFaultTemporary or cs.steerFaultPermanent or (cs.blinkerLever and not (holding and tap_echo)) or
-        not math.isfinite(cs.vEgo) or cs.vEgo < 0):
+        not math.isfinite(cs.vEgo) or cs.vEgo < 0 and not stopped_hold):
       return False
     if source not in ('manual', 'manual_turn') and not cc.latActive:
       return False

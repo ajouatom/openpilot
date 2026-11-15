@@ -25,6 +25,8 @@ Manual/model indication distinguishes its short one-touch echo only with matchin
 
 Boundary retreat must persist for 0.15s to cancel tracking, and new indications pause during retreat. Recent steering intent and paired boundary movement with consistent lane width permit bounded position changes during approach.
 
+With a continuous target boundary and recent driver intent, a brief jump of the opposite boundary can wait up to 0.15s for valid samples. New indication pauses during the gap and requires consistent movement of both boundaries afterward.
+
 ## Manual turn indicator (trial)
 
 `ManualTurnIndicator` is a separate option in the Lane Change (Auto Turn) settings group, OFF by default. It supports Ioniq 5 PE with a supported indicator adapter and `AutoBlinkerControl=1·2`. Driver observation operates independently of ATC, navigation and lateral-control activation. Its lamp feedback receives automatic-steering request isolation.
@@ -37,6 +39,8 @@ The comma display labels the source as a manual driver turn. Existing USB HUD bu
 
 When same-direction manual-turn conditions are met during a manual lane indication, the existing request continues under turn completion tracking.
 
+Lane-position jumps at junctions do not reset manual turns established through driver torque, increasing steering angle and measured rotation. An owned indication survives small negative speed-estimator noise around zero while standstill is confirmed in Drive.
+
 ## Model indication (trial)
 
 `ModelDesireIndicator` and `ModelPathIndicator` are separate default-off options for Ioniq 5 PE with Jetson USB2CAN and `AutoBlinkerControl=1` or `2`. Initiation requires active lateral control. Their lamp feedback is not reused as a new automatic steering request. At 30 km/h or above, the two nearest model forecasts can also trigger an indication when both predict the same lane change with at least 65% probability and both measured lane boundaries show the vehicle approaching that side. A forecast alone does not light the indicator or request steering. After forecast-based initiation, widening lane lines at a fork do not end the hold while the model and measured motion still indicate the same direction. Fading or opposite intent ends the fork hold; cruise CANCEL releases it immediately.
@@ -47,6 +51,8 @@ When same-direction manual-turn conditions are met during a manual lane indicati
 Same-direction origins share a continuing signal. Alignment after crossing, return before crossing, driver intervention, invalid inputs or a bounded timeout ends the hold request. Ending a request does not guarantee immediate extinction of OEM one-touch flashing. Recorded-input replay is not physical lamp or road validation.
 
 Model-turn indication also requires at least 15 degrees of same-direction steering and 3 degrees/s of measured rotation. While moving, a turn probability below 30% and wheel return within ±10 degrees for 0.4s end the hold.
+
+Initiation from current lane-change probability also requires both measured boundaries to move at least 0.15m toward that crossing over 0.30–0.55s, with the target boundary within 1.5m. This suppresses indications from small line fluctuations and lingering model probability.
 
 ## TBT turn indication
 

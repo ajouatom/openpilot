@@ -130,7 +130,9 @@ class Monitor:
 
   def publish_badge(self, state, now, lamps, accepted_id):
     display = (state, lamps, accepted_id)
-    if display != self.last_display and self.report and self.last_command and 0 <= now-self.last_command['time'] < 5:
+    ownership_changed = self.last_display is None or (state, accepted_id) != (self.last_display[0], self.last_display[2])
+    if (display != self.last_display and self.report and self.last_command and
+        0 <= now-self.last_command['time'] < (300 if ownership_changed else 5)):
       self.report('b1TapFeedback', request_id=self.last_command['id'], seq=self.last_command['seq'],
                   receiver_state=state, lamps=lamps, accepted_id=accepted_id)
     if display != self.last_display or now >= self.next_badge:
@@ -209,6 +211,10 @@ class Monitor:
     if last_seq in self.sent_sequences:
       self.proven_at = now
     authenticated = now-self.proven_at < 1.
+    requested_hold = self.source.get('hold') if self.source else None
+    lost_ack = bool(self.last_command and self.last_display and requested_hold and
+                    requested_hold['id'] == self.last_display[2] == self.last_command['id'] and
+                    ack != self.last_command['seq'])
     available = authenticated and state not in ('missing','error') and self.params.get_bool('IsOnroad') and not self.params.get_bool('CanfdBlinkerControl')
     available = self.output_owner.acquire(available and (self.output_owner.held or (state == 'ready' and not lamps)))
     if self.worker and (not available or self.worker.process.poll() is not None):
@@ -226,13 +232,15 @@ class Monitor:
       latest = self.worker.latest()
       if latest is not None:
         self.source = latest
-    # Capture the receiver's failure before Stop replaces its diagnostic reason.
-    if (authenticated and state in ('driver_override', 'error') and self.report and self.last_command and TRACE in self.attrs and
-        self.diagnostic_request != self.last_command['id'] and 0 <= now-self.last_command['time'] < 5):
+    # Ownership can disappear while the board still reports Waiting. Capture
+    # that first loss before Stop replaces the receiver's diagnostic reason.
+    if (authenticated and (state in ('driver_override', 'error') or lost_ack) and self.report and self.last_command and TRACE in self.attrs and
+        self.diagnostic_request != self.last_command['id'] and 0 <= now-self.last_command['time'] < (300 if lost_ack else 5)):
       self.diagnostic_request = self.last_command['id']
       with suppress(Exception):
         diagnostic = await self.client.call(self.attrs[TRACE], GATT, 'ReadValue', 'a{sv}', ({},), reply_timeout=.15)
         self.report('b1TapDiagnostic', request_id=self.last_command['id'],
+                    receiver_state=state, ack_lost=lost_ack, board_ack=ack,
                     detail=bytes(diagnostic[0])[:256].decode('ascii', errors='replace'))
     # The worker can publish a newer timestamp while latest() drains its socket.
     now = time.monotonic()
