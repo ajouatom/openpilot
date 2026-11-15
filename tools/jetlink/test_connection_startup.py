@@ -103,6 +103,19 @@ def test_wait_and_model_preparation_are_progress_not_red(reports):
   assert status.badge() == ('jetSON 모델 준비 중', 'loading')
 
 
+@pytest.mark.parametrize('message,label', [
+  ('Jetlink model setup requires ignition off', '시동 끄고 모델 준비 필요'),
+  ('Jetson disconnected', '모델 준비 보류'),
+])
+def test_deferred_model_preparation_exposes_its_reason(reports, message, label):
+  reports('loading')
+  link = json.loads(status.LINK_STATUS.read_text())
+  link['preparation'] = {'stage': 'waiting', 'message': message}
+  status.LINK_STATUS.write_text(json.dumps(link))
+  assert status.badge() == (f'jetSON {label}', 'loading')
+  assert message in status.diagnostics()['reason']
+
+
 @pytest.mark.parametrize('age', [3., 5., 7.9])
 def test_bounded_blocking_hello_does_not_expire_as_an_error(reports, monkeypatch, age):
   reports('connecting')

@@ -12,6 +12,7 @@ import time
 import numpy as np
 
 from openpilot.common.jetlink_peer import classify_auto_peer, may_provision
+from openpilot.common.jetson_model import is_jetson
 from openpilot.selfdrive.modeld.jetlink import VENDOR
 from openpilot.selfdrive.modeld.jetlink.link import (SOCKET, STATUS, REQUEST, REPLY, PacketReader, send, send_parts)
 from openpilot.selfdrive.modeld.jetlink.phase import Publisher as PhasePublisher
@@ -20,7 +21,7 @@ from openpilot.selfdrive.modeld.jetlink.compat import ProtocolChoice
 from openpilot.selfdrive.modeld.jetlink.mobile import transport_mode, setup_gadget, MobileCable, AutoTransport, MobileLinkError
 from openpilot.selfdrive.modeld.jetlink.power import UsbInputPower
 from openpilot.selfdrive.modeld.jetlink.scheduling import UsbCompletionPriority
-from openpilot.selfdrive.modeld.jetlink.contracts import model_name
+from openpilot.selfdrive.modeld.jetlink.contracts import JETSON_SPEC, model_name
 from openpilot.selfdrive.modeld.jetlink.selection import ModelChanged, check_loaded
 from openpilot.selfdrive.modeld.jetlink.startup import (CAPABILITY as BOOT_UPDATE_CAPABILITY, wait_for_boot_update,
                                                        RuntimeHandoff, ConnectionStartup)
@@ -140,11 +141,17 @@ def publish(status, spec=None, **extra):
   temporary = STATUS.with_suffix('.tmp')
   temporary.write_text(json.dumps(record))
   os.replace(temporary, STATUS)
-  event = (status, (extra.get('preparation') or {}).get('stage'), str(extra.get('error') or '')[:300])
+  preparation = extra.get('preparation') or {}
+  peer = extra.get('peer') or {}
+  event = dict(state=status, stage=preparation.get('stage'), detail=str(extra.get('error') or '')[:300],
+               message=str(preparation.get('message') or '')[:300], transport=record['transport'],
+               host=peer.get('carrot_host'), source_commit=peer.get('carrot_source_commit'),
+               loaded_sha256=peer.get('loaded'), requested_sha256=JETSON_SPEC.sha256 if is_jetson(peer) else record['sha256'])
   if event != LAST_STATUS_EVENT:
     from openpilot.common.swaglog import cloudlog
-    cloudlog.event('jetlinkConnectionState', state=status, stage=event[1], error=event[2],
-                   transport=record['transport'])
+    # SwagLogger treats the presence of "error" as ERROR, even an empty string.
+    severity = {'error': True} if status in ('retrying', 'blocked') else {}
+    cloudlog.event('jetlinkConnectionState', **event, **severity)
     LAST_STATUS_EVENT = event
 
 
