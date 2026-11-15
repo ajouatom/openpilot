@@ -7,7 +7,6 @@ import queue
 import subprocess
 import sys
 from types import SimpleNamespace
-from unittest.mock import patch
 
 import pytest
 
@@ -127,7 +126,7 @@ def test_manager_modem_selection(is_tici, device_type, expected):
 @pytest.mark.parametrize("device_type", ["tici", "tizi", "mici"])
 @pytest.mark.parametrize("version", [None, "test-version"])
 @pytest.mark.parametrize("timeout", [False, True])
-def test_modem_recovery_is_once_bounded_and_c3_only(mocker, device_type, version, timeout):
+def test_modem_recovery_is_once_bounded_and_c3_only(mocker, monkeypatch, device_type, version, timeout):
   hardware = mocker.Mock()
   hardware.get_modem_temperatures.return_value = []
   hardware.get_modem_data_usage.return_value = (0, 0)
@@ -143,7 +142,9 @@ def test_modem_recovery_is_once_bounded_and_c3_only(mocker, device_type, version
         "HardwareState": SimpleNamespace, "time": mocker.Mock(), "os": mocker.Mock()}
   if os.getenv("NATIVE_DEVICE_TESTS") == "1":
     from openpilot.system.hardware import hardwared
-    with patch.dict(hardwared.hw_state_thread.__globals__, ns):
+    with monkeypatch.context() as patch:
+      for name, value in ns.items():
+        patch.setattr(hardwared, name, value)
       hardwared.hw_state_thread(end_event, mocker.Mock())
   else:
     fn = load_members("openpilot/system/hardware/hardwared.py")["hw_state_thread"]
