@@ -90,6 +90,11 @@ def preparation_text(link, model):
             'waiting-host': '응답 대기 중', 'usb-probe': '응답 확인 중',
             'transport-selection': '연결 장치 확인 중'}.get(phase, '연결 대기')
   if link.get('state') == 'loading':
+    if phase == 'waiting':
+      message = str((link.get('preparation') or {}).get('message') or '')
+      if 'ignition off' in message.lower():
+        return '시동 끄고 모델 준비 필요'
+      return '모델 준비 보류'
     return '모델 준비 중'
   if link.get('state') == 'ready' and model:
     return '콤마 영상 준비 중' if model.get('warp_preparing') else '모델 전환 대기'
@@ -107,6 +112,9 @@ def diagnostics():
   result = {'label': host_label(saved.get('peer'), saved.get('transport', 'usb')), 'state': link.get('state', 'disconnected'),
             'severity': 'unknown', 'reason': preparation_text(link, model), 'addresses': [], 'temp_c': None,
             'active': bool(model.get('active')), 'fresh': False}
+  preparation = link.get('preparation') or {}
+  if link.get('state') == 'loading' and preparation.get('stage') == 'waiting':
+    result['reason'] = (result['reason'] + ' · ' + str(preparation.get('message') or '')[:160]).rstrip(' ·')
   if link.get('state') == 'updating' and result['label'] == 'jetSON':
     text, style = update_badge(link.get('host_update') or {})
     result.update(severity='error' if style == 'error' else 'warning', reason=text, fresh=True, active=False)
