@@ -125,17 +125,19 @@ def prepare_jetson(client, peer, offroad, connected, progress):
     require_setup(offroad, connected)
     return False
 
+  waiting_message = 'Waiting for resident Jetson model; new model setup requires ignition off'
   while True:
     while peer.get('loaded') != JETSON_SPEC.sha256 and not offroad():
       if not connected():
         raise PreparationDeferred('Jetson disconnected')
-      progress('resident-wait', None, 'Waiting for resident Jetson model; new model setup requires ignition off')
+      progress('resident-wait', None, waiting_message)
       current = client.state()
       if not isinstance(current, dict) or 'loaded' not in current:
         raise LinkError('Jetson did not report its loaded model')
       peer['loaded'] = current['loaded']
       if current.get('engine_state') == 'failed':
         raise LinkError(f"Jetson model preparation failed: {current.get('detail', '')}")
+      progress('resident-wait', None, waiting_message)
       time.sleep(.5)
 
     check()
