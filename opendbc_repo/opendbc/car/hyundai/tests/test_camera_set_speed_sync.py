@@ -124,7 +124,7 @@ def test_driver_press_holds_the_sync_for_a_second(monkeypatch):
   from opendbc.car.hyundai import hyundaicanfd
   from opendbc.car.hyundai.values import HyundaiFlags
   monkeypatch.setattr(hyundaicanfd, 'Params', lambda: SimpleNamespace(get_int=lambda key: 1, get=lambda key: '0'))
-  for attr in ('_set_speed_sync', '_gap_sync', '_driver_press_frame', '_lane_line_check', '_set_speed_sync_on'):
+  for attr in ('_set_speed_sync', '_gap_sync', '_driver_press_frame', '_lane_line_check'):
     monkeypatch.delattr(hyundaicanfd.create_ccnc_messages, attr, raising=False)
   seen = []
   monkeypatch.setattr(hyundaicanfd, '_camera_sync_button', lambda s, g, cs, hud, frame, quiet: seen.append((frame, quiet)) or 0)

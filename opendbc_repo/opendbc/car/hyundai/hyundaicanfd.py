@@ -1213,7 +1213,8 @@ class CameraSetSpeedSync:
   Scope:
     - Display/hand-over only: it never changes openpilot's set speed, our SCC_CONTROL output, or how the car is driven
       while engaged. The presses go to the camera bus only (CAN.CAM).
-    - Called only through _camera_sync_button (see its gates). CameraSetSpeedSync = 0 skips it: identical to carrot-wip.
+    - Called only through _camera_sync_button (see its gates); always on for camera-SCC CAN-FD with openpilot
+      longitudinal (no key since 11-15: it adds only hand-over value and never changes engaged driving).
 
   Rules (each one prevents a specific, observed or code-proven failure):
     - target clamped to MIN..MAX (stock set range): a target outside it is unreachable and would be pressed forever.
@@ -1364,7 +1365,6 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
   md = CS.modelV2
   if not hasattr(create_ccnc_messages, '_lane_line_check') or frame % 100 == 0:
     create_ccnc_messages._lane_line_check = Params().get_int("LaneLineCheck")
-    create_ccnc_messages._set_speed_sync_on = Params().get_int("CameraSetSpeedSync") > 0
   if not hasattr(create_ccnc_messages, '_set_speed_sync'):
     create_ccnc_messages._set_speed_sync = CameraSetSpeedSync()
     create_ccnc_messages._gap_sync = CameraGapSync()
@@ -1422,9 +1422,9 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
           elif CS.scc_control is not None and CS.scc_control["InfoDisplay"] == 4:
             if 10 < frame % 30 <= 16 and not stopping:
               values["CRUISE_BUTTONS"] = 2
-          elif (create_ccnc_messages._set_speed_sync_on and (sync_button := _camera_sync_button(
+          elif (sync_button := _camera_sync_button(
                   create_ccnc_messages._set_speed_sync, create_ccnc_messages._gap_sync, CS, hud_control, frame,
-                  frame - create_ccnc_messages._driver_press_frame > SYNC_DRIVER_HOLD_FRAMES))):
+                  frame - create_ccnc_messages._driver_press_frame > SYNC_DRIVER_HOLD_FRAMES)):
             values["CRUISE_BUTTONS"] = sync_button
           else:
             if CS.adrv_0x1ea is not None and CS.adrv_0x1ea["HDA_MODE2"] == 0: # if corner radar is disabled, send main btn

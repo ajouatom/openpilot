@@ -42,3 +42,12 @@ def test_window_closes_after_startup():
   cs.stock_adopt_frames = STOCK_ADOPT_FRAMES
   cs._update_stock_adopt(True, 80 * CV.KPH_TO_MS)
   assert not cs.stock_adopt_pending and cs.stock_adopt_kph == 0
+
+
+def test_driver_cancel_or_main_ends_the_hand_over():
+  # the hand-over request bypasses the cancel latch, so the driver's own CANCEL / MAIN must end it here
+  cs = state()
+  cs._update_stock_adopt(True, 80 * CV.KPH_TO_MS, driver_off=True)
+  assert not cs.stock_adopt_pending and cs.stock_adopt_kph == 0 and cs.manual_main_off_latched
+  cs._update_stock_adopt(True, 80 * CV.KPH_TO_MS)  # the camera still reports cruising: no re-arm
+  assert not cs.stock_adopt_pending and cs.stock_adopt_kph == 0
