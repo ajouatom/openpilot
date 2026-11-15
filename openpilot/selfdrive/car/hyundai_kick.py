@@ -18,6 +18,7 @@ class KickOutput:
     self.driver_stamp = self.driver_pressed_at = -1.
     self.driver_direction = None
     self.driver_counts = [0, 0]
+    self.source_counts = None
 
   def observe_driver(self, frames, cs, now):
     if not self.configured:
@@ -26,6 +27,15 @@ class KickOutput:
     # after Kick has acquired the shared lease and drained their commands.
     exclusive = (self.owner.held and 0 <= now - self.owner.renewed < .2 and
                  self.params.get_bool('CanfdBlinkerKick') and self.params.get_bool('IsOnroad') and cs.canValid)
+    source_counts = (getattr(cs, 'leftBlinkerStalkCount', 0), getattr(cs, 'rightBlinkerStalkCount', 0))
+    # Preserve ordinary lever events while Kick is off or awaiting ownership.
+    # Apply deltas so changing the source cannot manufacture a lever press.
+    if self.source_counts is None:
+      self.driver_counts = list(source_counts)
+    elif not exclusive:
+      for index in range(2):
+        self.driver_counts[index] = (self.driver_counts[index] + source_counts[index] - self.source_counts[index]) % 256
+    self.source_counts = source_counts
     if not exclusive or not 0 <= now - self.driver_stamp < .35:
       self.driver_direction = None
     if exclusive:
