@@ -422,11 +422,11 @@ class CarState(CarStateBase):
         self.camera_scc_hint = True
         self.op_params.put_bool_nonblocking("HyundaiCameraSccHint", True)
 
-  def _discover_canfd_camera_tx_messages(self, parser):
+  def _discover_canfd_camera_tx_messages(self, parser, messages=CANFD_CAMERA_TX_MESSAGES):
     # Startup CAN interruptions must not permanently disable host copies.
     # Keep the original earliest registration time, but retry missing messages
     # throughout the session. Absent variants must not add CAN validity checks.
-    for name, attr, ready_count in CANFD_CAMERA_TX_MESSAGES:
+    for name, attr, ready_count in messages:
       if self.controls_ready_count < ready_count or getattr(self, attr) is not None:
         continue
       msg = parser.dbc.name_to_msg.get(name)
@@ -546,6 +546,14 @@ class CarState(CarStateBase):
 
     if canfd and self.CP.flags & HyundaiFlags.CANFD:
       self._discover_canfd_camera_tx_messages(can_parsers[Bus.cam])
+      # SCC_CONTROL and the cruise buttons are cached once at ready 120/124 above. If their frame was missing at that one
+      # count (startup CAN interruption), SCC and button TX (RES keep-alive, CameraSetSpeedSync) stayed off for the
+      # whole drive. Retry them with the camera-template rules: only after their normal count, only once a fresh,
+      # full-size frame was really received on that bus, and never for a car that does not send them (no new CAN
+      # validity checks for absent messages). Once cached, nothing changes.
+      scc_bus = Bus.cam if self.CP.flags & HyundaiFlags.CANFD_CAMERA_SCC else Bus.pt
+      self._discover_canfd_camera_tx_messages(can_parsers[scc_bus], (("SCC_CONTROL", "scc_control", 121),))
+      self._discover_canfd_camera_tx_messages(can_parsers[Bus.pt], ((self.cruise_btns_msg_canfd, "cruise_buttons_msg", 125),))
 
 
 
