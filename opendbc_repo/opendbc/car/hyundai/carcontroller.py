@@ -621,6 +621,8 @@ class CarController(CarControllerBase):
 
       self.soft_hold_mode = 1 if params.get_int("AutoCruiseControl") > 1 else 2
       self.depart_jerk = params.get_int("StopGoAssist") >= 2
+      if self.canfd_stopping is not None:
+        self.canfd_stopping.unheld_brake = params.get_int("StopGoAssist") >= 1  # stop guard level (stopping.py)
       self.blinker_control = params.get_bool("CanfdBlinkerKick")
       self.blinker_kick_mode = params.get_int("CanfdBlinkerKickMode")
       model_mode = params.get_int("CanfdBlinkerKickModelMode")  # 0 hold, 1 off, 2/3/4: 3/5/7 flashes
