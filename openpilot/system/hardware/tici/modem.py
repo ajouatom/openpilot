@@ -174,6 +174,8 @@ class PPPSession:
 
 class Modem:
   def __init__(self):
+    from openpilot.system.hardware.tici.hardware import Tici
+    self.device_type = Tici().get_device_type()
     self._ppp = PPPSession()
     self._sim_change = False
     self._apn = ""  # blank = network-provided via PCO
@@ -268,10 +270,6 @@ class Modem:
       # clear initial EPS bearer APN (some carriers reject the default)
       'AT+CGDCONT=0,"IP",""',
 
-      # SIM hot swap
-      'AT+QSIMDET=1,0',
-      'AT+QSIMSTAT=1',
-
       # configure modem as data-centric
       'AT+QNVW=5280,0,"0102000000000000"',
       'AT+QNVFW="/nv/item_files/ims/IMS_enable",00',
@@ -279,6 +277,11 @@ class Modem:
     ]
     for c in cmds:
       self._at(c)
+
+    # SIM hot-swap detection is specific to the tizi EG25 configuration.
+    if self.device_type == "tizi":
+      self._at('AT+QSIMDET=1,0')
+      self._at('AT+QSIMSTAT=1')
 
   def _do_initializing(self):
     if not os.path.exists(AT_PORT):
@@ -543,6 +546,9 @@ class Modem:
       self._publish_state(**s)
 
   def run(self):
+    if self.device_type == "tici":
+      logging.info("C3 uses ModemManager/QMI")
+      return
     logging.info("starting")
     self._publish_state(state=State.INITIALIZING.value)
     if self._has_modem_manager():
@@ -574,6 +580,8 @@ class Modem:
       time.sleep(STATE_WAIT)
 
   def stop(self):
+    if self.device_type == "tici":
+      return
     self.running = False
     self._ppp.kill()
     self._ppp.cleanup_routes()

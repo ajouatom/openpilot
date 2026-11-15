@@ -11,7 +11,7 @@ from collections.abc import Iterator
 
 from openpilot.cereal import log
 import openpilot.cereal.messaging as messaging
-from openpilot.common.api import Api
+from openpilot.common.api import Api, comma_connect_enabled
 from openpilot.common.utils import get_upload_stream
 from openpilot.common.params import Params
 from openpilot.common.realtime import set_core_affinity
@@ -229,6 +229,9 @@ class Uploader:
 
 
 def main(exit_event: threading.Event | None = None) -> None:
+  if not comma_connect_enabled():
+    return
+
   if exit_event is None:
     exit_event = threading.Event()
 

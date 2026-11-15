@@ -21,6 +21,23 @@ env:
   CI: 1
 
 jobs:
+  comma_connect:
+    name: comma Connect offline policy and C3 modem
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: python -m pip install pytest pytest-mock requests
+      - run: >-
+          python -m pytest -q -c /dev/null --confcutdir=openpilot/system/tests
+          openpilot/system/tests/test_comma_connect.py
+          openpilot/system/tests/test_c3_modem.py
+          openpilot/system/tests/test_setup_download.py
+          openpilot/system/tests/test_agnos_download_cache.py
+          openpilot/common/tests/test_repo_update.py
+
   egpu_startup:
     name: eGPU selected-model startup
     runs-on: ubuntu-24.04
@@ -102,6 +119,14 @@ jobs:
       - run: ./tools/op.sh setup
       - name: Build openpilot
         run: scons
+      - name: Check native offline cloud boundaries and C3 modem routing
+        env:
+          NATIVE_DEVICE_TESTS: '1'
+        run: >-
+          python -m pytest -o addopts='' -q
+          openpilot/system/tests/test_comma_connect_native.py
+          openpilot/system/tests/test_c3_modem.py
+          openpilot/system/athena/tests/test_registration.py
       - name: Check Tesla stop solver, gesture and shared defaults
         run: |
           python -c "import openpilot.selfdrive.controls.lib.longitudinal_mpc_lib.long_mpc"

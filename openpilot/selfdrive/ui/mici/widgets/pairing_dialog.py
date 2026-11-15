@@ -3,12 +3,13 @@ import qrcode
 import numpy as np
 import time
 
-from openpilot.common.api import Api
+from openpilot.common.api import Api, comma_connect_enabled
 from openpilot.common.swaglog import cloudlog
 from openpilot.common.params import Params
 from openpilot.selfdrive.ui.ui_state import ui_state
 from openpilot.system.ui.widgets.nav_widget import NavWidget
 from openpilot.system.ui.lib.application import FontWeight, gui_app
+from openpilot.system.ui.lib.multilang import tr
 from openpilot.system.ui.widgets.label import UnifiedLabel
 
 
@@ -24,9 +25,13 @@ class PairingDialog(NavWidget):
     self._last_qr_generation = float("-inf")
 
     self._txt_pair = gui_app.texture("icons_mici/settings/device/pair.png", 33, 60)
-    self._pair_label = UnifiedLabel("pair with comma connect", font_size=48, font_weight=FontWeight.BOLD, line_height=0.8)
+    label = "pair with comma connect" if comma_connect_enabled() else tr("comma Connect is disabled")
+    self._pair_label = UnifiedLabel(label, font_size=48, font_weight=FontWeight.BOLD, line_height=0.8)
 
   def _get_pairing_url(self) -> str:
+    if not comma_connect_enabled():
+      return ""
+
     try:
       dongle_id = self._params.get("DongleId") or ""
       token = Api(dongle_id).get_token({'pair': True})
@@ -36,6 +41,9 @@ class PairingDialog(NavWidget):
     return f"https://connect.comma.ai/?pair={token}"
 
   def _generate_qr_code(self) -> None:
+    if not comma_connect_enabled():
+      return
+
     try:
       qr = qrcode.QRCode(version=1, error_correction=qrcode.constants.ERROR_CORRECT_L, box_size=10, border=0)
       qr.add_data(self._get_pairing_url())
@@ -67,10 +75,16 @@ class PairingDialog(NavWidget):
 
   def _update_state(self):
     super()._update_state()
-    if ui_state.prime_state.is_paired() and not self.is_dismissing:
+    if comma_connect_enabled() and ui_state.prime_state.is_paired() and not self.is_dismissing:
       self.dismiss()
 
   def _render(self, rect: rl.Rectangle):
+    if not comma_connect_enabled():
+      self._pair_label.set_max_width(int(self._rect.width - 16))
+      self._pair_label.set_position(self._rect.x + 8, self._rect.y + 16)
+      self._pair_label.render()
+      return
+
     self._check_qr_refresh()
 
     self._render_qr_code()

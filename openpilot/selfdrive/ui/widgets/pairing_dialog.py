@@ -3,7 +3,7 @@ import qrcode
 import numpy as np
 import time
 
-from openpilot.common.api import Api
+from openpilot.common.api import Api, comma_connect_enabled
 from openpilot.common.swaglog import cloudlog
 from openpilot.common.params import Params
 from openpilot.system.ui.widgets import Widget
@@ -29,6 +29,9 @@ class PairingDialog(Widget):
     self._close_btn.set_click_callback(gui_app.pop_widget)
 
   def _get_pairing_url(self) -> str:
+    if not comma_connect_enabled():
+      return ""
+
     try:
       dongle_id = self.params.get("DongleId") or ""
       token = Api(dongle_id).get_token({'pair': True})
@@ -38,6 +41,9 @@ class PairingDialog(Widget):
     return f"https://connect.comma.ai/?pair={token}"
 
   def _generate_qr_code(self) -> None:
+    if not comma_connect_enabled():
+      return
+
     try:
       qr = qrcode.QRCode(version=1, error_correction=qrcode.constants.ERROR_CORRECT_L, box_size=10, border=4)
       qr.add_data(self._get_pairing_url())
@@ -68,7 +74,7 @@ class PairingDialog(Widget):
       self.last_qr_generation = current_time
 
   def _update_state(self):
-    if ui_state.prime_state.is_paired():
+    if comma_connect_enabled() and ui_state.prime_state.is_paired():
       gui_app.pop_widget()
 
   def _render(self, rect: rl.Rectangle) -> int:
@@ -89,12 +95,15 @@ class PairingDialog(Widget):
     y += close_size + 40
 
     # Title
-    title = tr("Pair your device to your comma account")
+    title = tr("Pair your device to your comma account") if comma_connect_enabled() else tr("comma Connect is disabled")
     title_font = gui_app.font(FontWeight.NORMAL)
     left_width = int(content_rect.width * 0.5 - 15)
 
     title_wrapped = wrap_text(title_font, title, 75, left_width)
     rl.draw_text_ex(title_font, "\n".join(title_wrapped), rl.Vector2(content_rect.x, y), 75, 0.0, rl.BLACK)
+    if not comma_connect_enabled():
+      return -1
+
     y += len(title_wrapped) * 75 + 60
 
     # Two columns: instructions and QR code

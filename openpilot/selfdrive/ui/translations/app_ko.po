@@ -1564,3 +1564,6 @@ msgstr "전방 안전 시스템 오류"
 #: openpilot/selfdrive/selfdrived/events.py
 msgid "Front Safety System Fault: Check Vehicle"
 msgstr "전방 안전 시스템 오류: 차량을 점검하세요"
+
+msgid "comma Connect is disabled"
+msgstr "comma Connect가 꺼져 있습니다"
