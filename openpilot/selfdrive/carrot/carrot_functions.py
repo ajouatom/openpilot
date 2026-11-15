@@ -166,6 +166,7 @@ class CarrotPlanner:
     self.cruiseMaxVals6 = 0.6
 
     self.aChangeCostStarting = 10.0
+    self.stopGoAssist = 0
 
     self.trafficLightDetectMode = 2 # 0: None, 1:Stop, 2:Stop&Go
     self.trafficState_carrot = 0
@@ -231,6 +232,7 @@ class CarrotPlanner:
       self.eco_over_speed = self.params.get_int("CruiseEcoControl")
       self.autoNaviSpeedDecelRate = float(self.params.get_int("AutoNaviSpeedDecelRate")) * 0.01
       self.aChangeCostStarting = self.params.get_float("AChangeCostStarting")
+      self.stopGoAssist = self.params.get_int("StopGoLongAssist")
       self.trafficStopDistanceAdjust = self.params.get_float("TrafficStopDistanceAdjust") / 100.
     elif self.params_count >= 100:
 
@@ -534,6 +536,11 @@ class CarrotPlanner:
     )
 
 
+    # Red-light slow-roll hold: while a red stop rolls to the line below 3 m/s, a green/off frame does not end it.
+    # In a night drive log the model planned "go" 2 m before a red stop line and the car accelerated 1.4 -> 10 km/h.
+    # Once stopped (e2eStopped) a green starts the car as before.
+    stop_hold = self.xState == XState.e2eStop and v_ego < 3.0
+
     v_cruise_kph = self.cruise_eco_control(v_ego_cluster_kph, v_cruise_kph)
     v_cruise_kph, atc_active = self._update_carrot_man(sm, v_ego_kph, v_cruise_kph)
     
@@ -692,7 +699,7 @@ class CarrotPlanner:
       elif lead_in_stop_range:
         self.xState = XState.lead
       else:
-        if self.trafficState == TrafficState.green:
+        if self.trafficState == TrafficState.green and not stop_hold:
           self.add_signal_event(EventName.trafficSignGreen)
           self.xState = XState.e2eCruise
         else:
@@ -701,7 +708,13 @@ class CarrotPlanner:
           self.trafficStopAdjustRatio = np.interp(v_ego_kph, [0, 100], [1.0, 0.7])
           # 속도가 높을수록 먼 정지거리 추정값을 줄여 보정함.
           stop_dist = stop_model_x_rl * np.interp(stop_model_x_rl, [0, 50], [1.0, self.trafficStopAdjustRatio])
-          if stop_dist > 10.0:  # 10m 이상일 때만 실제 정지거리를 갱신함.
+          if stop_hold:
+            # A green/off frame carries the model's go plan (~140 m) into xStopFilter and _stop_x_rl for ~1 s. Track
+            # only frames that plan a stop, so the target dead-reckons through them and still converges on the line.
+            if self.actual_stop_distance > 10.0 and v[-1] < max(3.0, v[0] * 0.7):
+              hold_x = x[31] * np.interp(x[31], [0, 50], [1.0, self.trafficStopAdjustRatio])
+              self.actual_stop_distance += 0.1 * (hold_x - self.actual_stop_distance)
+          elif stop_dist > 10.0:  # 10m 이상일 때만 실제 정지거리를 갱신함.
             self.actual_stop_distance = stop_dist
           stop_model_x = 0
           self.fakeCruiseDistance = 0 if self.actual_stop_distance > 10.0 else 10.0
@@ -730,7 +743,9 @@ class CarrotPlanner:
       else:
         self.xState = XState.e2eCruise
 
-    if self.trafficState in [TrafficState.off, TrafficState.green] or self.xState not in [XState.e2eStop, XState.e2eStopped]:
+    # The slow-roll hold keeps its stop target through off/green frames.
+    if ((self.trafficState in [TrafficState.off, TrafficState.green] and not stop_hold)
+        or self.xState not in [XState.e2eStop, XState.e2eStopped]):
       stop_model_x = 1000.0
 
     if self.user_stop_distance >= 0 and not start_hold:

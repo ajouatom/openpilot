@@ -38,7 +38,7 @@ def test_can_error_hint_and_existing_disable_behavior(monkeypatch, event_name, b
   else:
     assert alert.alert_text_1 == 'CAN Error: Check Connections!!'
     assert alert.alert_text_2 == 'existing parser diagnostic'
-    assert alert.alert_size == events.AlertSize.small
+    assert alert.alert_size == events.AlertSize.mid  # text2 names the timed-out messages
   assert alert.priority == events.Priority.LOW
   assert alert.audible_alert == events.AudibleAlert.none
   assert alert.creation_delay == 1.
@@ -47,6 +47,14 @@ def test_can_error_hint_and_existing_disable_behavior(monkeypatch, event_name, b
   assert immediate.alert_size == events.AlertSize.full
   assert immediate.audible_alert == events.AudibleAlert.warningImmediate
   assert alerts.contains(events.ET.NO_ENTRY)
+
+
+def test_can_error_without_parser_result_stays_small(monkeypatch):
+  params = SimpleNamespace(get_int=lambda key: 2, get_bool=lambda key: False, get=lambda key: None)
+  monkeypatch.setattr(events, 'Params', lambda: params)
+  alert = events.car_parser_result(car.CarParams(brand='hyundai'), car.CarState(), None, True, 0, None)
+  assert alert.alert_text_2 == ''
+  assert alert.alert_size == events.AlertSize.small
 
 
 @pytest.mark.parametrize('locale', ['ko', 'zh-CHS'])

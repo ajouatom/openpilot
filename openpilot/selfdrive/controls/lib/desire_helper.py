@@ -31,7 +31,8 @@ AUTO_APP_WAIT_S = 10.0
 
 
 class DesireHelper:
-  def __init__(self, tesla_auto_signals=False, boundary_indicator_supported=False, *, fingerprint='', native_voice_signal=False):
+  def __init__(self, tesla_auto_signals=False, boundary_indicator_supported=False, *, fingerprint='', native_voice_signal=False,
+               kick_supported=False):
     self.params = Params()
     self.boundary_indicator_supported = boundary_indicator_supported
     self.boundary_indicator_enabled = False
@@ -47,6 +48,9 @@ class DesireHelper:
     self.indicator_journal_time = 0.
     self.bluetooth_commands = CommandReader('lane')
     self.assistant_lane = AssistantLane(fingerprint=fingerprint, native_signal=native_voice_signal)
+    # Only a car whose carcontroller may kick the lamp (CanfdBlinkerKick: HyundaiSafetyFlags.CANFD_BLINKER_KICK, set by
+    # modeld from CarParams) takes lamp ownership for it; every other car keeps the previous lamp interpretation.
+    self.kick_supported = kick_supported
     self.frame = 0
 
     # FSM core
@@ -118,6 +122,7 @@ class DesireHelper:
     self.laneChangeDelay = 0.0
     self.blinkerLatchedTurn = 0.0  # m/s, 0 = off
     self.laneChangeLeverWait = False
+    self.kick_model = False  # CanfdBlinkerKick + CanfdBlinkerKickModelMode != 1: carcontroller kicks the lamp on a model start
 
     # misc
     self.prev_desire_enabled = False
@@ -154,6 +159,8 @@ class DesireHelper:
       self.laneChangeDelay = self.params.get_float("LaneChangeDelay") * 0.1
       self.blinkerLatchedTurn = self.params.get_int("BlinkerLatchedTurn") * CV.KPH_TO_MS
       self.laneChangeLeverWait = self.params.get_bool("LaneChangeLeverWait")
+      self.kick_model = (self.kick_supported and self.params.get_bool("CanfdBlinkerKick")
+                         and self.params.get_int("CanfdBlinkerKickModelMode") != 1)
 
   def _check_desire_state(self, modeldata, carstate, maneuver_type):
     desire_state = modeldata.meta.desireState
@@ -719,6 +726,10 @@ class DesireHelper:
                 self.lane_change_state = LaneChangeState.off
                 self.lane_change_direction = LaneChangeDirection.none
               if can_start:
+                if self.kick_model and not driver_enabled and not (carstate.leftBlinker or carstate.rightBlinker):
+                  # carcontroller.kick_pulse lights this side on the Starting edge only when this mask bit rides in the
+                  # same modelV2: the kicked lamp must never read back as the driver's blinker (re-entry, 2nd change)
+                  self.boundary_indicator.own(time.monotonic(), blinker_state)
                 self.lane_change_state = LaneChangeState.laneChangeStarting
 
         elif self.lane_change_state == LaneChangeState.laneChangeStarting:

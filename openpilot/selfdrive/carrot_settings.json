@@ -370,7 +370,8 @@
                 "StopDistanceCarrot",
                 "StoppingAccel",
                 "VEgoStopping",
-                "AChangeCostStarting"
+                "AChangeCostStarting",
+                "StopGoLongAssist"
               ]
             },
             {
@@ -448,9 +449,14 @@
             "CanfdHDA2",
             "HyundaiCanfdClusterDirectTx",
             "CanfdBlinkerControl",
+            "CanfdBlinkerKick",
+            "CanfdBlinkerKickMode",
+            "CanfdBlinkerKickModelMode",
             "CanfdBlinkerTest",
             "CanfdDebug",
-            "HDPuse"
+            "HDPuse",
+            "CcncClusterDisplay",
+            "CcncTrafficBackground"
           ]
         },
         {
@@ -1347,6 +1353,22 @@
     },
     {
       "group": "주행튜닝",
+      "name": "StopGoLongAssist",
+      "title": "정차·출발 롱컨 보정",
+      "descr": "0:끔(기존 동작), 1:감속+정지 보정+굴림 제동, 2:1+출발 보정, 3:2+부드러운 정지\n감속·정지·출발·부드러운 정지 보정은 MPC acc 모드에서만 동작합니다(blended 미동작). 굴림 제동과 CAN-FD 출발 jerk는 모드와 무관하게 동작합니다.\n감속 보정(1 이상): 목표 차간보다 가깝고 앞차보다 0.3m/s 넘게 빠르게 다가가며 앞차 가속이 0.3m/s² 이하이면, 차간을 최대 +0.3초 늘리고 거리 유지 비중을 최대 4배로 올려 일찍 감속합니다. 45km/h 이하 전부, 65km/h까지 선형 감소, 그 위 미동작입니다. 단, 레이더 앞차와 시간 차간 0.9초 미만에서 1m/s 넘게 다가가면 속도와 무관하게 전부 적용합니다. 앞차가 -0.5m/s²보다 세게 감속하면 반응도 빠르게 합니다(같은 45~65km/h 감소). 차로변경 중에는 늘리지 않습니다.\n정지 보정(1 이상): 0.1~3m/s에서 이미 감속 계획 중이고 앞차가 서 있으면(0.3m/s 미만), 정지거리에 서는 등감속 이상으로 제동합니다(최대 -1.5).\n굴림 제동(1 이상, 현대·기아 CAN-FD 롱컨): 정지 후 SCC가 hold를 한 번도 확인하지 않은 채 차가 움직이면, StopReq를 유지한 채 hold 확인 때까지 -0.5로 제동합니다.\n출발 보정(2 이상): 정지 후 3초 안, 3m/s 미만에서 안정된 레이더 앞차가 0.3m/s 넘게 빠르고 0.1m/s² 넘게 가속 중이며 2.5m보다 멀면, 정지거리보다 가까워도 바로 출발하고 가속을 최소 1.2(가속 상한 이내)로 올립니다. 신호 정지(e2eStop·e2eStopped)·적색 신호 중이거나 Carrot 목표 속도가 0이면 하지 않습니다. 현대·기아 CAN-FD 롱컨은 정지 후 3초 안, 3m/s 미만에서 가속할 때 jerk 상한을 최소 3.0으로 올립니다.\n부드러운 정지(3): 0.1~2m/s에서 앞차가 서 있으면 감속 한도를 2m/s의 -1.5에서 0.5m/s의 -0.5까지 선형으로 줄입니다. 정지거리보다 가까이 설 수 있지만 앞차와 2.5m 안쪽으로 들어가지 않는 만큼만 줄입니다.\n정지·출발·부드러운 정지 보정은 가속·브레이크 페달, 소프트 홀드, 차로변경 중에는 쉽니다.",
+      "egroup": "LONG",
+      "etitle": "Stop & go longitudinal assist",
+      "edescr": "0:Off (previous behaviour), 1:Slowing+Stop+Roll brake, 2:1+Departure, 3:2+Soft stop\nThe slowing, stop, departure and soft stop corrections work only in the MPC acc mode (not blended); the roll brake and the CAN-FD departure jerk apply in either mode.\nSlowing (1 and up): inside the follow distance, closing on the lead by over 0.3 m/s and the lead accelerating at no more than 0.3 m/s², adds up to +0.3 s of gap and up to 4x the distance-keeping weight so braking starts earlier. Full up to 45 km/h, fading to none at 65 km/h; with a radar lead under a 0.9 s time gap and closing by over 1 m/s it applies in full at any speed. A lead braking harder than -0.5 m/s² also gets a faster response (same 45-65 km/h fade). No extra gap during a lane change.\nStop (1 and up): at 0.1-3 m/s while the plan already brakes behind a stopped lead (under 0.3 m/s), brakes at least as hard as a constant-decel stop at the stop distance (max -1.5).\nRoll brake (1 and up, Hyundai/Kia CAN-FD openpilot long): if the car moves after a stop the SCC never confirmed as held, keeps StopReq and brakes at -0.5 until the SCC reports the hold.\nDeparture (2 and up): within 3 s of standstill below 3 m/s, a stable radar lead over 0.3 m/s faster, accelerating over 0.1 m/s² and farther than 2.5 m starts the car at once even inside the stop distance, with accel raised to at least 1.2 (within the accel limit). Not during a signal stop (e2eStop/e2eStopped), on red, or with a Carrot target speed of 0. On Hyundai/Kia CAN-FD openpilot long, accelerating within 3 s of standstill below 3 m/s raises the jerk upper limit to at least 3.0.\nSoft stop (3): at 0.1-2 m/s behind a stopped lead, eases the decel limit linearly from -1.5 at 2 m/s to -0.5 at 0.5 m/s. It may stop closer than the stop distance, but eases only as far as it still stops 2.5 m from the lead.\nStop, departure and soft stop pause while the gas or brake is pressed, during soft hold and during a lane change.",
+      "cgroup": "纵向控制",
+      "ctitle": "停车·起步纵向辅助",
+      "cdescr": "0:关闭(原有行为), 1:减速+停车+溜车制动, 2:1+起步, 3:2+平顺停车\n减速、停车、起步、平顺停车修正仅在 MPC acc 模式下工作(blended 不工作); 溜车制动和 CAN-FD 起步 jerk 与模式无关。\n减速(1 及以上): 比目标车距更近、以超过0.3m/s接近前车且前车加速不超过0.3m/s²时, 车距最多增加0.3秒、保持距离权重最多提高到4倍以提前减速。45km/h以下全额, 到65km/h线性减弱, 以上不工作; 但雷达前车时距不足0.9秒且以超过1m/s接近时, 与车速无关全额生效。前车减速强于-0.5m/s²时也加快反应(同样45~65km/h减弱)。变道中不增加车距。\n停车(1 及以上): 0.1~3m/s、已在减速且前车停止(低于0.3m/s)时, 至少按在停车距离处匀减速停下的力度制动(最大-1.5)。\n溜车制动(1 及以上, 现代·起亚 CAN-FD 纵向控制): 停车后 SCC 从未确认保持(hold)而车辆移动时, 保持 StopReq 并以 -0.5 制动, 直到 SCC 确认保持。\n起步(2 及以上): 停车后3秒内且低于3m/s, 稳定的雷达前车快超过0.3m/s、加速超过0.1m/s²且距离超过2.5m时, 即使比停车距离近也立即起步, 加速提高到至少1.2(不超过加速上限)。信号停车(e2eStop·e2eStopped)、红灯期间或 Carrot 目标速度为0时不执行。现代·起亚 CAN-FD 纵向控制在停车后3秒内、低于3m/s加速时, 把 jerk 上限提高到至少3.0。\n平顺停车(3): 0.1~2m/s且前车停止时, 把减速上限从2m/s时的-1.5线性减小到0.5m/s时的-0.5。可能比停车距离停得更近, 但只减到仍能停在距前车2.5m处为止。\n踩油门或刹车、软保持(soft hold)及变道期间, 停车·起步·平顺停车修正暂停。",
+      "min": 0,
+      "max": 3,
+      "default": 0,
+      "unit": 1
+    },
+    {
+      "group": "주행튜닝",
       "name": "TrafficStopDistanceAdjust",
       "title": "TrafficStopDistanceAdjust(-150)",
       "descr": "신호정지위치 보정. 정지점 바로 앞의 정지차가 확인되면 자동으로 차량 기준 보정",
@@ -2110,6 +2132,81 @@
     },
     {
       "group": "시작",
+      "name": "CanfdBlinkerKick",
+      "title": "차로변경 깜빡이 자동",
+      "descr": "0: 끔(기본), 1: 켬.\n운전자가 깜빡이 없이 핸들로 차선을 넘어가기 시작하면 그 방향 깜빡이를 약 1초(2번 정도) 켭니다.\n- 대상: 아이오닉5 PE·아이오닉9·그랜저 GN7을 카메라 SCC(HyundaiCameraSCC 1~3) CAN-FD로 쓰는 경우만. 다른 차량과 HyundaiCameraSCC 0은 이 설정을 무시하고 기존 동작 그대로입니다.\n- 판단: 모델 차선 기준. 최근 3초 안에 양쪽 차선이 보였고, 차가 한쪽 선으로 다가가며, 1초 안에 운전자가 그쪽으로 조향 토크를 줄 때만 켭니다. D단이면 속도·인게이지와 무관합니다.\n- 켜지 않는 경우: 그쪽에 2초 안에 황색선이 보였을 때, 선 너머가 도로 끝일 때, 모델 차로변경 중, 깜빡이가 이미 켜져 있을 때.\n- 방식: 자동주차 ECU(0x7B1)에 잠시 멈춤을 요청하고 SPAS2(0x16A) 깜빡이 명령을 보낸 뒤 기본 세션으로 되돌립니다. 송신 방식은 「차로변경 깜빡이 송신 방식」을 따릅니다.\n- 적용: 켜기는 다음 OnRoad 시작부터, 끄기는 주행 중에도 바로 적용됩니다. 이 기능용 송신을 허용하는 갱신된 panda 펌웨어가 필요합니다.\n- 「CAN-FD SPAS 깜박이 사용」(CanfdBlinkerControl)과 같은 메시지를 씁니다. 이 설정이 켜져 있으면 다음 OnRoad 시작 때 그 설정을 끕니다.\n- 리모컨·내비 등 모델 차로변경에도 켜려면 「모델 차로변경 깜빡이」를 설정합니다.",
+      "egroup": "START",
+      "etitle": "Lane Change Auto Blinker",
+      "edescr": "0: Off (default), 1: On.\nFlashes the blinker for about 1 s (about two flashes) toward the side the driver starts steering across a lane line without signalling.\n- Cars: IONIQ 5 PE, IONIQ 9 and Azera / Grandeur GN7 on CAN-FD with camera SCC (HyundaiCameraSCC 1-3) only. Other cars and HyundaiCameraSCC 0 ignore this setting and keep the previous behaviour.\n- Detection: model lane lines. Both lines seen within the last 3 s, the car moving toward one of them, and driver steering torque toward it within the last 1 s. Works in D at any speed, engaged or not.\n- Not lit: a yellow line seen on that side within 2 s, the road edge right past the line, during a model lane change, or with a blinker already on.\n- How: asks the parking ECU (0x7B1) to pause, sends the blinker command on SPAS2 (0x16A), then returns the ECU to its default session. The send method follows Lane Change Auto Blinker Send Mode.\n- Applies: switching on takes effect at the next onroad start, switching off at once, also while driving. Needs the updated panda firmware that allows these frames.\n- Uses the same message as CAN-FD SPAS indicators (CanfdBlinkerControl). While this is on, that setting is switched off at the next onroad start.\n- For model lane changes (remote, navigation, ...) see Blinker for Model Lane Changes.",
+      "cgroup": "启动设置",
+      "ctitle": "变道自动转向灯",
+      "cdescr": "0: 关闭(默认), 1: 开启。\n驾驶员未打转向灯用方向盘开始越过车道线时, 向该方向打开转向灯约1秒(约闪2次)。\n- 适用: 仅限以摄像头 SCC(HyundaiCameraSCC 1~3) CAN-FD 方式使用的 IONIQ 5 PE、IONIQ 9、Grandeur GN7。其他车型和 HyundaiCameraSCC 0 忽略此设置, 保持原有行为。\n- 判断: 按模型车道线。最近3秒内两侧车道线可见、车辆向一侧车道线靠近、且1秒内驾驶员向该侧施加转向扭矩时才点亮。D挡下与车速和是否接管无关。\n- 不点亮: 2秒内该侧看到黄线、车道线外侧是路边、模型变道进行中、转向灯已亮。\n- 方式: 请求泊车ECU(0x7B1)暂停, 通过SPAS2(0x16A)发送转向灯指令后恢复ECU默认会话。发送方式按「变道自动转向灯发送方式」。\n- 生效: 开启从下次上路启动生效, 关闭在行驶中也立即生效。需要允许这些报文的新版 panda 固件。\n- 与「CAN-FD SPAS 转向灯」(CanfdBlinkerControl)使用同一报文。开启本设置时, 下次上路启动会关闭该设置。\n- 遥控器、导航等模型变道也要点亮时, 请设置「模型变道转向灯」。",
+      "min": 0,
+      "max": 1,
+      "default": 0,
+      "unit": 1,
+      "control": "toggle",
+      "risk": "high"
+    },
+    {
+      "group": "시작",
+      "name": "CanfdBlinkerKickMode",
+      "title": "차로변경 깜빡이 송신 방식",
+      "descr": "「차로변경 깜빡이 자동」이 깜빡이 명령을 보내는 방식입니다. 기본 1.\n0: 자동주차 ECU가 멈춤 요청에 답하고 순정 SPAS 송신이 멈춘 뒤에만 보냅니다. 답이 없으면 켜지 않습니다(아이오닉5 PE는 답하지 않았습니다).\n1: 피기백. ECU가 답하지 않으면 panda가 우리 SPAS 프레임을 순정 SPAS 프레임 바로 뒤에 붙여 보냅니다. 같은 ID가 동시에 송신을 시작하지 않아 충돌 오류를 막습니다. ECU가 답하면 0과 같습니다.\n- 대상 차량·배선은 「차로변경 깜빡이 자동」과 같습니다.",
+      "egroup": "START",
+      "etitle": "Lane Change Auto Blinker Send Mode",
+      "edescr": "How Lane Change Auto Blinker sends its blinker command. Default 1.\n0: only after the parking ECU answers the pause request and its stock SPAS frames stop; no answer, no lamp (the IONIQ 5 PE did not answer).\n1: piggyback. If the ECU does not answer, panda sends our SPAS frame right behind each stock SPAS frame, so the same id never starts at the same moment and does not collide. If the ECU answers, same as 0.\n- Cars and wiring: the same as Lane Change Auto Blinker.",
+      "cgroup": "启动设置",
+      "ctitle": "变道自动转向灯发送方式",
+      "cdescr": "「变道自动转向灯」发送转向灯指令的方式。默认1。\n0: 仅在泊车ECU应答暂停请求且原厂SPAS帧停止后发送; 无应答则不点亮(IONIQ 5 PE 未应答)。\n1: 搭载。ECU无应答时, panda把我们的SPAS帧紧跟在原厂SPAS帧之后发送, 同一ID不会同时起始, 避免冲突。ECU应答时与0相同。\n- 适用车型与接线与「变道自动转向灯」相同。",
+      "min": 0,
+      "max": 1,
+      "default": 1,
+      "unit": 1
+    },
+    {
+      "group": "시작",
+      "name": "CanfdBlinkerKickModelMode",
+      "title": "모델 차로변경 깜빡이",
+      "descr": "리모컨·앱·음성·내비가 시작한 모델 차로변경에도 그 방향 깜빡이를 켭니다. 「차로변경 깜빡이 자동」(CanfdBlinkerKick)이 켜져 있어야 하고 같은 송신 방식을 씁니다. 대상 차량·배선도 같습니다(아이오닉5 PE·아이오닉9·그랜저 GN7, 카메라 SCC CAN-FD).\n0: 유지(기본). 차로변경 동안 켜 두고, 차 중심이 새 차로로 차로 폭의 60% 들어가면 끕니다(최소 1초, 최대 10초).\n1: 끔. 모델 차로변경에는 켜지 않습니다.\n2/3/4: 3/5/7번. 순정 원터치처럼 정한 횟수만 깜빡이며, 차로변경이 먼저 끝나도 횟수를 채웁니다.\n- 운전자가 핸들로 선을 넘을 때의 깜빡임은 이 설정과 무관하게 1초입니다.\n- 우리가 켠 램프가 운전자 깜빡이로 다시 읽히지 않도록, 이런 차로변경이 시작된 뒤 최소 12초(그 뒤 양쪽 램프가 1초 이상 꺼질 때까지) 같은 쪽 레버를 무시합니다. 그동안 같은 방향 레버 차로변경·더블탭·회전 깜빡이가 안 될 수 있습니다.\n- 운전자 깜빡이로 시작한 차로변경, 크루즈 CANCEL 중, 시작 순간 램프가 이미 켜져 있을 때는 켜지 않습니다. 차로변경이 취소되면 바로 끕니다.",
+      "egroup": "START",
+      "etitle": "Blinker for Model Lane Changes",
+      "edescr": "Also turns the blinker on toward a model lane change started by the remote, the app, voice or navigation. Needs Lane Change Auto Blinker (CanfdBlinkerKick) on and uses its send mode. Same cars and wiring: IONIQ 5 PE, IONIQ 9 and Azera / Grandeur GN7 on camera-SCC CAN-FD.\n0: Hold (default). On through the change, off once the car centre is 60 % of a lane width into the new lane (at least 1 s, at most 10 s).\n1: Off. No blinker for model lane changes.\n2/3/4: 3/5/7 flashes, like the stock one-touch setting; the count finishes even if the change ends first.\n- The flash for the driver steering across a line stays 1 s whatever this is set to.\n- So our lamp is not read back as the driver's blinker, the same-side lever is ignored for at least 12 s after such a lane change starts (then until both lamps stay off for 1 s): a same-side lever lane change, double tap or turn blinker may not work then.\n- Not lit for changes started with the driver's own blinker, during cruise CANCEL, or with a lamp already on at the start. Cut at once if the lane change is cancelled.",
+      "cgroup": "启动设置",
+      "ctitle": "模型变道转向灯",
+      "cdescr": "由遥控器、App、语音或导航发起的模型变道也打开该方向转向灯。需要开启「变道自动转向灯」(CanfdBlinkerKick), 使用相同的发送方式。适用车型与接线相同(IONIQ 5 PE、IONIQ 9、Grandeur GN7, 摄像头 SCC CAN-FD)。\n0: 保持(默认)。变道期间保持, 车辆中心进入新车道达车道宽度60%时关闭(至少1秒, 最多10秒)。\n1: 关闭。模型变道不点亮。\n2/3/4: 3/5/7次。与原厂轻触设置相同, 即使变道先结束也会闪完。\n- 驾驶员用方向盘越线时的闪烁与此设置无关, 保持1秒。\n- 为防止我们点亮的转向灯被误读为驾驶员转向灯, 此类变道开始后至少12秒(之后直到两侧转向灯熄灭1秒以上)忽略同侧拨杆: 期间同侧拨杆变道、双击或转弯转向灯可能无效。\n- 驾驶员自己打灯发起的变道、巡航CANCEL期间、开始时转向灯已亮时不点亮。变道取消时立即停止。",
+      "min": 0,
+      "max": 4,
+      "default": 0,
+      "unit": 1,
+      "control": "select",
+      "options": {
+        "ko": [
+          "유지 (기본)",
+          "끔",
+          "3번",
+          "5번",
+          "7번"
+        ],
+        "en": [
+          "Hold (default)",
+          "Off",
+          "3 flashes",
+          "5 flashes",
+          "7 flashes"
+        ],
+        "zh": [
+          "保持（默认）",
+          "关闭",
+          "3次",
+          "5次",
+          "7次"
+        ]
+      },
+      "risk": "high"
+    },
+    {
+      "group": "시작",
       "name": "RecordRoadCam",
       "title": "RoadCam녹화",
       "descr": "저장소에 비디오 녹화\n0:녹화안함,1:일반카메라\n2:일반카메라+광각카메라",
@@ -2139,6 +2236,40 @@
       "max": 2,
       "default": 0,
       "unit": 1
+    },
+    {
+      "group": "시작",
+      "name": "CcncClusterDisplay",
+      "title": "CCNC 계기판 순정형 표시",
+      "descr": "0: 끔(기본), 1: 켬. 0은 아래 항목만 끕니다. HDP 차간 표시·팝업, 측면 박스→회색 차, 정차 중 조향 아이콘 수정은 이 설정과 무관하게 항상 적용됩니다.\n적용: 현대·기아·제네시스 CAN-FD에서 카메라 SCC에 오픈파일럿 롱컨(HyundaiCameraSCC 1·2)을 쓰고, 카메라의 CCNC 계기판 프레임 0x161(HDP 아이콘은 0x162)을 받은 차량. 오픈파일럿이 그 프레임을 바꿔 다시 보내며, 순정 HDA2처럼 오픈파일럿 상태를 계기판에 보여 줍니다. 약 1초 안에 반영됩니다.\n- 차선: 모델 차선 확률이 1초 넘게 0.08 미만이고 카메라도 그 선을 못 보면 그 선을 그리지 않습니다(0.12 이상이면 다시 그림, 주황 선은 유지). 아이오닉9·EV9는 기존 차선 표시를 유지합니다.\n- 점선: 카메라가 점선으로 본 차선을 점선으로 그립니다(아이오닉5 PE·그랜저 GN7·EV4).\n- 차로 강조: 조향 중 상태에 따라 차로 색을 바꿉니다. 레인리스 초록, 레인모드 하늘색, 조향각 오차 0.3초 이상 노랑, 조향 한계 빨강, 차로변경 중 초록. 숨긴 차선이 있으면 바꾸지 않습니다.\n- 앞차 링: 앞차가 보이면 크루즈 중에는 파란 링을 오픈파일럿 목표 차간 거리에, 크루즈가 아닐 때는 흰 링을 표시합니다.\n- 팝업: 크루즈를 켜거나 끌 때 순정 안내 팝업을 2초 띄웁니다.\n- 경고 문구: 오픈파일럿 경고 일부(속도 과다, 조향·SCC 작동 불가, 조향 한계, CAN·센서 이상)를 순정 문구로 띄웁니다. 조향 한계(주변 확인) 문구에는 순정처럼 더블 차임을 1초 냅니다. DBC에 없는 문구는 아이오닉5 PE·그랜저 GN7·EV4에만 나옵니다.\n- HDP 아이콘: 크루즈 또는 조향 중 HDP 아이콘을 켭니다(아이오닉5 PE·그랜저 GN7·EV4).",
+      "egroup": "START",
+      "etitle": "CCNC cluster stock-style display",
+      "edescr": "0: Off (default), 1: On. 0 turns off only the items below; the HDP gap display / popup, side box -> grey car and standstill steering icon fixes always apply, whatever this is set to.\nApplies to Hyundai/Kia/Genesis CAN-FD cars on camera SCC with openpilot longitudinal control (HyundaiCameraSCC 1 or 2) once the camera's CCNC cluster frame 0x161 (0x162 for the HDP icon) has been received. openpilot re-sends those frames and shows its state on the cluster the way the stock HDA2 display does. Applies within about 1 s.\n- Lane lines: a line whose model probability stays under 0.08 for over 1 s and that the camera does not see either is not drawn (drawn again from 0.12; an orange line stays). IONIQ 9 / EV9 keep the previous lane display.\n- Dashed: a line the camera reports as dashed is drawn dashed (IONIQ 5 PE, Azera / Grandeur GN7 and EV4).\n- Lane highlight by steering state while steering: laneless green, lane mode sky blue, steering angle error for 0.3 s yellow, steering limit red, green during a lane change. Not changed while a lane line is hidden.\n- Lead ring on a visible lead: blue at the gap openpilot keeps while cruising, white when not cruising.\n- Popups: the stock popup for 2 s when cruise is engaged or released.\n- Alert texts: some openpilot alerts (speed too high, steering / SCC unavailable, steering limit, CAN / sensor faults) show as stock texts. The steering-limit text (check surroundings) also plays the stock double chime for 1 s. Texts that the DBC does not list show only on the IONIQ 5 PE, Azera / Grandeur GN7 and EV4.\n- HDP icon while cruise or steering is active (IONIQ 5 PE, Azera / Grandeur GN7 and EV4).",
+      "cgroup": "启动设置",
+      "ctitle": "CCNC 仪表原厂式显示",
+      "cdescr": "0: 关闭(默认), 1: 开启。0 只关闭下列项目; HDP 车距显示·弹窗、侧方方框→灰色车辆、停车时转向图标的修正与此设置无关, 始终生效。\n适用: 现代·起亚·捷尼赛思 CAN-FD 车型, 摄像头 SCC 且使用 openpilot 纵向控制(HyundaiCameraSCC 1·2), 并已收到摄像头的 CCNC 仪表报文 0x161(HDP 图标需 0x162)。openpilot 修改并重新发送这些报文, 像原厂 HDA2 一样在仪表上显示 openpilot 状态。约1秒内生效。\n- 车道线: 模型车道线概率持续1秒以上低于0.08且摄像头也看不到时不显示该线(达到0.12再显示, 橙色线保留)。IONIQ 9、EV9 保持原有车道线显示。\n- 虚线: 摄像头识别为虚线的车道线显示为虚线(IONIQ 5 PE、Grandeur GN7、EV4)。\n- 车道高亮: 转向工作时按状态改变车道颜色。无车道模式绿色、车道模式天蓝色、转向角误差持续0.3秒黄色、转向极限红色、变道中绿色。有隐藏车道线时不改变。\n- 前车圆环: 前车可见时, 巡航中蓝色圆环位于 openpilot 保持的目标车距, 非巡航时显示白色圆环。\n- 弹窗: 巡航开启或解除时显示原厂提示弹窗2秒。\n- 警告文字: 部分 openpilot 警告(车速过高、转向/SCC 不可用、转向极限、CAN/传感器异常)显示为原厂文字。转向极限(注意周围)文字同时像原厂一样发出1秒双响提示音。DBC 未列出的文字仅在 IONIQ 5 PE、Grandeur GN7、EV4 上显示。\n- HDP 图标: 巡航或转向工作时点亮 HDP 图标(IONIQ 5 PE、Grandeur GN7、EV4)。",
+      "min": 0,
+      "max": 1,
+      "default": 0,
+      "unit": 1,
+      "control": "toggle"
+    },
+    {
+      "group": "시작",
+      "name": "CcncTrafficBackground",
+      "title": "CCNC 계기판 신호등 배경",
+      "descr": "0: 끔(기본, 배경은 기존 그대로), 1: 켬. 0은 이 항목만 끕니다(항상 적용되는 계기판 수정은 「CCNC 계기판 순정형 표시」 참고).\n오픈파일럿이 신호등을 감지하면 CCNC 계기판 배경을 바꿉니다. 빨간불은 감지되는 동안 빨간 배경, 초록불은 바뀐 뒤 2초만 초록 배경입니다. 기기 화면 신호등 표시와 같은 판단(longitudinalPlan.trafficState)을 씁니다. 신호 배경이 크루즈·회전 배경보다 우선합니다.\n- 적용: 「CCNC 계기판 순정형 표시」와 같은 차량(현대·기아·제네시스 CAN-FD에서 카메라 SCC에 오픈파일럿 롱컨(HyundaiCameraSCC 1·2)을 쓰고, 카메라의 CCNC 계기판 프레임 0x161을 받은 차량). 약 1초 안에 반영됩니다.\n- 배경 값 5(빨강)·8(초록)은 DBC에 없는 값으로, 아이오닉5 PE 계기판에서 확인했습니다.",
+      "egroup": "START",
+      "etitle": "CCNC cluster traffic-light background",
+      "edescr": "0: Off (default, background as before), 1: On. 0 turns off only this item (for the cluster fixes that always apply see CCNC cluster stock-style display).\nWhen openpilot detects a traffic light, changes the CCNC cluster background: red while a red light is detected, green for only 2 s after it turns green. Uses the same detection as the device's traffic-light display (longitudinalPlan.trafficState). The light background takes priority over the cruise and turn backgrounds.\n- Applies to the same cars as CCNC cluster stock-style display (Hyundai/Kia/Genesis CAN-FD cars on camera SCC with openpilot longitudinal control (HyundaiCameraSCC 1 or 2) once the camera's CCNC cluster frame 0x161 has been received), within about 1 s.\n- The background values 5 (red) and 8 (green) are not in the DBC; they were checked on an IONIQ 5 PE cluster.",
+      "cgroup": "启动设置",
+      "ctitle": "CCNC 仪表信号灯背景",
+      "cdescr": "0: 关闭(默认, 背景与以前相同), 1: 开启。0 只关闭此项目(始终生效的仪表修正见「CCNC 仪表原厂式显示」)。\nopenpilot 检测到信号灯时改变 CCNC 仪表背景: 检测到红灯期间为红色背景, 变绿后仅2秒为绿色背景。与设备画面信号灯显示使用相同判断(longitudinalPlan.trafficState)。信号灯背景优先于巡航和转弯背景。\n- 适用: 与「CCNC 仪表原厂式显示」相同的车型(现代·起亚·捷尼赛思 CAN-FD 车型, 摄像头 SCC 且使用 openpilot 纵向控制(HyundaiCameraSCC 1·2), 并已收到摄像头的 CCNC 仪表报文 0x161), 约1秒内生效。\n- 背景值 5(红)、8(绿)不在 DBC 中, 已在 IONIQ 5 PE 仪表上确认。",
+      "min": 0,
+      "max": 1,
+      "default": 0,
+      "unit": 1,
+      "control": "toggle"
     },
     {
       "group": "시작",
