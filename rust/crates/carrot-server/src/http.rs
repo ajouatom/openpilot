@@ -112,6 +112,7 @@ impl Application {
         let web_navi = crate::web_navi::Service::start(params.native_params().cloned()).ok();
         crate::egpu_library::start_maintenance(&config.repository, params.native_params().cloned());
         crate::web_settings::forget_stored_upload_default(&config.state.join("web_settings.json"));
+        crate::egpu_library::ensure_default_app_pick(&config.repository);
         let mut application = Self {
             terminal: crate::terminal::Config::original()
                 .and_then(crate::terminal::Service::start)

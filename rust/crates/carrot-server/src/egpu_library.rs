@@ -24,16 +24,40 @@ fn jetlink_cache() -> std::path::PathBuf {
 /// handed to it as a pick at the next connection while parked instead of
 /// waiting for a reboot (the eGPU keeps its next-boot rule).
 fn pick_for_app(library: &Library, key: &str) -> Result<(), String> {
+    let at = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|e| e.to_string())?
+        .as_secs_f64();
+    write_pick(library, key, at)
+}
+
+/// The pick an untouched model library stands for: the card shows its
+/// choice (N16 by default) as the model, but no pick was sent until one was
+/// made here, so an App with no model loaded waited forever ("No such file
+/// or directory" from the missing link socket). Dated 1970, it is older than
+/// any pick made in the App, so a model chosen there still wins.
+pub fn ensure_default_app_pick(repository: &Path) {
+    let cache = jetlink_cache();
+    if cache.join(openpilot_jetlink::app_pick::FILE).exists() {
+        return;
+    }
+    let library = Library::for_runtime(repository);
+    let result = library
+        .preferred()
+        .map_err(|e| e.to_string())
+        .and_then(|key| write_pick(&library, &key, 1.));
+    if let Err(error) = result {
+        eprintln!("model library: default App pick not saved: {error}");
+    }
+}
+
+fn write_pick(library: &Library, key: &str, at: f64) -> Result<(), String> {
     let catalog = library.catalog().map_err(|e| e.to_string())?;
     let spec = library.model_spec(key).map_err(|e| e.to_string())?;
     let spec = openpilot_jetlink::model_spec::ModelSpec::parse(
         &serde_json::to_vec(&spec).map_err(|e| e.to_string())?,
     )
     .map_err(|e| e.to_string())?;
-    let at = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_err(|e| e.to_string())?
-        .as_secs_f64();
     let pick = openpilot_jetlink::app_pick::AppPick {
         model: key.into(),
         name: catalog[key]["name"].as_str().unwrap_or(key).into(),
