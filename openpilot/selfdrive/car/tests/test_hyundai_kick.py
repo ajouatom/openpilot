@@ -101,6 +101,46 @@ def test_short_driver_press_survives_release_in_same_can_batch(output):
   assert not gate.update(True, 10.02)
 
 
+@pytest.mark.parametrize('enabled', [False, True])
+def test_ordinary_stalk_counters_work_without_kick_ownership(output, enabled):
+  gate, values = output
+  values['CanfdBlinkerKick'] = enabled
+  cs = NS(canValid=True, leftBlinkerStalkCount=254, rightBlinkerStalkCount=7)
+  gate.observe_driver([], cs, 10.)
+  assert not cs.turnSignalDriverValid
+  assert (cs.leftBlinkerStalkCount, cs.rightBlinkerStalkCount) == (254, 7)
+  cs = NS(canValid=True, leftBlinkerStalkCount=1, rightBlinkerStalkCount=8)
+  gate.observe_driver([], cs, 10.01)
+  assert (cs.leftBlinkerStalkCount, cs.rightBlinkerStalkCount) == (1, 8)
+
+
+def test_counter_source_handoff_does_not_create_a_press(output):
+  gate, values = output
+  gate.update(True, 10.)
+  cs = NS(canValid=True, leftBlinkerStalkCount=7, rightBlinkerStalkCount=2)
+  gate.observe_driver([lever_frame(0)], cs, 10.)
+  # An unverified legacy count must not enter the trusted counter stream.
+  cs = NS(canValid=True, leftBlinkerStalkCount=8, rightBlinkerStalkCount=2)
+  gate.observe_driver([lever_frame(0, 10.01)], cs, 10.01)
+  assert cs.leftBlinkerStalkCount == 7
+  values['CanfdBlinkerKick'] = False
+  gate.update(True, 10.02)
+  cs = NS(canValid=True, leftBlinkerStalkCount=8, rightBlinkerStalkCount=2)
+  gate.observe_driver([], cs, 10.02)
+  assert cs.leftBlinkerStalkCount == 7
+  cs = NS(canValid=True, leftBlinkerStalkCount=9, rightBlinkerStalkCount=3)
+  gate.observe_driver([], cs, 10.03)
+  assert (cs.leftBlinkerStalkCount, cs.rightBlinkerStalkCount) == (8, 3)
+  values['CanfdBlinkerKick'] = True
+  gate.update(True, 10.04)
+  cs = NS(canValid=True, leftBlinkerStalkCount=9, rightBlinkerStalkCount=3)
+  gate.observe_driver([lever_frame(0, 10.04)], cs, 10.04)
+  assert (cs.leftBlinkerStalkCount, cs.rightBlinkerStalkCount) == (8, 3)
+  cs = NS(canValid=True, leftBlinkerStalkCount=10, rightBlinkerStalkCount=3)
+  gate.observe_driver([lever_frame(1, 10.05)], cs, 10.05)
+  assert (cs.leftBlinkerStalkCount, cs.rightBlinkerStalkCount) == (9, 3)
+
+
 @pytest.mark.parametrize('blocked', ['owner', 'old_owner', 'off', 'offroad', 'invalid_can', 'bad_crc',
                                    'wrong_bus', 'tx_echo', 'old_frame', 'future_frame', 'short_frame'])
 def test_unverified_lever_cannot_bypass_lamp_isolation(output, blocked):
