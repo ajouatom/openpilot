@@ -97,6 +97,15 @@ set_cpu_limit() {
   done
 }
 
+# 6999's branch change and repair call rust/bin/openpilot-runtime-install. The
+# runtime files ship the old packaged-runtime installer, which only stages a
+# verified Rust package: until a first build finished, choosing carrot-wip
+# there failed and the device stayed on this branch. Updates are plain Git.
+install_update_helper() {
+  [[ -d rust/bin && ! -L rust/bin ]] || return 0
+  install -m 755 rust/tools/device_stage_update.sh rust/bin/openpilot-runtime-install
+}
+install_update_helper
 start_ui
 for core in 4 5 6 7; do
   [[ -f /AGNOS ]] && echo 1 | sudo -n tee "/sys/devices/system/cpu/cpu$core/online" > /dev/null
@@ -131,6 +140,7 @@ if [[ -L rust/bin || ! -f $assets_stamp || $(<"$assets_stamp") != "$assets_id" ]
   # The unpacked models equal their LFS pointers through the clean filter;
   # refreshing the index is enough for Git to see the checkout as unchanged.
   git update-index -q --refresh || true
+  install_update_helper
   start_ui
 fi
 
