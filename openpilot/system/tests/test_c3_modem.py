@@ -7,6 +7,7 @@ import queue
 import subprocess
 import sys
 from types import SimpleNamespace
+from unittest.mock import patch
 
 import pytest
 
@@ -142,7 +143,7 @@ def test_modem_recovery_is_once_bounded_and_c3_only(mocker, device_type, version
         "HardwareState": SimpleNamespace, "time": mocker.Mock(), "os": mocker.Mock()}
   if os.getenv("NATIVE_DEVICE_TESTS") == "1":
     from openpilot.system.hardware import hardwared
-    with mocker.patch.dict(hardwared.hw_state_thread.__globals__, ns):
+    with patch.dict(hardwared.hw_state_thread.__globals__, ns):
       hardwared.hw_state_thread(end_event, mocker.Mock())
   else:
     fn = load_members("openpilot/system/hardware/hardwared.py")["hw_state_thread"]

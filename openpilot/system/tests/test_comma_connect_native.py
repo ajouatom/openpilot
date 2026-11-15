@@ -66,7 +66,7 @@ def test_real_sentry_init(mocker):
 def test_real_prime_and_map_boundaries():
   from openpilot.selfdrive.ui.lib.prime_state import PrimeState, PrimeType
   from openpilot.selfdrive.navigation.tiles import RemoteTiles
-  Params().put("PrimeType", str(int(PrimeType.LITE)))
+  Params().put("PrimeType", int(PrimeType.LITE))
   prime = PrimeState()
   prime.start()
   prime._fetch_prime_status()
