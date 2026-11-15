@@ -72,7 +72,64 @@ class Tici(HardwareBase):
       return None
     return Amplifier()
 
+  def _get_qmi_modem_state(self) -> dict:
+    import dbus
+
+    service = "org.freedesktop.ModemManager1"
+    modem_interface = service + ".Modem"
+    bus = dbus.SystemBus()
+    manager = bus.get_object(service, "/org/freedesktop/ModemManager1", introspect=False)
+    objects = dbus.Interface(manager, "org.freedesktop.DBus.ObjectManager").GetManagedObjects(timeout=0.5)
+    modem = next((interfaces for interfaces in objects.values() if modem_interface in interfaces), {})
+    if not modem:
+      return {}
+
+    props = modem[modem_interface]
+    cellular = modem.get(modem_interface + ".Modem3gpp", {})
+    sim_path = props.get("Sim", "/")
+    state = int(props.get("State", 0))
+    access = int(props.get("AccessTechnologies", 0))
+    # ModemManager MMModemAccessTechnology bit flags.
+    network = "lte" if access & (1 << 14) else "utran" if access & 0x3e0 else "gsm" if access & 0x1e else ""
+    result = {
+      "connected": state == 11,
+      "state": {-1: "FAILED", 0: "UNKNOWN", 1: "INITIALIZING", 2: "LOCKED", 3: "DISABLED", 4: "DISABLING",
+                5: "ENABLING", 6: "ENABLED", 7: "SEARCHING", 8: "REGISTERED", 9: "DISCONNECTING",
+                10: "CONNECTING", 11: "CONNECTED"}.get(state, "UNKNOWN"),
+      "network_type": network,
+      "operator": str(cellular.get("OperatorName", "")),
+      "signal_quality": int(props.get("SignalQuality", (0, False))[0]),
+      "imei": str(props.get("EquipmentIdentifier", "")),
+      "modem_version": str(props.get("Revision", "")),
+      "sim_state": "ABSENT",
+    }
+    if sim_path != "/":
+      # A present SIM can still require a PIN/PUK, even when its properties are readable.
+      result["sim_state"] = {0: "UNKNOWN", 1: "READY", 2: "SIM PIN", 3: "SIM PIN2", 4: "SIM PUK", 5: "SIM PUK2"}.get(
+        int(props.get("UnlockRequired", 0)), "LOCKED")
+      try:
+        sim = bus.get_object(service, sim_path, introspect=False)
+        sim_props = dbus.Interface(sim, "org.freedesktop.DBus.Properties").GetAll(service + ".Sim", timeout=0.5)
+        result.update(iccid=str(sim_props.get("SimIdentifier", "")),
+                      mcc_mnc=str(sim_props.get("OperatorIdentifier", "")))
+      except dbus.DBusException:
+        result["sim_state"] = "UNKNOWN"
+    for counter in ("tx_bytes", "rx_bytes"):
+      try:
+        result[counter] = int(Path("/sys/class/net/wwan0/statistics", counter).read_text())
+      except OSError:
+        pass
+    return result
+
   def get_modem_state(self) -> dict:
+    if self.get_device_type() == "tici":
+      import dbus
+
+      try:
+        return self._get_qmi_modem_state()
+      except dbus.DBusException:
+        return {}
+
     try:
       with open(MODEM_STATE_PATH) as f:
         return json.load(f)

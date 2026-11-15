@@ -1,4 +1,5 @@
 import json
+import pytest
 from Crypto.PublicKey import RSA
 from pathlib import Path
 
@@ -9,6 +10,10 @@ from openpilot.system.hardware.hw import Paths
 
 
 class TestRegistration:
+
+  @pytest.fixture(autouse=True)
+  def enable_comma_connect(self, monkeypatch):
+    monkeypatch.setenv("COMMA_CONNECT_ENABLED", "1")
 
   def setup_method(self):
     # clear params and setup key paths

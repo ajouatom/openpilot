@@ -30,7 +30,7 @@ from websocket import (ABNF, WebSocket, WebSocketException, WebSocketTimeoutExce
 import openpilot.cereal.messaging as messaging
 from openpilot.cereal import log
 from openpilot.cereal.services import SERVICE_LIST
-from openpilot.common.api import Api, get_key_pair
+from openpilot.common.api import Api, comma_connect_enabled, get_key_pair
 from openpilot.common.utils import CallbackReader, get_upload_stream
 from openpilot.common.params import Params
 from openpilot.common.realtime import set_core_affinity
@@ -806,6 +806,9 @@ def backoff(retries: int) -> int:
 
 
 def main(exit_event: threading.Event | None = None):
+  if not comma_connect_enabled():
+    return
+
   try:
     set_core_affinity([0, 1, 2, 3])
   except Exception:

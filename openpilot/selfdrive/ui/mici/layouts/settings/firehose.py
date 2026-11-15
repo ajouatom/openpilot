@@ -3,7 +3,7 @@ import threading
 import time
 import pyray as rl
 
-from openpilot.common.api import api_get
+from openpilot.common.api import api_get, comma_connect_enabled
 from openpilot.common.params import Params
 from openpilot.common.swaglog import cloudlog
 from openpilot.selfdrive.ui.lib.api_helpers import get_token
@@ -198,6 +198,9 @@ class FirehoseLayoutBase(Widget):
       return tr("INACTIVE: connect to an unmetered network"), self.RED
 
   def _fetch_firehose_stats(self):
+    if not comma_connect_enabled():
+      return
+
     try:
       dongle_id = self._params.get("DongleId")
       if not dongle_id or dongle_id == UNREGISTERED_DONGLE_ID:
