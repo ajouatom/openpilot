@@ -66,7 +66,13 @@ CI나 검증이 작업을 막으면 우회로를 짓지 말고 사용자에게 �
 
 ## 6. 브랜치
 
-저장소는 `bin9208/openpilot-rust`만 쓴다. `bin9208/openpilot`, `ajouatom/openpilot`에는 push하지 않는다.
+작업은 `bin9208/openpilot-rust`에서 한다. `bin9208/openpilot`에는 push하지 않는다.
+
+`ajouatom/openpilot`(원본)에는 다른 사람들이 쓰고 시험하는 `bin9208/carrot-rust-dev` 브랜치 하나만 있다.
+
+- 이 저장소에서 작업을 끝내고 사용자가 확인한 커밋만 그 브랜치에 올린다. 두 쪽은 같은 커밋 이력을 따른다.
+- 원본에서는 이 브랜치만 다룬다. 다른 브랜치·태그를 만들거나 바꾸거나 지우지 않고, 기능 브랜치와 PR도 만들지 않는다.
+- 명령: `git push --no-follow-tags https://github.com/ajouatom/openpilot.git <SHA>:refs/heads/bin9208/carrot-rust-dev` (강제 push 금지)
 
 | 브랜치 | 내용 |
 | --- | --- |
