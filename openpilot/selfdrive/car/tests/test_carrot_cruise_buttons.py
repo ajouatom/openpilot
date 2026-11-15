@@ -805,11 +805,11 @@ def test_set_engage_without_the_option_starts_at_the_current_speed(v_ego, expect
   assert helper._update_cruise_buttons(CS, CC, 64) == expected
 
 
-@pytest.mark.parametrize("frame, requested", [(50, True), (51, False)])
-def test_stock_cruise_adopt_engages_at_the_stock_set_speed(frame, requested):
+@pytest.mark.parametrize("frame, cancel_latched, requested", [(50, False, True), (51, False, False), (50, True, False)])
+def test_stock_cruise_adopt_engages_at_the_stock_set_speed(frame, cancel_latched, requested):
   helper, CS, CC = make_cruise_helper(70, 0, carrot_cruise_active=False, cruise_enabled=False)
   helper.autoCruiseControl = 0  # restart hand-over does not depend on automatic engage settings
-  helper._cruise_cancel_state = True
+  helper._cruise_cancel_state = cancel_latched  # a cancel given since the restart blocks the hand-over
   helper.frame, helper.stock_adopt_kph = frame, 87.
   assert helper._adopt_stock_cruise(CC, 70) == 87.
   assert helper._activate_cruise == (1 if requested else 0)

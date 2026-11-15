@@ -398,25 +398,26 @@ class CarState(CarStateBase):
         and self.MainMode_ACC and not self.manual_main_off_latched):
       self.main_enabled = True
 
-  def _update_stock_adopt(self, camera_scc_seen, stock_set_speed_ms, driver_off=False):
+  def _update_stock_adopt(self, camera_scc_seen, stock_set_speed_ms, off_requested=False):
     """Restart hand-over of the camera's cruising stock SCC.
 
     While pending, carcontroller sends no SCC_CONTROL (panda keeps forwarding the camera's own frame, so the car keeps
-    cruising as before the restart) and cruise.py requests an engage every 0.5 s at stock_adopt_kph. That request
-    deliberately bypasses the cancel latch: at startup a latched cancel state from before the restart must not block
-    the hand-over. Because of that bypass, the driver's own intent is checked here instead:
-      - driver_off (CANCEL / pause, or any MAIN button activity): the hand-over ends at once. The same button already
-        reaches the camera, so stock cruise stops anyway; ending here only prevents openpilot from re-engaging in the
-        ~0.1 s before the camera's ACCMode leaves 1/2, and from re-arming MAIN the driver just turned off.
+    cruising as before the restart) and cruise.py requests an engage every 0.5 s at stock_adopt_kph, subject to the
+    normal interlocks and the cancel latch. The wait ends, and normal SCC_CONTROL (ACCMode 0 until openpilot engages)
+    resumes, when:
+      - off_requested: the driver's CANCEL / pause or any MAIN button activity on the car's buttons, or a cancel / off
+        request inside openpilot (cancel latch or activateCruise < 0 from the previous frame: Bluetooth remote cancel,
+        Carrot CRUISE OFF). The driver wants cruise off, so openpilot must not take it over, and our ACCMode 0 also
+        stops the stock cruise for the requests the camera never receives (remote, Carrot, NORMAL_CRUISE_MAIN_BTN,
+        which create_ccnc_messages does not forward).
       - stock not cruising (MAIN off, or ACCMode not 1 enabled / 2 gas override) when the camera frame is first seen:
         a normal start, never a hand-over.
-      - STOCK_ADOPT_FRAMES (30 s) after start: a normal start from then on. If openpilot could not engage by then,
-        SCC_CONTROL resumes as on a normal start (carrot-wip behaviour, which does this from the first frame).
+      - STOCK_ADOPT_FRAMES (30 s) after start: a normal start from then on (carrot-wip does this from the first frame).
     Once openpilot engages, carcontroller clears stock_adopt_pending and normal control continues."""
     self.stock_adopt_kph = 0.
     if not self.stock_adopt_pending:
       return
-    if driver_off:
+    if off_requested:
       self.stock_adopt_pending = False
       return
     self.stock_adopt_frames += 1
@@ -1598,7 +1599,8 @@ class CarState(CarStateBase):
       self.ACCMode = cp_cam.vl["SCC_CONTROL"]["ACCMode"]
       self.LFA_ICON = cp_cam.vl["LFAHDA_CLUSTER"]["HDA_LFA_SymSta"]
       self._update_stock_adopt(0x1A0 in cp_cam.seen_addresses, cp_cam.vl["SCC_CONTROL"]["VSetDis"] * speed_factor,
-                               cruise_button == Buttons.CANCEL or bool(self.main_buttons[-1]) or main_button_released)
+                               cruise_button == Buttons.CANCEL or bool(self.main_buttons[-1]) or main_button_released
+                               or self.out.cruiseCancelState or self.out.activateCruise < 0)
     self._update_canfd_main_enabled(cruise_button, main_button_released)
     # CAN FD cars enable on main button press, set available if no TCS faults preventing engagement
     ret.cruiseState.available = self.main_enabled and self.controls_ready_count >= READY_COUNT_OK #cp.vl["TCS"]["ACCEnable"] == 0

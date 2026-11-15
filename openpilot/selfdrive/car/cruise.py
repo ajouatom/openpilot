@@ -890,12 +890,13 @@ class VCruiseCarrot:
 
   def _adopt_stock_cruise(self, CC, v_cruise_kph):
     # The device (re)started while the camera's stock SCC was cruising: take it over at the driver's stock set speed.
-    # Interlocks in _cruise_control still apply. Re-request every 0.5 s: engage needs a rising edge, and an early one
-    # can fall on a no-entry frame (e.g. still initializing).
+    # Interlocks and the cancel latch in _cruise_control still apply (the latch starts False after a restart, so it
+    # only blocks a cancel the driver gave since). Re-request every 0.5 s: engage needs a rising edge, and an early one
+    # can fall on a no-entry frame (e.g. still initializing). carstate ends the wait on any cancel / off request.
     if self.stock_adopt_kph <= 0 or CC.enabled:
       return v_cruise_kph
     if self.frame % 50 == 0:
-      self._cruise_control(1, -1, "Cruise on (stock SCC)", allow_cancel_state=True, manual=True)
+      self._cruise_control(1, -1, "Cruise on (stock SCC)", manual=True)
     return self.stock_adopt_kph
 
   def _cruise_control(self, enable, cancel_timer, reason, allow_cancel_state=False, manual=False):

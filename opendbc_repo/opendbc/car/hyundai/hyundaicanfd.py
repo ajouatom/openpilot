@@ -1215,7 +1215,9 @@ class CameraSetSpeedSync:
       engaged. The presses go to the camera bus only (CAN.CAM).
     - The target is the driver's cruise set speed (CarState.vCruiseCluster), not hudControl.setSpeed: the latter is
       the displayed speed, which follows the planned speed at a red light and temporary curve/navigation speeds.
-    - Called only through CameraSync (see its gates); always on for camera-SCC CAN-FD with openpilot longitudinal.
+    - Called only through CameraSync (see its gates); always on for camera-SCC CAN-FD with openpilot longitudinal on
+      the CRUISE_BUTTONS / CRUISE_BUTTONS_ALT path. 0x10B ALT2 cars use create_alt2_adas_button_request, which has
+      no sync.
 
   Rules (each one prevents a specific, observed or code-proven failure):
     - target outside MIN..MAX (stock set range) = no press: an unreachable target would otherwise be pressed forever,
