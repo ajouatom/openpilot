@@ -29,3 +29,7 @@ openpilot-logging = { path = "../logging", optional = true }
 name = "openpilot-mapsd"
 path = "src/main.rs"
 required-features = ["native"]
+
+[[example]]
+name = "replay_maps"
+required-features = ["native"]

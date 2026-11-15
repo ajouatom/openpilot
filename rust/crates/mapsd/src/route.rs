@@ -43,7 +43,11 @@ impl RouteTracker {
     /// `route`: (longitude, latitude) rows, at least two.
     pub fn new(route: Vec<[f64; 2]>) -> Option<Self> {
         (route.len() >= 2 && route.len() <= 4096 && route.iter().flatten().all(|v| v.is_finite()))
-            .then(|| Self { distance: cumulative_distance(&route), route, progress: f64::NEG_INFINITY })
+            .then(|| Self {
+                distance: cumulative_distance(&route),
+                route,
+                progress: f64::NEG_INFINITY,
+            })
     }
 
     fn project(&mut self, longitude: f64, latitude: f64) -> f64 {
@@ -54,10 +58,15 @@ impl RouteTracker {
         let n = self.route.len() - 1;
         let near: Vec<usize> = (0..n)
             .filter(|&i| {
-                self.distance[i + 1] >= self.progress + WINDOW.0 && self.distance[i] <= self.progress + WINDOW.1
+                self.distance[i + 1] >= self.progress + WINDOW.0
+                    && self.distance[i] <= self.progress + WINDOW.1
             })
             .collect();
-        let near = if near.is_empty() { (0..n).collect() } else { near };
+        let near = if near.is_empty() {
+            (0..n).collect()
+        } else {
+            near
+        };
         let mut best = (f64::INFINITY, near[0], 0.);
         for &i in &near {
             let (a, b) = (to(self.route[i]), to(self.route[i + 1]));
@@ -65,13 +74,15 @@ impl RouteTracker {
             let along = (((point[0] - a[0]) * ab[0] + (point[1] - a[1]) * ab[1])
                 / (ab[0] * ab[0] + ab[1] * ab[1]).max(1e-12))
             .clamp(0., 1.);
-            let d = (a[0] + along * ab[0] - point[0]).powi(2) + (a[1] + along * ab[1] - point[1]).powi(2);
+            let d = (a[0] + along * ab[0] - point[0]).powi(2)
+                + (a[1] + along * ab[1] - point[1]).powi(2);
             if d < best.0 {
                 best = (d, i, along);
             }
         }
         let (_, segment, along) = best;
-        let reached = self.distance[segment] + along * (self.distance[segment + 1] - self.distance[segment]);
+        let reached =
+            self.distance[segment] + along * (self.distance[segment + 1] - self.distance[segment]);
         self.progress = self.progress.max(reached);
         self.progress
     }
@@ -79,7 +90,12 @@ impl RouteTracker {
     /// (longitude, latitude, bearing) on the route at `progress`.
     pub fn pose(&self, progress: f64) -> (f64, f64, f64) {
         let end = *self.distance.last().expect("two points");
-        let ends = [progress - HEADING_HALF_WINDOW, progress, progress + HEADING_HALF_WINDOW].map(|v| v.clamp(0., end));
+        let ends = [
+            progress - HEADING_HALF_WINDOW,
+            progress,
+            progress + HEADING_HALF_WINDOW,
+        ]
+        .map(|v| v.clamp(0., end));
         let lon: Vec<f64> = self.route.iter().map(|p| p[0]).collect();
         let lat: Vec<f64> = self.route.iter().map(|p| p[1]).collect();
         let lons = ends.map(|e| interp(e, &self.distance, &lon));
@@ -92,7 +108,13 @@ impl RouteTracker {
     }
 
     /// Commit progress only when the pose stays within `max_distance` m of the fix.
-    pub fn update_pose(&mut self, longitude: f64, latitude: f64, advance: f64, max_distance: f64) -> Option<(f64, f64, f64)> {
+    pub fn update_pose(
+        &mut self,
+        longitude: f64,
+        latitude: f64,
+        advance: f64,
+        max_distance: f64,
+    ) -> Option<(f64, f64, f64)> {
         let previous = self.progress;
         let progress = self.project(longitude, latitude);
         let pose = self.pose(progress + advance);
@@ -124,7 +146,11 @@ pub struct RouteSelection {
 
 impl RouteSelection {
     /// The route to switch to, if this message replaces the current one.
-    pub fn update(&mut self, carrot_route_id: u64, route: &[[f64; 2]]) -> Option<(u64, Vec<[f64; 2]>)> {
+    pub fn update(
+        &mut self,
+        carrot_route_id: u64,
+        route: &[[f64; 2]],
+    ) -> Option<(u64, Vec<[f64; 2]>)> {
         if carrot_route_id != 0 {
             self.stamped = true;
             if carrot_route_id == self.id {

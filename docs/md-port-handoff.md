@@ -264,6 +264,7 @@ tmux 로그에 B1 흔적은 없었다. 사용자에게 B1 보드 유무를 아�
 | `logging` 초당 요약(`runtimeTiming`) | `runtime_diagnostics.py`의 `RuntimeDiagnostics`와 대조함. `communication_snapshot`은 안 봄 |
 | `modeld` 카메라 짝 맞춤과 누락 기록 | `camera_sync.py`·`camera_gap.py`와 대조함. Rust는 카메라 프레임을 매번 통째로 복사한다(`drivingd/src/camera.rs`). 원본은 복사하지 않는다. 최적화 단계에서 볼 것 |
 | `card` 크루즈 CANCEL 래치의 게시와 소비 | `card.py`·`hyundaicanfd.py`의 해당 줄만 대조함. `cruise.py` 전체는 안 봄 |
+| N16 경로(`drivingd` 내비 입력, `mapsd`, `action` 사용) | 원본이 carrot-wip이 아니라 폐기된 `carrot-nav`(`c1a28aff4`, 기본 체크아웃에서 `git show`)다. 47칸 내비 벡터, nav_map 값 범위(0–255), `action_t`, `action[0]/max(1,v)²` 조향은 같다. 다른 점: carrot-nav의 carrot_man은 `navRoute.carrotRouteId`를 붙이는데 우리 carrot_man(carrot-wip)은 0이라, mapsd가 경로를 받지 못해 모든 주행에서 검은 지도였다(`ef6c0f1f3`에서 좌표로 경로를 구분하게 고침). 타일은 comma API 대신 `MapboxPublicKey` 또는 `MapTilesUrl`만 쓴다 |
 | 나머지 전부 | 안 봄 |
 
 ### 4. 기기에서 본 미해결 현상
