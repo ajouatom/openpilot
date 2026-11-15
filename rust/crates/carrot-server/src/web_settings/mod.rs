@@ -48,6 +48,37 @@ pub fn sanitize(raw: &Value, catalog: &Catalog) -> Result<Value, Error> {
     Ok(settings)
 }
 
+/// Drops this port's upload default from a file an earlier build wrote it to,
+/// leaving every other key as it is, so carrot-wip uses its own default again.
+pub fn forget_stored_upload_default(path: &Path) {
+    let Ok(text) = fs::read_to_string(path) else {
+        return;
+    };
+    let Ok(mut value @ Value::Object(_)) = Value::parse(&text) else {
+        return;
+    };
+    let Value::Object(fields) = &mut value else {
+        return;
+    };
+    let before = fields.len();
+    fields.retain(|(name, value)| {
+        !(name
+            .iter()
+            .copied()
+            .eq("web_upload_url".chars().map(u32::from))
+            && value.text_eq(openpilot_web_upload::DEFAULT_WEB_UPLOAD_URL))
+    });
+    if fields.len() == before {
+        return;
+    }
+    let mut temporary = path.as_os_str().to_os_string();
+    temporary.push(".tmp");
+    let temporary = PathBuf::from(temporary);
+    if crate::state_json::write_json(&temporary, &value).is_ok() {
+        let _ = fs::rename(&temporary, path);
+    }
+}
+
 impl WebSettings {
     pub fn new(settings_path: &Path, catalog_path: &Path) -> Self {
         Self {
@@ -100,7 +131,21 @@ impl WebSettings {
         let mut temporary = self.settings_path.as_os_str().to_os_string();
         temporary.push(".tmp");
         let temporary = PathBuf::from(temporary);
-        crate::state_json::write_json(&temporary, &clean)?;
+        // carrot-wip reads this file too and takes a stored web_upload_url
+        // over its own default. Writing this port's default made a device
+        // switched back to carrot-wip keep uploading to this port's server;
+        // left out, each branch falls back to its own default.
+        let mut stored = clean.clone();
+        if let Value::Object(fields) = &mut stored {
+            fields.retain(|(name, value)| {
+                !(name
+                    .iter()
+                    .copied()
+                    .eq("web_upload_url".chars().map(u32::from))
+                    && value.text_eq(openpilot_web_upload::DEFAULT_WEB_UPLOAD_URL))
+            });
+        }
+        crate::state_json::write_json(&temporary, &stored)?;
         fs::rename(temporary, &self.settings_path)?;
         Ok(clean)
     }
@@ -124,5 +169,65 @@ impl WebSettings {
             }
         }
         self.write(&current)
+    }
+}
+
+#[cfg(test)]
+mod upload_default_tests {
+    use super::*;
+
+    #[test]
+    fn this_ports_upload_default_is_not_stored_for_carrot_wip_to_inherit() {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("web_settings.json");
+        let settings = WebSettings::new(&path, &root.path().join("catalog.json"));
+        let written = settings
+            .update(&Value::parse(r#"{"start_page":"tools"}"#).unwrap())
+            .unwrap();
+        // The caller and later reads still see this port's default.
+        assert!(written
+            .get("web_upload_url")
+            .text_eq(openpilot_web_upload::DEFAULT_WEB_UPLOAD_URL));
+        let stored = fs::read_to_string(&path).unwrap();
+        assert!(!stored.contains("web_upload_url"), "{stored}");
+        assert!(settings
+            .read()
+            .unwrap()
+            .get("web_upload_url")
+            .text_eq(openpilot_web_upload::DEFAULT_WEB_UPLOAD_URL));
+        // A saved original-project address reads as this port's default and is dropped.
+        fs::write(
+            &path,
+            r#"{"web_upload_url":"https://upload.shind0.synology.me"}"#,
+        )
+        .unwrap();
+        settings
+            .update(&Value::parse(r#"{"start_page":"tools"}"#).unwrap())
+            .unwrap();
+        assert!(!fs::read_to_string(&path)
+            .unwrap()
+            .contains("web_upload_url"));
+        // A file an earlier build wrote keeps its other keys.
+        fs::write(
+            &path,
+            format!(
+                r#"{{"carrot_only":1,"web_upload_url":"{}"}}"#,
+                openpilot_web_upload::DEFAULT_WEB_UPLOAD_URL
+            ),
+        )
+        .unwrap();
+        forget_stored_upload_default(&path);
+        let left = fs::read_to_string(&path).unwrap();
+        assert!(
+            left.contains("carrot_only") && !left.contains("web_upload_url"),
+            "{left}"
+        );
+        // A server the user chose is kept.
+        settings
+            .update(&Value::parse(r#"{"web_upload_url":"https://example.com"}"#).unwrap())
+            .unwrap();
+        assert!(fs::read_to_string(&path)
+            .unwrap()
+            .contains("https://example.com"));
     }
 }
