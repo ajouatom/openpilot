@@ -1,5 +1,23 @@
 # Repository memory
 
+- 2026-11-15: Reporter Ioniq5 b4dcfe6ce00fe149 route1c/13..15 on16df8e63
+  contains three stationary P/onroad minutes, controls disabled.120 distinct
+  connection transitions,24 PreparationDeferred/waiting cycles averaging7.393s,
+  no ready state or jetsonPerformance. Each deferral precedes software net-down
+  by0.229..0.565s. Internal model3600frames averages25.398ms/max38.925ms,
+  zero frame gaps/invalid cameraOdometry; all3600 livePose valid with good flags.
+  Current Jetson firmware/Super/loaded model and exact deferral reason unrecorded.
+  Loaded=None/wrong SHA while onroad reproduces ignition-off deferral in real
+  mac.prepare; this is a candidate explanation, not proof for this device.
+  Our Nov14 transition event omitted preparation.message and used error='' on
+  every event; SwagLogger interprets presence as ERROR, yielding120 duplicated
+  errorLogMessage events. bfcf747adf records bounded reason/model identities,
+  uses ERROR only for retrying/blocked, shows ignition-off requirement in UI.
+  f636c0b5a2 tests real severity separately from device ZMQ sink.90 local status/
+  startup/HUD checks and Linux43680147528 main2596/56skip plus other groups pass.
+  No reporter device writes or connection-recovery proof.
+  Evidence .analysis/scratch/2026-11-15-ioniq5-route1c.
+
 - 2026-11-15: Owner reports missed turns/lanes and straight-road indications
   after Nov14 fixes. Post-update11e0 evening/11e1 morning run91eb1e86bb and
   B1 release5 exact ELF.35 requests, zero reported driver_override, three
