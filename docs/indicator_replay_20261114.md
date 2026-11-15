@@ -149,3 +149,90 @@ faults and the two moving ACK-loss causes remain unresolved by this patch.
 Vehicle installation and physical verification of these November 15 changes
 remain pending. Private evidence is in
 `.analysis/archive/2026-11-15/indicators/INDEX.md`.
+
+## November 15 complete retained-log follow-up
+
+This follow-up uses baseline `b12855935aa` and 403 identified full-log segments
+from 52 routes. There are 407 local full-log copies and 181 additional qlog-only
+segments. The aligned observer replay covers 452,218 frames. It reconstructs
+pre-inference carState/carControl samples, uses recorded actuator curvature and
+the previous lane-change phase, and supplies bounded same-request tap echo.
+All observer options are enabled for the comparison. Exact process receipt times,
+receiver state and changed physical lamp feedback are not fully reconstructed.
+Seventeen files have an incomplete tail, for which only complete events are read.
+
+### Implemented corrections
+
+- TBT travel accumulation treats a small negative filtered speed as zero when
+  the vehicle reports standstill in drive. Three retained stopped episodes
+  previously invalidated the journey at −0.00096 to −0.00303 km/h. Reverse,
+  invalid inputs, moving negative speeds and values at or below −0.1 m/s retain
+  their invalidation behavior.
+- B1 renews an authenticated, acknowledged hold with fresh source ownership
+  before its next metadata read. A delayed read could consume the remaining
+  lease before the former read-then-write sequence refreshed it. The command
+  retains the original source expiry and the receiver's local guards. Fresh
+  release or override after the read supersedes the renewal. Bounded exchange
+  timing and the last eight exchanges accompany failure diagnostics.
+- Manual turn angle growth follows a driver's partial unwind and renewed
+  same-direction steering within the current intent. Motion before driver
+  admission is excluded from this additional evidence.
+- Road-curve recognition reads individual cereal list elements. Cap'n Proto
+  list slicing raised TypeError and silently disabled the original curve test.
+  New tests use serialized production-schema messages.
+
+### Before and after
+
+| Check | Baseline | Revised |
+| --- | --- | --- |
+| Observer requests across 52 routes | 298 | 299 |
+| Existing requests removed | — | 0 |
+| Existing request starts | — | 296 exact, two about 0.10 s earlier |
+| Existing request ends and promotions | Recorded-input baseline | Exact agreement |
+| Missed right turn, 11e3/13 | No request | 53.048–59.288 s |
+| TBT journey starts | 61 | 61 |
+| TBT normal completions | 55 | 58 |
+| TBT input-invalid endings | 4 | 1 |
+| TBT journeys clipped by retained-log end | 2 | 2 |
+| Injected 200 ms metadata delay | Acknowledged lease expires | Renewal arrives before expiry |
+| Production cereal curve regression, both directions | Fails | Passes |
+
+The TBT component assumes mode 2 and does not reconstruct full source admission,
+navigation target identity or receiver delivery. Only the three stopped endings
+change. The remaining input-invalid ending is at a segment boundary where the
+scan selected carState/carControl timestamps 6–10 ms newer than the model row.
+It is a replay alignment limitation and does not establish a fourth vehicle fault.
+The added right turn is visually confirmed. Its detection still occurs after
+the turn has begun. Two earlier starts occur at 11e1/0 and 11e5/4. Every existing
+observer end and promotion remains at the same recorded time.
+
+The 889 indicator tests and 77 Bluetooth tests pass locally, with eight platform
+skips. Five new behavioral regressions fail against the isolated baseline.
+Three recorded negative-speed inputs independently reproduce the old invalidation.
+Focused undefined-name and syntax checks pass. Full-file Ruff reports existing
+legacy style/import findings in the touched test files and the B1 owner import.
+
+### Remaining observed failures
+
+Four visually classified unmarked-road curve indications remain in 11e3/15,
+11e3/16 and 11e4/2. A road-edge fallback removed genuine fork indications as well
+and was rejected. A broader pre-intent steering history also introduced an
+unwanted left indication in 11d6/0 before a right entrance and was rejected.
+The final replay adds only the confirmed 11e3/13 right turn.
+
+Two observations near the start of 11e5/0 have no corresponding B1 request or
+physical lamp. Historical source admission reasons were not recorded. Four
+release-5 receiver failures explicitly report lease expiry, but their ATT
+read/write delays were not logged. The injected delay test establishes a repaired
+scheduling failure mode. It cannot establish the cause or cure of each of those
+four historical events. New timing diagnostics support that distinction.
+
+In the latest three recorded drives, 50 of 52 observations have physical lamp
+onset, with 189 ms median and 256 ms P95 detection-to-lamp latency. Those are
+baseline measurements. Revised physical latency and uninterrupted real hold
+remain unverified. The baseline aligned replay matches 51 of those 52 starts,
+with one feedback-dependent cancellation mismatch affecting the subsequent start.
+No vehicle write or CAN actuation is part of this follow-up.
+
+Private before/after evidence and all-route tables are indexed in
+`.analysis/archive/2026-11-15/indicator-fixes/INDEX.md`.

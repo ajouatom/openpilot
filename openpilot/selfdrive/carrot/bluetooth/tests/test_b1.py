@@ -53,6 +53,79 @@ def test_acknowledged_turn_hold_survives_flash_cycles_and_stops_on_override():
   assert intent.choose(data, 'ready', 7, now)[0] == 0
 
 
+@pytest.mark.parametrize('blocked', [None, 'source_stale', 'offroad', 'override', 'old_report', 'wrong_ack', 'released',
+                                   'released_during_read', 'override_during_read'])
+def test_owned_hold_renews_before_slow_metadata_read(monkeypatch, blocked):
+  import asyncio
+  import sys
+  from types import SimpleNamespace
+  from openpilot.selfdrive.carrot.bluetooth import b1_monitor as b1
+
+  clock = [10.]
+  monkeypatch.setattr(b1.time, 'monotonic', lambda: clock[0])
+  monitor = b1.Monitor()
+  monitor.params = SimpleNamespace(get_bool=lambda name: name == 'IsOnroad' and blocked != 'offroad')
+  monkeypatch.setitem(sys.modules, 'openpilot.common.params', SimpleNamespace(Params=lambda: monitor.params))
+  monitor.session = 71
+  monitor.board_report = (71, 9900, 8 if blocked == 'wrong_ack' else 7,
+                          'driver_override' if blocked == 'override' else 'waiting',
+                          9.7 if blocked == 'old_report' else 9.9)
+  monitor.proven_at = 9.9
+  monitor.intent.seq = 7
+  monitor.sent_sequences.append(7)
+  monitor.intent.inflight = (7, 'held', 9.8)
+  monitor.intent.seen.append('held')
+  monitor.attrs = {b1.META:'meta', b1.CONTROL:'command'}
+  monitor.output_owner = SimpleNamespace(held=True, acquire=lambda ready: ready, release=lambda: None)
+  monitor.publish_badge = lambda *args: None
+  hold = {'id':'held', 'time':9.8, 'direction':'right'}
+  def latest():
+    return {'ok':True, 'stamp':9.7 if blocked == 'source_stale' else clock[0],
+            'events':[], 'hold':None if blocked == 'released' or (blocked == 'released_during_read' and clock[0] > 10.2) else hold,
+            'b1_hold':True}
+  feedback, calls, operations = [], [], []
+  monitor.worker = SimpleNamespace(process=SimpleNamespace(poll=lambda: None), send=feedback.append,
+                                   latest=latest, close=lambda: None)
+  monitor.source = latest()
+  deadline, owned, seq = 10.1, True, 7
+
+  async def board(path, interface, method, signature, body, reply_timeout):
+    nonlocal deadline, owned, seq
+    calls.append(path)
+    if path == 'meta':
+      clock[0] += .20
+      owned &= clock[0] < deadline
+      if blocked == 'override_during_read':
+        owned = False
+      state = b1.STATES.index('driver_override') if blocked == 'override_during_read' else 3
+      return (struct.pack('<IIHBBBH', 71, int(clock[0]*1000), 7 if owned else 0, state, 2, 2, seq),)
+    nonce, stamp, seq, op, ttl = struct.unpack('<IIHBB', body[0][:12])
+    operations.append(op)
+    assert nonce == 71
+    assert body[0][12:] == hmac.digest(bytes(32), body[0][:12], 'sha256')[:8]
+    deadline = stamp / 1000 + ttl * .005
+    # Even the extrapolated board stamp must not extend the source lease.
+    if op != 3:
+      assert deadline <= monitor.source['stamp'] + .35 + 1e-9
+    clock[0] += .02
+
+  monitor.client.call = board
+  asyncio.run(monitor.exchange(bytes(32)))
+  if blocked is None:
+    assert calls == ['command', 'meta']
+    assert operations == [5] and owned
+    assert feedback[-1]['accepted_id'] == 'held'
+  elif blocked in ('released_during_read', 'override_during_read'):
+    assert calls == ['command', 'meta', 'command']
+    assert operations == [5, 0 if blocked == 'released_during_read' else 3]
+    if blocked == 'override_during_read':
+      assert monitor.intent.inflight is None
+  else:
+    assert calls[0] == 'meta'
+    assert not owned
+    assert not any(op in (1, 2, 4, 5) for op in operations)
+
+
 def test_rapid_opposite_request_and_loss_of_remote():
   for connected in (False,True):
     intent=Intent()

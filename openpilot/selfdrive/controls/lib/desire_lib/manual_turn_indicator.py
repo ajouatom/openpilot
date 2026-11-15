@@ -88,6 +88,10 @@ class ManualTurnIndicator:
       self.reset('driver')
       return None
     sign = 1 if self.intent == 1 else -1
+    # A driver may relax the wheel, then resume the same turn after takeover.
+    # Measure renewed growth from that admitted motion within this intent.
+    if direction == self.intent and cs.steeringAngleDeg * sign < self.initial_angle * sign:
+      self.initial_angle = cs.steeringAngleDeg
     # Pose z is positive for right rotation, while Hyundai steering is positive left.
     signed_yaw = -yaw_rate * sign
     self.rotation += signed_yaw * dt
