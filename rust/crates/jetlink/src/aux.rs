@@ -34,6 +34,9 @@ use std::{
 
 /// The App's hello key that allows the messages below.
 pub const CAPABILITY: &str = "carrot_aux_v1";
+/// The App also takes uint8 inputs and answers in float16 when asked, and
+/// holds a reply until its driving reply is out (Jetlink Carrot 0.9.0-carrot.4).
+pub const CAPABILITY_V2: &str = "carrot_aux_v2";
 /// Comma to App: a model by sha256 and size.
 pub const MSG_LOAD: u16 = 0x4010;
 /// App to comma: a model's state (ready, need_upload, loading, failed).
@@ -136,6 +139,9 @@ struct Job {
 #[derive(Default)]
 struct Inner {
     live: bool,
+    /// The App said [`CAPABILITY_V2`]: inputs go as uint8 where exact and
+    /// outputs come back as float16.
+    compact: bool,
     models: HashMap<String, Model>,
     /// (len, mtime) -> sha256 of a model file.
     hashes: HashMap<PathBuf, (u64, SystemTime, String)>,
@@ -149,6 +155,52 @@ struct Inner {
 pub struct Hub {
     inner: Mutex<Inner>,
     changed: Condvar,
+}
+
+/// `input` (float32 bytes) as uint8 when every value is a byte / 255, as
+/// xiaoge prepares its images; None when any is not, so it goes as float32.
+fn exact_u8(input: &[u8]) -> Option<Vec<u8>> {
+    if input.len() % 4 != 0 {
+        return None;
+    }
+    input
+        .chunks_exact(4)
+        .map(|b| {
+            let value = f32::from_le_bytes([b[0], b[1], b[2], b[3]]);
+            let byte = (value * 255.0).round();
+            ((0.0..=255.0).contains(&byte) && f32::from(byte as u8) / 255.0 == value)
+                .then_some(byte as u8)
+        })
+        .collect()
+}
+
+/// IEEE half to single precision, every value (subnormals, infinities, NaN).
+fn f16_to_f32(half: u16) -> f32 {
+    let sign = u32::from(half >> 15) << 31;
+    let exponent = u32::from((half >> 10) & 0x1f);
+    let mantissa = u32::from(half & 0x3ff);
+    let bits = match (exponent, mantissa) {
+        (0, 0) => sign,
+        (0, _) => {
+            // subnormal: normalise
+            let mut e = 127 - 15 + 1;
+            let mut m = mantissa;
+            while m & 0x400 == 0 {
+                m <<= 1;
+                e -= 1;
+            }
+            sign | (e << 23) | ((m & 0x3ff) << 13)
+        }
+        (0x1f, _) => sign | 0x7f80_0000 | (mantissa << 13),
+        _ => sign | ((exponent + 127 - 15) << 23) | (mantissa << 13),
+    };
+    f32::from_bits(bits)
+}
+
+fn f16_to_f32_bytes(blob: &[u8]) -> Vec<u8> {
+    blob.chunks_exact(2)
+        .flat_map(|b| f16_to_f32(u16::from_le_bytes([b[0], b[1]])).to_le_bytes())
+        .collect()
 }
 
 fn failed(code: &str, detail: impl Into<String>) -> Outcome {
@@ -169,8 +221,14 @@ impl Hub {
     /// asked about again on the next link (the App keeps its own cache, so
     /// that costs one message), and nothing waits on a link that is gone.
     pub fn set_live(&self, live: bool) {
+        self.set_link(live, false);
+    }
+
+    /// `set_live`, with whether the App speaks [`CAPABILITY_V2`].
+    pub fn set_link(&self, live: bool, compact: bool) {
         let mut guard = self.lock();
         let inner = &mut *guard;
+        inner.compact = live && compact;
         if inner.live == live {
             return;
         }
@@ -390,8 +448,19 @@ impl Hub {
             .position(|job| ready(&inner, &job.sha256))?;
         let job = inner.waiting.remove(index)?;
         inner.sent.insert(job.id, Instant::now());
-        let head = json!({"id": job.id, "sha256": job.sha256, "outputs": job.outputs});
-        match encode(&head, &[&job.input]) {
+        let mut head = json!({"id": job.id, "sha256": job.sha256, "outputs": job.outputs});
+        // xiaoge's inputs are bytes / 255 in float32: as uint8 they are a
+        // quarter of the bytes and the App rebuilds the same floats. Outputs
+        // in float16 halve the lane model's 2 MB reply; the App's GPU runs
+        // in float16 anyway.
+        let bytes = inner.compact.then(|| exact_u8(&job.input)).flatten();
+        if inner.compact {
+            head["outputs_dtype"] = json!("f16");
+        }
+        if bytes.is_some() {
+            head["input"] = json!("u8");
+        }
+        match encode(&head, &[bytes.as_deref().unwrap_or(&job.input)]) {
             Ok(bytes) => Some((MSG_REQ, bytes)),
             Err(error) => {
                 inner.sent.remove(&job.id);
@@ -456,9 +525,18 @@ impl Hub {
                     return;
                 }
                 let outcome = if head["ok"] == true {
+                    let half = head["outputs_dtype"] == "f16";
+                    let mut head = head;
+                    if let Some(fields) = head.as_object_mut() {
+                        fields.remove("outputs_dtype");
+                    }
                     Outcome::Done {
                         head,
-                        blob: blob.to_vec(),
+                        blob: if half {
+                            f16_to_f32_bytes(blob)
+                        } else {
+                            blob.to_vec()
+                        },
                     }
                 } else {
                     failed(
@@ -598,6 +676,33 @@ mod tests {
         .unwrap()
     }
 
+    #[test]
+    fn compact_link_sends_exact_bytes_and_restores_half_outputs() {
+        let image: Vec<u8> = (0..=255u8)
+            .flat_map(|b| (f32::from(b) / 255.0).to_le_bytes())
+            .collect();
+        let bytes = exact_u8(&image).unwrap();
+        assert_eq!(bytes, (0..=255u8).collect::<Vec<_>>());
+        // A value that is no byte / 255 keeps the float32 path.
+        let mut odd = image.clone();
+        odd[..4].copy_from_slice(&0.123f32.to_le_bytes());
+        assert!(exact_u8(&odd).is_none());
+        for (half, value) in [
+            (0x3c00u16, 1.0f32),
+            (0xc000, -2.0),
+            (0x3555, 0.333_251_95),
+            (0x0001, 5.960_464_5e-8),
+            (0x7bff, 65504.0),
+            (0x0000, 0.0),
+        ] {
+            assert_eq!(f16_to_f32(half), value, "{half:#x}");
+        }
+        assert!(f16_to_f32(0x7c00).is_infinite() && f16_to_f32(0x7e00).is_nan());
+        assert_eq!(
+            f16_to_f32_bytes(&0x3c00u16.to_le_bytes()),
+            1.0f32.to_le_bytes()
+        );
+    }
     #[test]
     fn payload_round_trips() {
         let bytes = encode(&json!({"a": 1}), &[b"xy", b"z"]).unwrap();

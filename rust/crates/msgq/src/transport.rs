@@ -157,6 +157,16 @@ impl MultiSubscriber {
         self.poll(milliseconds(timeout)?)
     }
 
+    /// `poll_ready`, returning no earlier than `not_before`: messages that
+    /// arrive meanwhile are collected in one scan (see `queue::poll_not_before`).
+    pub fn poll_ready_not_before(
+        &mut self,
+        timeout: Duration,
+        not_before: std::time::Instant,
+    ) -> Result<Vec<usize>, Error> {
+        self.poll_with(milliseconds(timeout)?, Some(not_before))
+    }
+
     pub fn receive_one(&mut self, index: usize) -> Result<Option<Vec<u8>>, Error> {
         self.queues
             .get_mut(index)
@@ -224,11 +234,21 @@ impl MultiSubscriber {
     }
 
     fn poll(&mut self, timeout_ms: i32) -> Result<Vec<usize>, Error> {
+        self.poll_with(timeout_ms, None)
+    }
+
+    fn poll_with(
+        &mut self,
+        timeout_ms: i32,
+        not_before: Option<std::time::Instant>,
+    ) -> Result<Vec<usize>, Error> {
         let mut ready = Vec::with_capacity(self.queues.len());
-        queue::poll(timeout_ms, || {
+        let endpoints = &self.endpoints;
+        let queues = &mut self.queues;
+        let scan = || {
             ready.clear();
-            for (index, queue) in self.queues.iter_mut().enumerate() {
-                if self.endpoints[index].polled {
+            for (index, queue) in queues.iter_mut().enumerate() {
+                if endpoints[index].polled {
                     if let Some(queue) = queue {
                         if queue.ready()? {
                             ready.push(index);
@@ -237,7 +257,11 @@ impl MultiSubscriber {
                 }
             }
             Ok(!ready.is_empty())
-        })?;
+        };
+        match not_before {
+            Some(not_before) => queue::poll_not_before(timeout_ms, not_before, scan)?,
+            None => queue::poll(timeout_ms, scan)?,
+        }
         for (index, queue) in self.queues.iter().enumerate() {
             if queue.is_some() && !self.endpoints[index].polled {
                 ready.push(index);

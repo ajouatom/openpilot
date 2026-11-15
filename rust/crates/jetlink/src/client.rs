@@ -586,6 +586,7 @@ impl<T: Transport> Client<T> {
         }
         self.boot_update(&hello)?;
         let aux_offered = hello[crate::aux::CAPABILITY] == true;
+        let aux_compact = hello[crate::aux::CAPABILITY_V2] == true;
         let path = if self.transport.gadget() {
             "usb"
         } else {
@@ -788,7 +789,7 @@ impl<T: Transport> Client<T> {
         self.app_request_pending = follows_app;
         if aux_offered {
             if let Some(hub) = &self.aux {
-                hub.set_live(true);
+                hub.set_link(true, aux_compact);
                 self.aux_live = true;
             }
         }

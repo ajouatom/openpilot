@@ -135,7 +135,13 @@ impl VisionClient {
             self.connected = false;
             return Ok(None);
         }
-        buffer.sync(false);
+        // The original client cleans (writes back) the CPU cache over the
+        // whole buffer on every receive. A subscriber never writes a camera
+        // buffer, so there is nothing to write back, yet the kernel walks all
+        // 4.8 MB: 33 % of driving-modeld's time and most of encoderd's kernel
+        // time on a comma 3X (simpleperf, __clean_dcache_area_poc). Readers
+        // see current pixels through the server's invalidate at publish
+        // (vision_server; the data cache is physically tagged).
         let layout = buffer.wire.layout;
         let metadata = VisionMetadata {
             width: layout.width,

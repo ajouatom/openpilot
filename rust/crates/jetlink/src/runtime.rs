@@ -99,6 +99,49 @@ pub const FRAME_BUDGET_NS: u64 = 150_000_000;
 /// A shadow frame slower than this does not qualify the peer for joining.
 pub const PROBE_BUDGET: Duration = Duration::from_millis(100);
 
+/// The peer's frame times over the last two seconds, judged against the
+/// comma's 20 Hz. A recurrent graph (N16, Cinque Terre V3) steps its own
+/// history once per frame it is sent; a phone that answers in 70 ms (N16 on a
+/// Legion Y700's GPU) drops every third camera frame behind it, the graph
+/// sees time run unevenly, and its path swung left and right in the car. Too
+/// slow on average, the internal model drives and the peer only shadows;
+/// it joins again at the usual gate (stopped, or the driver steering) once
+/// it is fast again. One slow frame changes nothing.
+#[derive(Default)]
+pub struct SpeedGate {
+    recent: std::collections::VecDeque<f64>,
+}
+impl SpeedGate {
+    /// Joining needs this many frames averaging at most `JOIN_MEAN_MS`.
+    pub const JOIN_FRAMES: usize = 20;
+    pub const JOIN_MEAN_MS: f64 = 48.0;
+    /// Driving, an average over this many frames above `LEAVE_MEAN_MS` leaves.
+    pub const LEAVE_FRAMES: usize = 40;
+    pub const LEAVE_MEAN_MS: f64 = 52.0;
+    pub fn clear(&mut self) {
+        self.recent.clear();
+    }
+    pub fn record(&mut self, ms: f64) {
+        if self.recent.len() == Self::LEAVE_FRAMES {
+            self.recent.pop_front();
+        }
+        self.recent.push_back(ms);
+    }
+    fn mean(&self, frames: usize) -> Option<f64> {
+        (self.recent.len() >= frames)
+            .then(|| self.recent.iter().rev().take(frames).sum::<f64>() / frames as f64)
+    }
+    pub fn may_join(&self) -> bool {
+        self.mean(Self::JOIN_FRAMES)
+            .is_some_and(|mean| mean <= Self::JOIN_MEAN_MS)
+    }
+    /// The average that makes the driving peer leave, if it is that slow.
+    pub fn too_slow(&self) -> Option<f64> {
+        self.mean(Self::LEAVE_FRAMES)
+            .filter(|mean| *mean > Self::LEAVE_MEAN_MS)
+    }
+}
+
 pub struct Runtime {
     work: Option<SyncSender<Work>>,
     results: Receiver<Result<Complete, Error>>,
@@ -125,6 +168,7 @@ pub struct Runtime {
     probe_passed: bool,
     /// The connected graph takes N16 navigation inputs.
     navigation_model: bool,
+    speed: SpeedGate,
     /// Stage times of the peer frame collected since the last `begin`.
     last_stages: Option<Stages>,
     frame: u32,
@@ -171,6 +215,7 @@ impl Runtime {
             slow_logged: None,
             probe_passed: false,
             navigation_model: false,
+            speed: SpeedGate::default(),
             last_stages: None,
             frame: 0,
             status: Status {
@@ -235,6 +280,7 @@ impl Runtime {
                 self.identity = Some(model.client.identity.clone());
                 self.selected_sha = model.client.session.spec.sha256.clone();
                 self.navigation_model = model.client.session.spec.navigation();
+                self.speed.clear();
                 match model.client.cancel_handle() {
                     Ok(handle) => self.cancel = Some(handle),
                     Err(error) => {
@@ -256,8 +302,17 @@ impl Runtime {
                 self.last_stages = Some(stages);
                 // Collected for a frame sent while the internal model was
                 // published: a shadow frame, which qualifies (or not) a join.
+                self.speed.record(elapsed.as_secs_f64() * 1000.0);
                 if self.status.decision.source != Source::Jetlink {
-                    self.probe_passed = elapsed <= PROBE_BUDGET;
+                    self.probe_passed = elapsed <= PROBE_BUDGET && self.speed.may_join();
+                } else if let Some(mean) = self.speed.too_slow() {
+                    // Leaves at the next `begin`; the link stays up.
+                    self.probe_passed = false;
+                    self.detail = format!(
+                        "Jetlink frames average {mean:.0} ms, over the {} ms a 20 Hz frame allows; the internal model drives",
+                        SpeedGate::LEAVE_MEAN_MS
+                    );
+                    eprintln!("{}", self.detail);
                 }
                 self.status.execution_ms = elapsed.as_secs_f64() * 1000.0;
                 // As carrot's model.py: a frame over 50 ms is reported, at most
@@ -535,6 +590,44 @@ impl Drop for Runtime {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn speed_gate_keeps_a_fast_peer_and_benches_a_slow_one() {
+        let mut gate = SpeedGate::default();
+        for _ in 0..19 {
+            gate.record(45.);
+        }
+        assert!(!gate.may_join(), "too few frames to judge");
+        gate.record(45.);
+        assert!(gate.may_join());
+        // The user's N16 on a Snapdragon 8 Gen 2 (route cb4): 45.5 ms on
+        // average, one frame in thirty over 50 ms, a rare one near 97 ms.
+        for i in 0..80 {
+            gate.record(match i % 30 {
+                0 => 52.,
+                15 if i == 45 => 97.,
+                _ => 45.5,
+            });
+        }
+        assert!(
+            gate.too_slow().is_none(),
+            "a rare slow frame never benches it"
+        );
+        for _ in 0..20 {
+            gate.record(45.5);
+        }
+        assert!(gate.may_join());
+        // N16 on a Legion Y700's GPU.
+        let mut slow = SpeedGate::default();
+        for _ in 0..40 {
+            slow.record(70.);
+        }
+        assert!(!slow.may_join());
+        assert!(slow
+            .too_slow()
+            .is_some_and(|mean| (mean - 70.).abs() < 1e-9));
+        slow.clear();
+        assert!(slow.too_slow().is_none());
+    }
 
     #[test]
     fn slow_frame_line_keeps_the_total_first_and_names_each_stage() {

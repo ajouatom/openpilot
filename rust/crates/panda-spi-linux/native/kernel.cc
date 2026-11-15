@@ -122,7 +122,12 @@ Call Handle::flock_call(bool exclusive) {
 void Handle::flock(bool exclusive) { ::flock(fd_, exclusive ? LOCK_EX : LOCK_UN); }
 void Handle::close() { if (fd_ >= 0) { ::close(fd_); fd_ = -1; } }
 std::unique_ptr<Handle> create(const std::string &path) { return std::make_unique<Handle>(path); }
-uint64_t now_ns() { timespec time{}; clock_gettime(CLOCK_BOOTTIME, &time); return static_cast<uint64_t>(time.tv_sec) * 1000000000ULL + time.tv_nsec; }
+// SPI timing only measures intervals (turnaround, ACK and recovery deadlines),
+// so the monotonic clock serves: the comma never suspends while pandad runs.
+// The kernel (4.9) reads CLOCK_BOOTTIME by a system call but CLOCK_MONOTONIC
+// through the vDSO, and the turnaround and ACK loops read the clock thousands
+// of times a second (strace: ~5,000 clock_gettime calls/s across the CAN threads).
+uint64_t now_ns() { timespec time{}; clock_gettime(CLOCK_MONOTONIC, &time); return static_cast<uint64_t>(time.tv_sec) * 1000000000ULL + time.tv_nsec; }
 void yield_now() { sched_yield(); }
 void sleep_us(uint32_t micros) { usleep(micros); }
 void sleep_until_ns(uint64_t deadline) {
@@ -130,7 +135,7 @@ void sleep_until_ns(uint64_t deadline) {
                         static_cast<long>(deadline % 1000000000ULL)};
   // Retry the same absolute target on EINTR. Other errors fall back to Rust's
   // clock-checked precision loop, preserving the minimum quiet interval.
-  while (clock_nanosleep(CLOCK_BOOTTIME, TIMER_ABSTIME, &target, nullptr) == EINTR) {}
+  while (clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &target, nullptr) == EINTR) {}
 }
 Call set_scheduler(int32_t policy, int32_t priority) {
   sched_param parameter{};

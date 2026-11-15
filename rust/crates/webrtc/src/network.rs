@@ -75,13 +75,23 @@ fn base(kind: &str, address: SocketAddr, local: IpAddr) -> CandidateConfig {
     }
 }
 
-async fn binding(socket: UdpSocket, server: (String, u16)) -> Result<RTCIceCandidateInit, Error> {
+/// How long one answer's STUN step may take, the server's lookup apart.
+const STUN_TIMEOUT: Duration = Duration::from_secs(2);
+
+/// The address the kernel sends to `recipient` from: the only local address
+/// whose STUN answer can come back. One bound to Jetlink's USB network
+/// (192.168.60.1) or tailscale's (100.x) waited out the whole timeout, and two
+/// of them made an answer take 10 s, past carrot-server's limit: Carrot
+/// Vision kept "connecting" whenever an external model had the USB link up.
+fn route_source(recipient: SocketAddr) -> Option<IpAddr> {
+    let probe = UdpSocket::bind(SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 0)).ok()?;
+    probe.connect(recipient).ok()?;
+    probe.local_addr().ok().map(|address| address.ip())
+}
+
+async fn binding(socket: UdpSocket, recipient: SocketAddr) -> Result<RTCIceCandidateInit, Error> {
     let local = socket.local_addr()?;
     let socket = tokio::net::UdpSocket::from_std(socket)?;
-    let recipient = tokio::net::lookup_host((server.0.as_str(), server.1))
-        .await?
-        .find(SocketAddr::is_ipv4)
-        .ok_or(Error::Contract("STUN server has no IPv4 address"))?;
     let mut request = Message::new();
     request.build(&[Box::new(BINDING_REQUEST), Box::new(TransactionId::new())])?;
     let mut delay = Duration::from_millis(500);
@@ -165,6 +175,25 @@ impl Network {
             candidates: Vec::new(),
         };
         let mut requests = JoinSet::new();
+        // The STUN server is looked up once, and asked only from the address
+        // the default route uses.
+        let stun = match &self.stun {
+            Some(server) => match timeout(
+                STUN_TIMEOUT,
+                tokio::net::lookup_host((server.0.as_str(), server.1)),
+            )
+            .await
+            {
+                Ok(Ok(mut found)) => found
+                    .find(SocketAddr::is_ipv4)
+                    .and_then(|recipient| Some((recipient, route_source(recipient)?))),
+                _ => {
+                    eprintln!("WebRTC STUN server not resolved; host candidates only");
+                    None
+                }
+            },
+            None => None,
+        };
         for address in addresses {
             let socket = match UdpSocket::bind(SocketAddr::new(address, 0)) {
                 Ok(socket) => socket,
@@ -189,12 +218,11 @@ impl Network {
             result
                 .candidates
                 .push(RTCIceCandidate::from(&candidate).to_json()?);
-            if local.is_ipv4() {
-                if let Some(server) = &self.stun {
-                    let server = server.clone();
+            if let Some((recipient, source)) = stun {
+                if local.ip() == source {
                     let cloned = socket.try_clone()?;
                     requests.spawn(async move {
-                        timeout(Duration::from_secs(5), binding(cloned, server)).await
+                        timeout(STUN_TIMEOUT, binding(cloned, recipient)).await
                     });
                 }
             }
