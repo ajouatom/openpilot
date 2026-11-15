@@ -12,12 +12,12 @@ from jetlink.transport.base import LinkTimeout
 @pytest.mark.parametrize('state,level', [('loading', 20), ('connecting', 20), ('ready', 20), ('retrying', 40), ('blocked', 40)])
 def test_connection_event_records_deferral_identity_and_real_severity(tmp_path, monkeypatch, state, level):
   from logging.handlers import BufferingHandler
-  from openpilot.common import swaglog
   from openpilot.common.logging_extra import SwagLogger
   logger = SwagLogger()
   records = BufferingHandler(20)
   logger.addHandler(records)
-  monkeypatch.setattr(swaglog, 'cloudlog', logger)
+  # Exercise the real event severity without starting the device's ZMQ sink.
+  monkeypatch.setitem(sys.modules, 'openpilot.common.swaglog', SimpleNamespace(cloudlog=logger))
   monkeypatch.setattr(daemon, 'STATUS', tmp_path / 'status.json')
   monkeypatch.setattr(daemon, 'LAST_STATUS_EVENT', None)
   peer = {'carrot_host': 'jetson', 'carrot_source_commit': 'a' * 40, 'loaded': 'b' * 64}
