@@ -281,7 +281,8 @@ def test_audio_cue_schema_roundtrip():
     assert read.atcTurnStartMonoTime==11000000000 and str(read.atcTurnDirection)=='left'
 
 
-def test_actual_source_loop_starts_from_audio_cue_before_model_turn(monkeypatch):
+@pytest.mark.parametrize('stopped_speed', [0., -.003020115/3.6])
+def test_actual_source_loop_starts_from_audio_cue_before_model_turn(monkeypatch, stopped_speed):
   import blink_source as source
   import json
   import types
@@ -302,7 +303,8 @@ def test_actual_source_loop_starts_from_audio_cue_before_model_turn(monkeypatch)
     sm['selfdriveState'].atcTurnDirection='left' if i else 'none'
     sm['carrotMan'].atcType='turn left' if i else 'none'
     sm['modelV2'].meta.desire='turnLeft' if i==2 else 'none'
-    sm['carState'].vEgo=0. if 3<=i<=5 else 5.
+    sm['carState'].vEgo=stopped_speed if 3<=i<=5 else 5.
+    sm['carState'].standstill=3<=i<=5
     sm['carState'].steeringAngleDeg=60. if i==6 else 0.
     sm['carControl'].latActive=not 3<=i<=5
     sm['livePose'].orientationNED.z=-.5 if i>=6 else 0.

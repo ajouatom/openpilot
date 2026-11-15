@@ -161,7 +161,7 @@ def main(fd, spas=False, ble=False):
     auto_fresh = all(k in sm.services and sm.valid[k] and sm.alive[k] and
                      fresh(sm.recv_time[k], now, 1.0 if k == 'carrotMan' and automatic.direction else .35)
                      for k in ('modelV2', 'carrotMan'))
-    travelled = travel.update(now, cs.vEgo, ok)
+    travelled = travel.update(now, cs.vEgo, ok, standstill=getattr(cs, 'standstill', False), gear=str(cs.gearShifter))
     auto_valid = not auto_paused and auto_fresh and ok and automatic_control_allowed(
       cs, sm['carControl'], sm['selfdriveState'], params.get_bool('AlwaysLateral'), automatic.direction is not None)
     auto_valid = auto_valid and not navigation_cancelled(sm, now)

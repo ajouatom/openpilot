@@ -1,5 +1,26 @@
 # Repository memory
 
+- 2026-11-15: Complete retained indicator audit uses baseline b12855935aa,
+  403 identified full-log segments/52routes/452218 aligned model frames.
+  TBT D+standstill tiny-negative speed invalidates three journeys. Preserve
+  Travel epoch only for that confirmed stopped noise; replay61starts yields
+  normal completions55->58, inputs4->1, clipped2, all other transitions agree.
+  B1 renews fresh authenticated acknowledged hold before metadata read, keeping
+  source expiry/local guards; 200ms delayed-read regression fails before/passes
+  after. Add timing and eight-exchange diagnostic history. Four historical
+  release5 lease_expired events lack ATT timings, physical cure unverified.
+  Actual cereal slicing disabled following_road_curve via caught TypeError;
+  individual indexing passes real-schema regressions. Manual-turn growth follows
+  partial unwind within current pressed intent, recovering11e3/13+53.048..59.288.
+  Final requests298->299, existing296 exact starts/two~.10s earlier, all existing
+  ends/promotions exact. Reject pre-intent history (new false11d6/0 left) and
+  road-edge fallback (lost real11e3/15 left fork). Four unmarked-road false
+  indications and two11e5/0 source-delivery misses remain. Full truth labels,
+  actual SubMaster receipt/receiver feedback unavailable; no perfect-rate claim.
+  Local889indicator+77Bluetooth pass/8platformskip. No live vehicle writes.
+  Evidence .analysis/archive/2026-11-15/indicator-fixes/INDEX.md and
+  docs/indicator_replay_20261114.md follow-up.
+
 - 2026-11-15: PreparationDeferred previously unwound daemon.main and closed the
   USB/network owner even when only engine readiness/offroad admission was pending.
   EngineHost.preload and its worker outlive Session.close; reconnect does not

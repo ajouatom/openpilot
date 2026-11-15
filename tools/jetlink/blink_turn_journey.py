@@ -8,7 +8,11 @@ class Travel:
     self.distance = 0.
     self.epoch = 0
 
-  def update(self, now, speed, valid):
+  def update(self, now, speed, valid, *, standstill=False, gear=None):
+    # The filtered estimate can cross zero while the wheels confirm a D stop.
+    # Preserve the distance anchor through that noise, including a long red light.
+    if standstill and gear == 'drive' and -.1 < speed < 0:
+      speed = 0.
     old, self.previous = self.previous, (now, speed) if valid and math.isfinite(speed) and speed >= 0 else None
     if self.previous is None or old is not None and not 0 < now-old[0] <= .35:
       self.epoch += 1

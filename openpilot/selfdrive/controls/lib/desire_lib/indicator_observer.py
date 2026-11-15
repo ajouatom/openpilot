@@ -56,13 +56,13 @@ def path_direction(md, curvature):
 def following_road_curve(md, speed, yaw_rate):
   """Recognized curved lane geometry agreeing with the vehicle's current arc."""
   try:
-    if yaw_rate is None or speed < 1 or min(md.laneLineProbs[1:3]) < .5:
+    if yaw_rate is None or speed < 1 or not all(.5 <= md.laneLineProbs[i] <= 1 for i in (1, 2)):
       return False
     curvature = yaw_rate / speed
     if abs(curvature) < .002:
       return False
     curves = []
-    for line in md.laneLines[1:3]:
+    for line in (md.laneLines[1], md.laneLines[2]):
       near = [interpolate(x, line.x, line.y) for x in (5., 10., 15.)]
       slope = (near[2] - near[0]) / 10.
       curves.append((near[2] - 2 * near[1] + near[0]) / 25. / (1 + slope * slope)**1.5)

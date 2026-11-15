@@ -279,6 +279,26 @@ def test_travel_gap_invalidates_anchor_without_extrapolating_stale_speed():
   j,s=turn()
   assert s(12.,travel=(1,1.)) is None
 
+
+@pytest.mark.parametrize('speed', [-.002311213/3.6, -.000962035/3.6, -.003020115/3.6])
+def test_confirmed_drive_stop_noise_preserves_tbt_distance_epoch(speed):
+  travel = Travel()
+  travel.update(10., 0., True)
+  for i in range(1, 101):
+    assert travel.update(10.+i*.05, speed, True, standstill=True, gear='drive') == (0, 0.)
+  assert travel.update(15.05, 2., True, standstill=False, gear='drive') == pytest.approx((0, .05))
+
+
+@pytest.mark.parametrize('speed,standstill,gear,valid', [
+  (-.001, False, 'drive', True), (-.001, True, 'reverse', True),
+  (-.1, True, 'drive', True), (-.001, True, 'drive', False),
+  (float('nan'), True, 'drive', True), (float('-inf'), True, 'drive', True),
+])
+def test_stop_noise_exception_preserves_reverse_and_invalid_distance_gates(speed, standstill, gear, valid):
+  travel = Travel()
+  travel.update(10., 0., True)
+  assert travel.update(10.05, speed, valid, standstill=standstill, gear=gear) is None
+
 @pytest.mark.parametrize('side', [1, 2])
 @pytest.mark.parametrize('case', ['approaching', 'no_motion', 'other_side', 'one_boundary', 'split_vote',
                                   'low_confidence', 'no_target_line', 'bad_shape', 'invalid', 'cancel'])
