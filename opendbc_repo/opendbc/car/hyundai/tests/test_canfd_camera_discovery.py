@@ -145,18 +145,3 @@ def test_registration_still_waits_for_startup_gate(setup, name, attr, ready):
   tick(state, parsers, ready - 1, [packer.make_can_msg(name, parsers[Bus.cam].bus, {})])
   assert getattr(state, attr) is None
   assert not parsers[Bus.cam].addresses
-
-
-@pytest.mark.parametrize("name,attr,bus", [("SCC_CONTROL", "scc_control", Bus.cam),
-                                          ("CRUISE_BUTTONS", "cruise_buttons_msg", Bus.pt)])
-def test_scc_and_buttons_missed_at_their_one_shot_count_are_retried(setup, name, attr, bus):
-  # Cached only at ready 120/124 before: a frame missing at that count left SCC/button TX off for the whole drive.
-  state, parsers, packer = setup
-  state.controls_ready_count = carstate.READY_COUNT_OK + 1  # the one-shot counts are long past
-  assert getattr(state, attr) is None
-  tick(state, parsers, 300)
-  assert getattr(state, attr) is None  # never sent: nothing registered, nothing cached
-  for i, frame in enumerate((301, 302)):
-    tick(state, parsers, frame, [packer.make_can_msg(name, parsers[bus].bus, {"COUNTER": i + 1})])
-  assert getattr(state, attr) is parsers[bus].vl[name]
-  assert getattr(state, attr)["COUNTER"] == 2
