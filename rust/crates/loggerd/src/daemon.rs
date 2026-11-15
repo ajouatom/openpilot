@@ -43,7 +43,7 @@ pub fn run(environment: Environment) -> Result<(), Error> {
         rustix::thread::sched_setaffinity(None, &cores).map_err(std::io::Error::from)?;
     }
     let params = Params::for_runtime()?;
-    let record_audio = params.get_bool("RecordAudio")?;
+    let record_audio = crate::encoder::record_audio(&params)?;
     let mut states = Vec::new();
     for service in SERVICES {
         let stream = Stream::from_service(service.name);

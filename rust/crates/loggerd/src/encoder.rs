@@ -8,6 +8,20 @@ use openpilot_cereal::log_capnp::{encode_data, event};
 use openpilot_logging::{log_site, record::Level};
 use openpilot_params::Params;
 
+/// Audio is recorded when `RecordAudio` asks for it, never on a C3X Lite:
+/// it has no microphone, and qcamera would hold its frames for audio that
+/// never comes.
+pub fn record_audio(params: &Params) -> Result<bool, Error> {
+    Ok(audio_wanted(
+        params.get_bool("RecordAudio")?,
+        params.get_bool("HardwareC3xLite")?,
+    ))
+}
+
+fn audio_wanted(record_audio: bool, c3x_lite: bool) -> bool {
+    record_audio && !c3x_lite
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Stream {
     Road,
@@ -105,7 +119,7 @@ impl Encoder {
             recording: false,
             marked_ready: false,
             audio_initialized: false,
-            include_audio: stream == Stream::Qroad && params.get_bool("RecordAudio")?,
+            include_audio: stream == Stream::Qroad && record_audio(params)?,
             record,
             dropped_frames: 0,
         })
@@ -290,5 +304,15 @@ impl Encoder {
             writer.close()?;
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn a_lite_never_records_or_waits_for_audio() {
+        assert!(super::audio_wanted(true, false));
+        assert!(!super::audio_wanted(true, true));
+        assert!(!super::audio_wanted(false, false));
     }
 }

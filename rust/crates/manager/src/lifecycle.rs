@@ -79,7 +79,11 @@ pub fn ignore_list(params: &impl Parameters, env: &Environment) -> Result<Vec<St
             .map(str::to_owned),
     );
     if params.boolean("HardwareC3xLite")? {
-        ignore.extend(["micd".into(), "soundd".into(), "loggerd".into()]);
+        // C3X Lite has no microphone or speaker. carrot also leaves loggerd
+        // out here, which left Lite drives without rlog/qlog for problem
+        // reports; loggerd itself records no audio on Lite (it never waits
+        // for audio that cannot come), so it runs.
+        ignore.extend(["micd".into(), "soundd".into()]);
         params.put_bool("RecordAudio", false)?;
     }
     Ok(ignore)
