@@ -199,7 +199,9 @@ Seventeen files have an incomplete tail, for which only complete events are read
 
 The TBT component assumes mode 2 and does not reconstruct full source admission,
 navigation target identity or receiver delivery. Only the three stopped endings
-change. The remaining input-invalid ending requires separate input recovery.
+change. The remaining input-invalid ending is at a segment boundary where the
+scan selected carState/carControl timestamps 6–10 ms newer than the model row.
+It is a replay alignment limitation and does not establish a fourth vehicle fault.
 The added right turn is visually confirmed. Its detection still occurs after
 the turn has begun. Two earlier starts occur at 11e1/0 and 11e5/4. Every existing
 observer end and promotion remains at the same recorded time.
