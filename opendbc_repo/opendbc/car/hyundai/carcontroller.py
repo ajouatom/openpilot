@@ -57,7 +57,7 @@ STEER_ANGLE_TEST_RATE = 1.0  # deg/tick toward SteerAngleTest
 LARGE_ANGLE_UNWIND_RATE = 1.5  # deg/tick: allow a quicker return from the EPS fault-angle region
 CANFD_JERK_UPPER_MIN = 1.0
 CANFD_JERK_LIMIT_MAX = 5.0
-CANFD_DEPART_JERK_UPPER = 3.0  # StopGoAssist departure: no-lead departures already send 2.8-3.3 (02_logs §22)
+CANFD_DEPART_JERK_UPPER = 3.0  # StopGoLongAssist departure: no-lead departures already send 2.8-3.3 (02_logs §22)
 # CanfdBlinkerKick: in D at any speed (user 10-27: city lane changes are slow) the parking ECU (APRK, 0x7B1) is silenced
 # around a kick and SPAS2 BLINKER_CONTROL is sent in its place; out of D its default session returns
 APRK_ADDR = 0x7B1
@@ -620,9 +620,9 @@ class CarController(CarControllerBase):
         self.steerDeltaDownLC = self.steerDeltaDown
 
       self.soft_hold_mode = 1 if params.get_int("AutoCruiseControl") > 1 else 2
-      self.depart_jerk = params.get_int("StopGoAssist") >= 2
+      self.depart_jerk = params.get_int("StopGoLongAssist") >= 2
       if self.canfd_stopping is not None:
-        self.canfd_stopping.unheld_brake = params.get_int("StopGoAssist") >= 1  # stop guard level (stopping.py)
+        self.canfd_stopping.unheld_brake = params.get_int("StopGoLongAssist") >= 1  # stop guard level (stopping.py)
       self.blinker_control = params.get_bool("CanfdBlinkerKick")
       self.blinker_kick_mode = params.get_int("CanfdBlinkerKickMode")
       model_mode = params.get_int("CanfdBlinkerKickModelMode")  # 0 hold, 1 off, 2/3/4: 3/5/7 flashes

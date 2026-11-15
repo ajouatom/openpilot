@@ -39,7 +39,7 @@ class CanfdStopping:
     # including approach and interlock overrides.
     self.last_scc_stop_req = 0
     self.last_scc_jerk_upper = 1.0
-    # StopGoAssist >= 1 (carcontroller sets it from the setting): brake motion after a stop the SCC never confirmed as
+    # StopGoLongAssist >= 1 (carcontroller sets it from the setting): brake motion after a stop the SCC never confirmed as
     # held. Off = the carrot-wip stop sequence unchanged (zero aReq once StopReq is set).
     self.unheld_brake = False
     self.reset()

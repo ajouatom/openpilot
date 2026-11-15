@@ -238,7 +238,7 @@ class CarrotPlanner:
       self.eco_over_speed = self.params.get_int("CruiseEcoControl")
       self.autoNaviSpeedDecelRate = float(self.params.get_int("AutoNaviSpeedDecelRate")) * 0.01
       self.aChangeCostStarting = self.params.get_float("AChangeCostStarting")
-      self.stopGoAssist = self.params.get_int("StopGoAssist")
+      self.stopGoAssist = self.params.get_int("StopGoLongAssist")
       self.trafficStopDistanceAdjust = self.params.get_float("TrafficStopDistanceAdjust") / 100.
       self.paddleSignalPriority = self.params.get_int("PaddleSignalPriority") > 0
     elif self.params_count >= 100:

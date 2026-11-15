@@ -552,7 +552,7 @@ def test_upper_sequence_changes_no_other_decoded_packet_fields(camera):
 
 
 def test_roll_after_unconfirmed_hold_keeps_the_wip_sequence_without_stop_go_assist():
-  controller = CanfdStopping()  # StopGoAssist 0: unheld_brake off
+  controller = CanfdStopping()  # StopGoLongAssist 0: unheld_brake off
   for _ in range(20):
     step(controller, speed=.02, previous_value=0.)
   cmd = step(controller, speed=.08, previous_value=0.)
@@ -562,7 +562,7 @@ def test_roll_after_unconfirmed_hold_keeps_the_wip_sequence_without_stop_go_assi
 def test_roll_after_unconfirmed_hold_brakes_until_scc_holds():
   # route 0000007c: stopped by time (no SCC hold), then rolled back 1.55 m on zero aReq
   controller = CanfdStopping()
-  controller.unheld_brake = True  # StopGoAssist >= 1
+  controller.unheld_brake = True  # StopGoLongAssist >= 1
   for _ in range(20):
     step(controller, speed=.02, previous_value=0.)
   assert controller.phase == StopPhase.held
