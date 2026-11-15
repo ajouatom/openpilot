@@ -318,6 +318,8 @@ fn run() -> Result<(), EntryError> {
     rustix::fs::flock(&lock, rustix::fs::FlockOperation::NonBlockingLockExclusive)
         .map_err(std::io::Error::from)?;
     let params = Arc::new(Params::for_runtime()?);
+    // In P, stopped and disengaged counts as parked for a model pick (`park`).
+    openpilot_jetlink::park::spawn();
     // Carrot's auxiliary vision: xiaoge asks here for its camera models to run
     // on the App. Without the socket xiaoge keeps running them on the CPU.
     if let Err(error) = openpilot_jetlink::aux::serve_local(

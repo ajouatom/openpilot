@@ -14,6 +14,8 @@ openpilot-runtime-core = { path = "../runtime-core" }
 openpilot-managed-entry = { path = "../managed-entry" }
 openpilot-modeld = { path = "../modeld" }
 openpilot-mapsd = { path = "../mapsd" }
+openpilot-cereal = { path = "../cereal" }
+openpilot-messaging = { path = "../messaging" }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["float_roundtrip"] }
 thiserror = "2"

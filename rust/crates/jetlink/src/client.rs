@@ -77,6 +77,8 @@ pub struct Client<T: Transport> {
     aux: Option<std::sync::Arc<crate::aux::Hub>>,
     /// The App said `carrot_aux_v1` and the session is up: the hub is live.
     aux_live: bool,
+    /// When `after_reply` last looked for a pick made in P (ns).
+    pick_checked_at: u64,
     pub status: std::sync::Arc<std::sync::Mutex<Value>>,
     pub hello_complete: std::sync::Arc<std::sync::atomic::AtomicBool>,
 }
@@ -96,6 +98,14 @@ fn parked() -> bool {
     let read = |name: &str| std::fs::read_to_string(format!("/data/params/d/{name}"));
     read("IsOffroad").is_ok_and(|value| value.trim() == "1")
         && !read("IsOnroad").is_ok_and(|value| value.trim() == "1")
+}
+/// `at` of the pick named in the last hello of this process, as f64 bits;
+/// 0 for none. In P (`crate::park`) only a pick not named yet rejoins, so
+/// shifting into P does not drop the link every time.
+static NAMED_PICK_AT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+fn named_pick_at() -> Option<f64> {
+    let bits = NAMED_PICK_AT.load(std::sync::atomic::Ordering::Acquire);
+    (bits != 0).then(|| f64::from_bits(bits))
 }
 impl<T: Transport> Client<T> {
     /// A new, fresh, valid route map to send, or one blank map when it went
@@ -121,11 +131,17 @@ impl<T: Transport> Client<T> {
             .as_ref()
             // Only while parked: a link that drops and rejoins on the road
             // keeps the model the App runs; the pick goes at the next park.
-            .filter(|app| self.transport.version() == wire::Version::V3 && (app.parked)())
+            // In P, stopped and disengaged counts (crate::park): in cars whose
+            // comma turns off with the ignition there is no other park.
+            .filter(|app| {
+                self.transport.version() == wire::Version::V3
+                    && ((app.parked)() || crate::park::in_park())
+            })
             .and_then(|app| crate::app_pick::current(&app.cache));
         if let Some(pick) = &pick {
             // Inside `client`: the App reads the pick from the hello's client.
             hello["client"]["pick"] = pick.hello(crate::now_ns() as f64 / 1e9);
+            NAMED_PICK_AT.store(pick.at.to_bits(), std::sync::atomic::Ordering::Release);
         }
         if let Some(app) = &mut self.app {
             app.pick_at = pick.as_ref().map(|pick| pick.at);
@@ -174,6 +190,7 @@ impl<T: Transport> Client<T> {
             client_nonce: None,
             aux: None,
             aux_live: false,
+            pick_checked_at: 0,
             status: std::sync::Arc::new(std::sync::Mutex::new(json!({}))),
             hello_complete: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
         }
@@ -274,6 +291,8 @@ impl<T: Transport> Client<T> {
                 }
             }
             self.release_app_request()?;
+        } else if self.picked_in_park() {
+            return Err(Error::Contract("model picked on the comma"));
         }
         self.idle_at = crate::now_ns().saturating_add(2_000_000_000);
         let deadline = Deadline::after(Duration::from_millis(500))?;
@@ -285,6 +304,19 @@ impl<T: Transport> Client<T> {
         crate::selection::check_loaded(&self.session_contract().spec, &state)?;
         self.report("ready", "ready", None, Some(&state));
         Ok(())
+    }
+    /// A pick made on the comma that the App has not heard, while in P,
+    /// stopped and disengaged (`crate::park`): the link rejoins so the next
+    /// hello carries it. Only a pick not named before counts.
+    fn picked_in_park(&self) -> bool {
+        let Some(app) = &self.app else {
+            return false;
+        };
+        if self.transport.version() != wire::Version::V3 || !crate::park::in_park() {
+            return false;
+        }
+        let picked = crate::app_pick::current(&app.cache).map(|pick| pick.at);
+        picked.is_some() && picked != app.pick_at && picked != named_pick_at()
     }
     /// Lets this link carry carrot's auxiliary vision when the App offers it.
     pub fn set_aux(&mut self, hub: std::sync::Arc<crate::aux::Hub>) {
@@ -982,6 +1014,15 @@ impl<T: Transport> Client<T> {
 impl<T: Transport> Backend for Client<T> {
     fn after_reply(&mut self) -> Result<(), Error> {
         self.provision_wifi(false)?;
+        // modeld keeps the link busy onroad, so idle() rarely runs there: a
+        // pick made in P is looked for here too, once a second.
+        let now = crate::now_ns();
+        if now >= self.pick_checked_at {
+            self.pick_checked_at = now.saturating_add(1_000_000_000);
+            if self.picked_in_park() {
+                return Err(Error::Contract("model picked on the comma"));
+            }
+        }
         self.pump_aux()
     }
     fn idle(&mut self) -> Result<(), Error> {

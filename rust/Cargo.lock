@@ -2935,10 +2935,12 @@ name = "openpilot-jetlink"
 version = "0.1.0"
 dependencies = [
  "libc",
+ "openpilot-cereal",
  "openpilot-http-transport",
  "openpilot-logging",
  "openpilot-managed-entry",
  "openpilot-mapsd",
+ "openpilot-messaging",
  "openpilot-modeld",
  "openpilot-params",
  "openpilot-runtime-core",

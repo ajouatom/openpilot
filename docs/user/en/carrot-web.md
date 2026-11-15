@@ -240,6 +240,13 @@ both comma and Jetson to download, verify, and apply the choice. A new Jetson mo
 needs engine preparation. The eGPU downloads the official precompiled PKL without
 recompiling the driving model itself.
 
+A Jetlink App (Android tablet or phone) takes the choice at its next connection, without a reboot.
+The comma sends the choice while parked (ignition off) or with the ignition on in **P, stopped and not
+engaged**, and uploads the model over the cable when the App lacks it. In cars whose comma is powered
+from the harness and turns off with the ignition, choose in P. With the tablet already connected the
+link rejoins once within a second of choosing in P. During the upload and the App's engine preparation
+the comma drives on its internal model; while driving the App keeps the model it runs.
+
 `NOO supported` identifies models accepting route images and navigation inputs. Currently
 N16 supports these inputs; Flip Flop, Light speed and Light speed 2 do not. This label does not establish current
 route validity or driving performance. MD v3 has been retired from the list. Flip Flop uses
