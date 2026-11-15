@@ -5,7 +5,7 @@ from opendbc.car.hyundai.scalar import clip_float
 from opendbc.car import CanBusBase, DT_CTRL
 from opendbc.car.carlog import carlog
 from opendbc.car.crc import CRC16_XMODEM
-from opendbc.car.hyundai.values import HyundaiFlags, HyundaiExtFlags
+from opendbc.car.hyundai.values import CAR, HyundaiFlags, HyundaiExtFlags
 from opendbc.car.hyundai.stopping import MOVING_SPEED, STOP_LOWER_BAND
 from opendbc.car.hyundai.stop_object import apply_signal_stop_object
 from openpilot.common.params import Params
@@ -503,7 +503,7 @@ def create_acc_control_scc2(packer, CAN, enabled, accel_value_last, accel, stopp
     return None, accel_value_last
   interlock_active = longitudinal_interlock_active(CS)
   soft_hold_active = CS.softHoldActive > 0 and CS.out.cruiseState.available
-  acc_control_enabled = (enabled or soft_hold_active) and CS.out.cruiseState.available and CS.paddle_button_prev == 0 and not interlock_active
+  acc_control_enabled = (enabled or soft_hold_active) and CS.out.cruiseState.available and CS.paddle_button_prev == 0 and getattr(CS, "paddle_hold_frames", 0) == 0 and not interlock_active
   enabled = acc_control_enabled
 
   acc_mode = 0 if not enabled else (2 if gas_override else 1)
@@ -876,7 +876,120 @@ def _hide_replaced_adas_service_warning(values):
     values["FAULT_DAS"] = 0
 
 
-def _select_cluster_background(cruise_enabled, lat_active, paddle_pressed, paddle_mode, turning=False):
+# --- CcncClusterDisplay / CcncTrafficBackground (CCNC cluster frames 0x161 / 0x162) ---
+# Purpose: make the stock CCNC cluster show openpilot's state the way the stock HDA2 display does. Both keys default to
+# 0, which turns off only the items gated on them. Not gated, so applied at 0 too: the HDP gap bars / spacing / gap
+# popup, the corner box -> grey car normalization and the standstill steering icons in create_ccnc_messages.
+# Scope: create_ccnc_messages runs on CAN-FD with CAMERA_SCC and openpilot longitudinal (HyundaiCameraSCC 1 or 2; 3 has
+# no openpilot longitudinal); 0x161 items need the camera's 0x161 seen, the HDP icon its 0x162.
+# Evidence: cluster tests on an Ioniq 5 PE (one raw field or bit swept while parked and filmed, 2026-10-18..29;
+# "cluster test N" below is that field's slot number) and the rlogs dated next to each value.
+
+LANE_LINE_UNSEEN = 14  # 0x161 LANELINE_*: draws nothing on the Ioniq 5 PE cluster (not a DBC value)
+# model laneLineProbs at low speed (10-18 rlogs, night): parking lots 0.01~0.04, city stops 0.13~0.22, highway ~1.0
+LANE_HIDE_PROB, LANE_SHOW_PROB, LANE_HIDE_FRAMES = 0.08, 0.12, 100  # hide after 1 s below 0.08, show again from 0.12
+
+
+def _lane_unseen(state, side, prob, frame):
+  hidden, low_since = state.get(side, (False, None))
+  if prob >= LANE_SHOW_PROB:
+    hidden, low_since = False, None
+  elif prob < LANE_HIDE_PROB:
+    low_since = frame if low_since is None else low_since
+    hidden = hidden or frame - low_since >= LANE_HIDE_FRAMES
+  else:
+    low_since = None  # in between: keep the current state
+  state[side] = (hidden, low_since)
+  return hidden
+
+
+# 0x162 bit 188 (no DBC name; cluster test 9, 10-29): the HDP icon. Stock never sets it.
+HDP_ICON_BIT = 188
+# 0x161 ALERTS_5 popups on engage / disengage (cluster test 22, 10-29): 19 "always be ready to drive", 21 "HDP released"
+ENGAGE_POPUP, DISENGAGE_POPUP = 19, 21
+ENGAGE_POPUP_FRAMES = int(2.0 / DT_CTRL)
+# openpilot alert -> cluster text (0x161 ALERTS_4 = cluster test 21, ALERTS_5 = 22; 10-29 videos), keyed by event name.
+# Cruise released and the R-gear disengage are not mirrored on purpose: the cluster already shows its own text for them.
+CLUSTER_ALERT_TEXTS = {
+  "speedTooHigh": ("ALERTS_4", 83),                # driving speed is high
+  "steerUnavailable": ("ALERTS_5", 9),             # lane keeping assist: not in operating conditions
+  "accFaulted": ("ALERTS_5", 4),                   # smart cruise control: not in operating conditions
+  "steerSaturated": ("ALERTS_3", 18),              # check surroundings, with the comma "take control" alert
+  **dict.fromkeys(("controlsMismatch", "canError", "canBusMissing", "vehicleSensorsInvalid", "relayMalfunction",
+                   "locationdPermanentError", "paramsdPermanentError"), ("ALERTS_4", 147)),  # abnormal operation detected
+}
+
+
+# Stock pairs CHECK_SURROUNDINGS with SOUNDS_4 2 (DOUBLE CHIME) for ~1 s (BSM lane change refusal, 11-08 log): ours does too
+CHIME_TEXT = ("ALERTS_3", 18)
+CHIME_FRAMES = int(1.0 / DT_CTRL)
+
+
+def _cluster_alert_text(alert_type):
+  name = alert_type.split("/")[0]
+  return CLUSTER_ALERT_TEXTS.get(name)
+
+
+def _set_raw_bits(msg, bits, value):
+  # set 0x162 bits the DBC does not name, then refresh the CAN-FD checksum
+  addr, dat, bus = msg
+  d = bytearray(dat)
+  for i, b in enumerate(bits):
+    d[b // 8] = (d[b // 8] & ~(1 << (b % 8))) | (((value >> i) & 1) << (b % 8))
+  d[0:2] = hkg_can_fd_checksum(addr, None, d).to_bytes(2, 'little')
+  return addr, bytes(d), bus
+
+
+# Every CAN-FD car shares one DBC, so a value its VAL_ table names goes to every CCNC cluster. Values it does not name
+# (ALERTS_5 9, 0x162 bit 188) go only to clusters seen to draw them: Ioniq 5 PE (cluster tests 10-29), GN7 / EV4
+# (owner report 11-12).
+NON_DBC_CLUSTER_VALUE_CARS = (CAR.HYUNDAI_IONIQ_5_PE, CAR.HYUNDAI_AZERA_7TH_GEN, CAR.KIA_EV4)
+# The dashed codes 8/10 only on the clusters above (an allow list; Ioniq 5 PE seen 10-18, GN7 / EV4 by the same 11-12
+# owner report). IONIQ 9 / EV9 drew no line for them (owner reports 10-28~30); others stay solid.
+DASHED_LANE_CARS = NON_DBC_CLUSTER_VALUE_CARS
+# IONIQ 9 / EV9 drew no line for a non-DBC lane code (owner reports above), so they also keep carrot-wip's lane values
+# instead of the unseen code 14 (decision 11-15). Every other CCNC car gets 14.
+LANE_UNSEEN_WIP_CARS = (CAR.HYUNDAI_IONIQ_9, CAR.KIA_EV9)
+
+
+def _dbc_listed(field, value):
+  if not hasattr(_dbc_listed, "values"):
+    from opendbc.can import CANDefine  # here: opendbc.can imports back into opendbc.car at module load
+    _dbc_listed.values = CANDefine("hyundai_canfd_generated").dv["ADRV_0x161"]  # all CAN-FD platforms (values.py)
+  return value in _dbc_listed.values.get(field, {})
+
+
+def _dashed_lane_line(color, lane_line, car=None):
+  # 0x161 dashed codes seen on the Ioniq 5 PE cluster: 8 white, 10 green (no orange dashed)
+  if car in DASHED_LANE_CARS and lane_line // 10 > 0 and lane_line % 10 in (0, 5):  # camera: dashed / DLM inner dashed (color 0 = no lane info)
+    return {2: 8, 6: 10}.get(color, color)
+  return color
+
+
+# CcncTrafficBackground: red light -> steady red 5, green light -> steady green 8 (Ioniq 5 PE, 10-20; not DBC values)
+TRAFFIC_BACKGROUND = {1: 5, 2: 8}
+
+
+def _traffic_display_state(traffic_state, frame):
+  # Like the C4 traffic light ball: red while red, green only for 2 s after it turns green
+  # (model-based green is on for most normal driving).
+  if traffic_state == 2 and _traffic_display_state.last != 2:
+    _traffic_display_state.green_until = frame + 200
+  _traffic_display_state.last = traffic_state
+  return 0 if traffic_state == 2 and frame >= _traffic_display_state.green_until else traffic_state
+_traffic_display_state.last, _traffic_display_state.green_until = 0, 0
+
+
+# CcncClusterDisplay: hudControl.latHudState -> 0x161 LANE_HIGHLIGHT (cluster test 24, 10-24):
+# laneless green, lane mode sky blue, steer warn yellow, saturated red
+LANE_HIGHLIGHT_BY_LAT = {1: 1, 2: 3, 3: 4, 4: 5}
+
+
+def _select_cluster_background(cruise_enabled, lat_active, paddle_pressed, paddle_mode, turning=False, traffic_state=0):
+  # A detected traffic light takes over the background until detection ends (traffic_state is 0 unless
+  # CcncTrafficBackground is on).
+  if traffic_state in TRAFFIC_BACKGROUND:
+    return TRAFFIC_BACKGROUND[traffic_state]
   # Reuse the existing flashing-red background to identify an active model turn.
   if (lat_active and turning) or (paddle_mode > 0 and paddle_pressed):
     return 6
@@ -903,6 +1016,8 @@ def _normalize_cluster_corner_objects(values, *, ccnc=False):
     key = f"{side}_DETECT"
     if values[f"{side}_DETECT_DISTANCE"] != 0 and (ccnc or values[key] >= 4):
       values[key] = 3 if ccnc else 1
+    elif ccnc and values[key] in (1, 2):  # 10-24 rlogs: stock flicks a box with distance 0 between car frames
+      values[key] = 3
 
 
 def _convert_ccnc_front_box_to_car(values):
@@ -933,6 +1048,158 @@ def _apply_ccnc_lead(values, radar_state, enabled, model_v2=None, hud_lateral=No
   values["FF_DISTANCE"] = clip_float(lead.dRel, 0.1, 204.5)
   # Match the OEM object using current geometry, independently of display lag.
   values["FF_LATERAL"] = clip_float(lateral if hud_lateral is None else hud_lateral, -6.4, 6.3)
+
+
+class CameraSetSpeedSync:
+  """Keep the camera's stock SCC set speed (SCC_CONTROL VSetDis) equal to the driver's cruise set speed.
+
+  Purpose:
+    With openpilot longitudinal on a camera-SCC CAN-FD car, the camera's stock SCC keeps cruising in the background
+    (create_ccnc_messages keeps it active with SET_DECEL pulses) while its output is replaced by ours. When the device
+    drops out (reboot, crash, panda loss) panda stops replacing it and the car continues on the camera's OWN VSetDis,
+    which only follows the driver's physical +/- presses. After openpilot changed the set speed by itself (road limit,
+    navigation, RES+ restore), a drop-out therefore handed the car a different speed. This class presses +/- on the
+    camera bus until the two agree.
+
+  Scope:
+    - Hand-over only: it never changes openpilot's set speed, our SCC_CONTROL output, or how the car is driven while
+      engaged. The presses go to the camera bus only (CAN.CAM).
+    - The target is the driver's cruise set speed (CarState.vCruiseCluster), not hudControl.setSpeed: the latter is
+      the displayed speed, which follows the planned speed at a red light and temporary curve/navigation speeds.
+    - Called only through CameraSync (see its gates); always on for camera-SCC CAN-FD with openpilot longitudinal on
+      the CRUISE_BUTTONS / CRUISE_BUTTONS_ALT path. 0x10B ALT2 cars use create_alt2_adas_button_request, which has
+      no sync.
+
+  Rules (each one prevents a specific, observed or code-proven failure):
+    - target outside MIN..MAX (stock set range) = no press: an unreachable target would otherwise be pressed forever,
+      and clamping would move a camera that already matches (e.g. 25 mph raised to 30).
+    - camera 0 or >= 255 = no valid set speed (255 = MAIN off on the Ioniq 5 PE): no press.
+    - overshoot -> `done` for this target: on cars whose short press steps by 5/10 units, alternating +/- would never
+      settle. A new target clears it.
+    - jump guard: while the car is faster than VSetDis, a stock +/- press SETS VSetDis to the current speed instead of
+      stepping it (Ioniq 5 PE route 00000089 seg20: 81 -> 127). Press + only if that jump cannot pass the target
+      (speed <= target); press - only if no jump can happen (speed <= camera). Otherwise wait. The speed is the
+      cluster speed (integer CLU_SPEED), rounded so the comparison is exact.
+    - one short press per 0.3 s (frame % 30 window), so the camera always sees separate short presses (a long press
+      steps by 10).
+    - `busy` (pressing or waiting on the jump guard) makes the gap sync wait."""
+  # shortcut: stock SCC set range assumed 30..180 (km/h or mph units); a target outside is left alone
+  MIN, MAX = 30, 180
+
+  def __init__(self):
+    self.target = None
+    self.direction = 0
+    self.done = False
+    self.busy = False  # still working toward the target (pressing or waiting on the jump guard): gap sync waits
+
+  def button(self, target_speed, camera_speed, frame, v_ego=0.):
+    """target_speed, camera_speed and v_ego in the cluster unit (km/h or mph). Returns 1 (+), 2 (-) or 0 (no press)."""
+    target = int(round(target_speed))
+    if target != self.target:
+      self.target, self.direction, self.done = target, 0, False
+    camera = int(camera_speed)
+    if camera == target:
+      self.direction = 0  # reached: a later mismatch (driver press) is a new approach, not an overshoot
+    self.busy = (not self.done and self.MIN <= target <= self.MAX and 0 < camera < 255 and camera != target)
+    if not self.busy:
+      return 0
+    direction = 1 if target > camera else -1
+    if self.direction and direction != self.direction:
+      self.done, self.busy = True, False  # overshot: this car's short press is not a single unit; stop, do not toggle
+      return 0
+    if round(v_ego) > (target if direction > 0 else camera):
+      return 0  # jump guard (class docstring)
+    self.direction = direction
+    if not 10 < frame % 30 <= 16:  # one short press every 0.3 s
+      return 0
+    return 1 if direction > 0 else 2  # Buttons.RES_ACCEL (+) / Buttons.SET_DECEL (-)
+
+
+class CameraGapSync:
+  """Keep the camera's stock SCC gap (SCC_CONTROL DISTANCE_SETTING) equal to openpilot's leadDistanceBars.
+
+  Purpose: the same drop-out hand-over as CameraSetSpeedSync. Driver GAP presses reach both, yet the two drifted one
+  step apart on the Ioniq 5 PE (11-08/09 logs: camera = bars - 1, openpilot 1 <-> camera 4), so a drop-out handed stock
+  SCC another gap. The stock gap cycles 1 -> 2 -> 3 -> 4 -> 1 per press, so GAP is pressed until it matches.
+
+  Rules: only 1..4 on both sides are valid; one press per second (frame % 100 window) so the camera's new gap is read
+  back before the next press; at most MAX_PRESSES (two full cycles) per target, after which a camera that does not
+  follow is left alone instead of getting a press every second for the whole drive. A new target clears the count.
+  Runs only when the set speed sync is not busy (see CameraSync)."""
+  MAX_PRESSES = 8  # two full cycles; beyond that the camera is not following, so stop for this target
+
+  def __init__(self):
+    self.target = None
+    self.presses = 0
+    self.window = None
+
+  def button(self, target_bars, camera_gap, frame):
+    target, camera = int(target_bars), int(camera_gap)
+    if target != self.target or camera == target:
+      self.target, self.presses = target, 0
+    if camera == target or not (1 <= target <= 4 and 1 <= camera <= 4) or self.presses >= self.MAX_PRESSES:
+      return 0
+    if not 10 < frame % 100 <= 16:  # one short press per second, so the camera's gap updates before the next one
+      return 0
+    if frame // 100 != self.window:
+      self.window = frame // 100
+      self.presses += 1
+    return 3  # Buttons.GAP_DIST
+
+
+# The camera gets the driver's own +/-/GAP press first; openpilot's set speed / bars follow up to ~60 ms later, so a sync
+# press in between is one extra step. A long GAP press (driving mode) or CruiseGapLevels 2/3 change openpilot's bars
+# without the camera following one-to-one. Syncing resumes only after 1 s without any driver button press.
+SYNC_DRIVER_HOLD_FRAMES = 100
+# A different sync button (GAP after +/-, or +/- after GAP) starts only 0.3 s after the last sync press. The camera reads
+# a press on release (its gap changed 83-90 ms after release on the Ioniq 5 PE), so two different buttons back to back
+# without a released frame could merge or drop one.
+SYNC_SWITCH_FRAMES = 30
+
+
+class CameraSync:
+  """Decides the CameraSetSpeedSync / CameraGapSync button for the camera bus each frame (0 = no press).
+
+  Used only from the engaged branch of create_ccnc_messages after the keep-alive branches, i.e. while the camera's stock
+  SCC already cruises. Every gate below only removes presses; none adds one. When a gate is not met the frame carries
+  the driver's own buttons unchanged, exactly as carrot-wip does.
+    - no driver button press in the last SYNC_DRIVER_HOLD_FRAMES (note_driver is called on every button frame).
+    - CS.ACCMode == 1 only (the camera's stock SCC state): 2 = gas override, where a press sets VSetDis to the current
+      speed; 3 = not a plain active state, so it is not touched; 0/4 are handled by the keep-alive branch before.
+    - 0 < VSetDis < 255 (255 = MAIN off / no valid set speed) and a set cruise speed (0 < vCruiseCluster < 255).
+    - moving (vEgo > 3 m/s), like the keep-alive pulses: a stock + press at standstill is a RESUME from hold.
+    - set speed first, gap after: while the set speed sync is busy the gap waits.
+    - SYNC_SWITCH_FRAMES between two different sync buttons, so +/- and GAP never follow each other without a release."""
+
+  def __init__(self):
+    self.speed, self.gap = CameraSetSpeedSync(), CameraGapSync()
+    self.driver_frame = -SYNC_DRIVER_HOLD_FRAMES - 1
+    self.last_button, self.last_frame = 0, -SYNC_SWITCH_FRAMES - 1
+
+  def note_driver(self, frame, driver_pressed):
+    if driver_pressed:
+      self.driver_frame = frame
+
+  def button(self, CS, hud_control, frame):
+    scc = CS.scc_control
+    set_kph = CS.out.vCruiseCluster
+    if (scc is None or frame - self.driver_frame <= SYNC_DRIVER_HOLD_FRAMES or CS.ACCMode != 1 or
+        not 0 < scc["VSetDis"] < 255 or not 0 < set_kph < 255 or CS.out.vEgo <= 3.):
+      return 0
+    recent = frame - self.last_frame <= SYNC_SWITCH_FRAMES
+    if not (recent and self.last_button == 3):
+      kph_to_unit = 1. if CS.is_metric else CV.KPH_TO_MPH
+      button = self.speed.button(set_kph * kph_to_unit, scc["VSetDis"], frame, CS.out.vEgoCluster * CV.MS_TO_KPH * kph_to_unit)
+      if button or self.speed.busy:
+        return self._sent(button, frame)
+    if recent and self.last_button in (1, 2):
+      return 0
+    return self._sent(self.gap.button(hud_control.leadDistanceBars, scc["DISTANCE_SETTING"], frame), frame)
+
+  def _sent(self, button, frame):
+    if button:
+      self.last_button, self.last_frame = button, frame
+    return button
 
 
 def create_alt2_adas_button_request(packer, CAN, frame, CC, CS, stopping, *, keep_stock_scc_main=False):
@@ -978,8 +1245,16 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
 
   md = CS.modelV2
   if not hasattr(create_ccnc_messages, '_lane_line_check') or frame % 100 == 0:
-    create_ccnc_messages._lane_line_check = Params().get_int("LaneLineCheck")
+    params = Params()
+    create_ccnc_messages._lane_line_check = params.get_int("LaneLineCheck")
+    # opt-in cluster display keys; 0 turns off only their own items (see the CcncClusterDisplay section above)
+    create_ccnc_messages._cluster_display = params.get_int("CcncClusterDisplay") > 0
+    create_ccnc_messages._traffic_background = params.get_int("CcncTrafficBackground") > 0
+  if not hasattr(create_ccnc_messages, '_camera_sync'):
+    create_ccnc_messages._camera_sync = CameraSync()
   lane_line_check = create_ccnc_messages._lane_line_check
+  cluster_display = create_ccnc_messages._cluster_display
+  car = getattr(CP, "carFingerprint", None)
   desire, _ = _get_desire_and_lane_changing(md)
 
   if CP.flags & HyundaiFlags.CAMERA_SCC.value:
@@ -1013,6 +1288,7 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
         driver_pressed = (CS.cruise_buttons_msg["LFA_BTN"] != 0 or CS.cruise_buttons_msg["CRUISE_BUTTONS"] != 0
                           or CS.cruise_buttons_msg.get("ADAPTIVE_CRUISE_MAIN_BTN", 0) != 0
                           or CS.cruise_buttons_msg.get("NORMAL_CRUISE_MAIN_BTN", 0) != 0)
+        create_ccnc_messages._camera_sync.note_driver(frame, driver_pressed)
         if (keep_stock_scc_main and not CC.enabled and not CS.MainMode_ACC and not driver_pressed
             and 10 < frame % 200 <= 16):
           values["ADAPTIVE_CRUISE_MAIN_BTN"] = 1
@@ -1030,6 +1306,8 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
           elif CS.scc_control is not None and CS.scc_control["InfoDisplay"] == 4:
             if 10 < frame % 30 <= 16 and not stopping:
               values["CRUISE_BUTTONS"] = 2
+          elif sync_button := create_ccnc_messages._camera_sync.button(CS, hud_control, frame):
+            values["CRUISE_BUTTONS"] = sync_button
           else:
             if CS.adrv_0x1ea is not None and CS.adrv_0x1ea["HDA_MODE2"] == 0: # if corner radar is disabled, send main btn
               if 10 < frame % 1000 <= 16 and CS.out.vEgo > 3:
@@ -1045,6 +1323,8 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
         main_enabled = CS.out.cruiseState.available
         cruise_enabled = CC.enabled
         lat_enabled = CS.out.latEnabled
+        # steering pauses at standstill; keep the cluster's steering/lane-change icons as if it were active
+        lat_icon = lat_active or (cruise_enabled and lat_enabled and CS.out.standstill)
         nav_active = hud_control.activeCarrot > 1
         vehicle_navi_available = CS.out.vehicleNaviAvailable
         nav_icon_available = nav_active or vehicle_navi_available
@@ -1066,24 +1346,41 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
         set_speed_in_units = hud_control.setSpeed * (CV.MS_TO_KPH if CS.is_metric else CV.MS_TO_MPH)
         values["vSetDis"] = int(set_speed_in_units + 0.5)
 
-        values["DISTANCE"] = 4 if hdp_active else hud_control.leadDistanceBars
-        values["DISTANCE_LEAD"] = 2 if cruise_enabled and lead_visible else 1 if main_enabled and lead_visible else 0
+        values["DISTANCE"] = hud_control.leadDistanceBars  # real gap bars under the HDP colors too
+        if cluster_display:
+          values["DISTANCE_LEAD"] = (2 if cruise_enabled else 1) if lead_visible else 0
+        else:
+          values["DISTANCE_LEAD"] = 2 if cruise_enabled and lead_visible else 1 if main_enabled and lead_visible else 0
         values["DISTANCE_CAR"] = 3 if hdp_active else 2 if cruise_enabled else 1 if main_enabled else 0
         values["DISTANCE_SPACING"] = 5 if hdp_active else 1 if cruise_enabled else 0
+        if hdp_active and hud_control.leadDistanceBars != 4:
+          values["DISTANCE_SPACING"] = 3  # HDP spacing style for gaps 1-3 (cluster test 19-3, 10-20)
 
-        values["TARGET"] = 1 if lead_visible and cruise_enabled else 0
-        values["TARGET_DISTANCE"] = lead_distance
+        if cluster_display:
+          values["TARGET"] = (1 if cruise_enabled else 3) if lead_visible else 0  # blue when engaged, white otherwise
+          # The ring marks the target gap like stock (10-24 rlog: stock sends ~1.0/1.3/1.4/2.1 s x v by gap step, not
+          # the lead distance). Engaged: the gap openpilot keeps; otherwise the stock value stays.
+          desired_distance = getattr(hud_control, "desiredDistance", 0.)
+          if cruise_enabled and desired_distance > 0:
+            values["TARGET_DISTANCE"] = clip_float(desired_distance, 0.1, 204.5)
+        else:
+          values["TARGET"] = 1 if lead_visible and cruise_enabled else 0
+          values["TARGET_DISTANCE"] = lead_distance
 
+        traffic_state = 0
+        if create_ccnc_messages._traffic_background:
+          traffic_state = _traffic_display_state(getattr(hud_control, "trafficState", 0), frame)
         values["BACKGROUND"] = _select_cluster_background(
           cruise_enabled, lat_active, CS.paddle_button_prev > 0, paddle_mode, turning=desire in (1, 2),
+          traffic_state=traffic_state,
         )
         values["CENTERLINE"] = 1 if HDA_CntrlModSta > 0 else 0
         values["CAR_CIRCLE"] = 2 if hdp_active else 1 if cruise_enabled else 0
 
         values["NAV_ICON"] = 2 if nav_icon_available and cruise_enabled else 1 if main_enabled and nav_icon_available else 0
         values["HDA_ICON"] = 5 if hdp_active else 2 if cruise_enabled else 1 if main_enabled else 0
-        values["LFA_ICON"] = 5 if hdp_active else 2 if lat_active else 1 if lat_enabled else 0
-        values["LKA_ICON"] = 4 if lat_active else 3 if lat_enabled else 0
+        values["LFA_ICON"] = 5 if hdp_active else 2 if lat_icon else 1 if lat_enabled else 0
+        values["LKA_ICON"] = 4 if lat_icon else 3 if lat_enabled else 0
         values["FCA_ALT_ICON"] = 0
 
         if values["ALERTS_2"] in [1, 2, 5, 6, 10, 21, 22]:
@@ -1105,6 +1402,38 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
         if values["ALERTS_5"] in [11] and CS.softHoldActive == 0:
           values["ALERTS_5"] = 0
 
+        if cluster_display:
+          # ALERTS_5 19/21 are DBC values: every CCNC cluster (IONIQ 9's 6 = trailer is the same DBC value, not another table)
+          if cruise_enabled != getattr(create_ccnc_messages, '_was_enabled', cruise_enabled):
+            create_ccnc_messages._engage_popup = (ENGAGE_POPUP if cruise_enabled else DISENGAGE_POPUP, frame + ENGAGE_POPUP_FRAMES)
+          create_ccnc_messages._was_enabled = cruise_enabled
+          popup, popup_until = getattr(create_ccnc_messages, '_engage_popup', (0, 0))
+          if frame < popup_until and values["ALERTS_5"] == 0:
+            values["ALERTS_5"] = popup
+          # the alert's own text beats the generic disengage popup; a stock text still wins
+          text = _cluster_alert_text(getattr(hud_control, "alertType", "") or "")
+          if text and not (car in NON_DBC_CLUSTER_VALUE_CARS or _dbc_listed(*text)):
+            text = None
+          shown = None
+          if text and (values[text[0]] == 0 or (text[0] == "ALERTS_5" and values["ALERTS_5"] == popup and frame < popup_until)):
+            values[text[0]] = text[1]
+            shown = text
+          if shown == CHIME_TEXT and getattr(create_ccnc_messages, '_chime_shown', None) != shown:
+            create_ccnc_messages._chime_until = frame + CHIME_FRAMES
+          create_ccnc_messages._chime_shown = shown
+          # after the stock-sound filter; a stock sound or emergency (ALERTS_1) wins
+          if (shown == CHIME_TEXT and frame < getattr(create_ccnc_messages, '_chime_until', 0)
+              and values["SOUNDS_4"] == 0 and values["ALERTS_1"] == 0):
+            values["SOUNDS_4"] = 2  # DOUBLE CHIME
+
+        # carrot: with HDP on, a gap change shows the stock "distance N" popup (ALERTS_3 7~10) for 2 s; an alert text beats it
+        gap_bars = hud_control.leadDistanceBars
+        if hdp_active and gap_bars != getattr(create_ccnc_messages, '_gap_bars', gap_bars):
+          create_ccnc_messages._gap_popup_until = frame + 200
+        create_ccnc_messages._gap_bars = gap_bars
+        if frame < getattr(create_ccnc_messages, '_gap_popup_until', 0) and values["ALERTS_3"] == 0 and 1 <= gap_bars <= 4:
+          values["ALERTS_3"] = 6 + gap_bars
+
         # curvature 표시(0x161쪽 기존 로직 유지)
         _suppress_trailer_mode_warning(values, CS)
 
@@ -1113,6 +1442,16 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
         values["LANELINE_CURVATURE_DIRECTION"] = 1 if curvature < 0 and lat_active else 0
 
         trailer_lane_change_blocked = CS.trailer_connected
+        # CcncClusterDisplay: an unseen line is drawn as nothing (14), a dashed camera line as dashed (8/10)
+        lane_display = cluster_display and car not in LANE_UNSEEN_WIP_CARS
+        if lane_display:
+          lane_probs = md.laneLineProbs if md is not None and len(md.laneLineProbs) >= 3 else None
+          unseen = create_ccnc_messages.__dict__.setdefault('_lane_unseen', {})
+          # hide only when both miss (10-24 rlogs): the model drops all lines for 2~3 s mid lane change, the camera drops them in 26% of stops
+          left_seen = hud_control.leftLaneVisible and (
+            not (lane_probs is not None and _lane_unseen(unseen, 'L', lane_probs[1], frame)) or CS.out.leftLaneLine // 10 > 0)
+          right_seen = hud_control.rightLaneVisible and (
+            not (lane_probs is not None and _lane_unseen(unseen, 'R', lane_probs[2], frame)) or CS.out.rightLaneLine // 10 > 0)
         if trailer_lane_change_blocked:
           values["LANELINE_LEFT"] = 2 if hud_control.leftLaneVisible else 0
           values["LANELINE_RIGHT"] = 2 if hud_control.rightLaneVisible else 0
@@ -1125,6 +1464,8 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
           lane_color = 4 if lane_line_warn_left or CS.out.leftBlindspot else lane_color
           if hud_control.leftLaneDepart:
             values["LANELINE_LEFT"] = 4 if (frame // 50) % 2 == 0 else 1
+          elif lane_display:
+            values["LANELINE_LEFT"] = _dashed_lane_line(lane_color, CS.out.leftLaneLine, car) if left_seen or lane_color == 4 else LANE_LINE_UNSEEN  # orange stays
           else:
             values["LANELINE_LEFT"] = lane_color if hud_control.leftLaneVisible else 0
 
@@ -1136,6 +1477,8 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
           lane_color = 4 if lane_line_warn_right or CS.out.rightBlindspot else lane_color
           if hud_control.rightLaneDepart:
             values["LANELINE_RIGHT"] = 4 if (frame // 50) % 2 == 0 else 1
+          elif lane_display:
+            values["LANELINE_RIGHT"] = _dashed_lane_line(lane_color, CS.out.rightLaneLine, car) if right_seen or lane_color == 4 else LANE_LINE_UNSEEN
           else:
             values["LANELINE_RIGHT"] = lane_color if hud_control.rightLaneVisible else 0
 
@@ -1143,16 +1486,25 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
         values["LCA_RIGHT_ARROW"] = 2 if CS.out.rightBlinker else 0
 
         if trailer_lane_change_blocked:
-          values["LCA_LEFT_ICON"] = 1 if lat_active else 0
-          values["LCA_RIGHT_ICON"] = 1 if lat_active else 0
+          values["LCA_LEFT_ICON"] = 1 if lat_icon else 0
+          values["LCA_RIGHT_ICON"] = 1 if lat_icon else 0
         else:
-          values["LCA_LEFT_ICON"] = (1 if CS.out.leftBlindspot else 2) if lat_active else 0
-          values["LCA_RIGHT_ICON"] = (1 if CS.out.rightBlindspot else 2) if lat_active else 0
+          values["LCA_LEFT_ICON"] = (1 if CS.out.leftBlindspot else 2) if lat_icon else 0
+          values["LCA_RIGHT_ICON"] = (1 if CS.out.rightBlindspot else 2) if lat_icon else 0
 
         values["LANE_LEFT"] = 0 if trailer_lane_change_blocked else 1 if desire in (1, 3) else 0
         values["LANE_RIGHT"] = 0 if trailer_lane_change_blocked else 1 if desire in (2, 4) else 0
 
         _apply_driver_monitoring_alert(values, hud_control, CS.adrv_0x161)
+        if cluster_display:
+          lat_hud = getattr(hud_control, "latHudState", 0)
+          if lat_hud and desire in (3, 4):
+            lat_hud = 1  # lane change first: stock lights the lane green only while changing lanes (10-24 logs)
+          if LANE_LINE_UNSEEN in (values["LANELINE_LEFT"], values["LANELINE_RIGHT"]):
+            lat_hud = 0  # a hidden lane line: no highlight, the stock value stays
+          if lat_hud in LANE_HIGHLIGHT_BY_LAT:
+            values["LANE_HIGHLIGHT"] = LANE_HIGHLIGHT_BY_LAT[lat_hud]
+            values["LANE_HIGHLIGHT_DISTANCE"] = 0.  # 0: only the patch around the car (user choice 10-24; stock lane change uses 150 m)
         ret.append(packer.make_can_msg("ADRV_0x161", CAN.ECAN, values, rx_counter = rx_counter))
 
       if CS.adrv_0x200 is not None:
@@ -1197,7 +1549,11 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
           values["FAULT_LSS"] = 0
           values["FAULT_DAS"] = 0
 
-        ret.append(packer.make_can_msg("CCNC_0x162", CAN.ECAN, values, rx_counter=rx_counter))
+        msg = packer.make_can_msg("CCNC_0x162", CAN.ECAN, values, rx_counter=rx_counter)
+        # CcncClusterDisplay: HDP icon while cruise or steering is engaged; bit 188 has no DBC name: checked clusters only
+        if cluster_display and car in NON_DBC_CLUSTER_VALUE_CARS and (CC.enabled or lat_active):
+          msg = _set_raw_bits(msg, (HDP_ICON_BIT,), 1)
+        ret.append(msg)
 
     # --- NEW_MSG_4B9 (corner radar keep-alive?) ---
     if enable_corner_radar > 0:

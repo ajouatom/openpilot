@@ -210,11 +210,11 @@ class Monitor:
     self.sent_sequences.append(self.intent.seq)
 
   async def renew_hold(self, key):
+    from tools.jetlink.blink_owner import external_output_allowed
     # Renew an acknowledged hold before a potentially slow ATT metadata read.
     # The board still enforces its local CAN, driver and ownership guards.
     if (not self.board_report or not self.worker or not self.output_owner.held or
-        self.worker.process.poll() is not None or not self.params.get_bool('IsOnroad') or
-        self.params.get_bool('CanfdBlinkerControl')):
+        self.worker.process.poll() is not None or not external_output_allowed(self.params)):
       return 0
     nonce, stamp, ack, state, sampled = self.board_report
     latest = self.worker.latest()
@@ -233,6 +233,7 @@ class Monitor:
     return op
 
   async def exchange(self, key):
+    from tools.jetlink.blink_owner import external_output_allowed
     from tools.jetlink.blink_protocol import Process  # noqa: TID251 -- shared standalone indicator worker
     from openpilot.common.params import Params
     if self.params is None:
@@ -267,7 +268,7 @@ class Monitor:
     lost_ack = bool(self.last_command and self.last_display and requested_hold and
                     requested_hold['id'] == self.last_display[2] == self.last_command['id'] and
                     ack != self.last_command['seq'])
-    available = authenticated and state not in ('missing','error') and self.params.get_bool('IsOnroad') and not self.params.get_bool('CanfdBlinkerControl')
+    available = authenticated and state not in ('missing','error') and external_output_allowed(self.params)
     available = self.output_owner.acquire(available and (self.output_owner.held or (state == 'ready' and not lamps)))
     if self.worker and (not available or self.worker.process.poll() is not None):
       self.stop_source()
