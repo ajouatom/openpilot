@@ -38,6 +38,8 @@ pub const CLUSTER_SCREEN_MODE_DEBUG_GRAPH: i64 = 3;
 pub const CLUSTER_SCREEN_MODE_DEBUG_GRAPH_RIGHT: i64 = 4;
 pub const CLUSTER_SCREEN_MODE_TRIP_REPORT: i64 = 5;
 pub const CLUSTER_SCREEN_MODE_NAVI: i64 = 6;
+/// The driving view and the N16 navigation model's route map (carrot 7).
+pub const CLUSTER_SCREEN_MODE_NAV_MODEL: i64 = 7;
 pub const CLUSTER_SCREEN_MODE_PARAM: &str = "ClusterHudScreenMode";
 pub const CLUSTER_RADAR_INFO_NONE: i64 = 0;
 pub const CLUSTER_RADAR_INFO_VEHICLE_SPEED: i64 = 1;

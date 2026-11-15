@@ -1,15 +1,19 @@
 //! openpilot-mapsd: carrot's `selfdrive/navigation/mapsd.py`. Renders the
-//! N16 route map while a navigation graph asks for it (DEMAND_PATH) and a
-//! route, a position and a fresh instruction exist; black otherwise.
-use openpilot_cereal::{custom_capnp::carrot_man, log_capnp::event};
+//! N16 route map while something wants it (an eGPU, a navigation graph, the
+//! cluster HUD's nav-model view, a Carrot Web page) and a route, a position
+//! and a fresh instruction exist; black otherwise. The image also goes to a
+//! small PNG preview with the reason for what it shows.
+use openpilot_cereal::{car_capnp::car_state, custom_capnp::carrot_man, log_capnp::event};
 use openpilot_mapsd::{
     output::{self, Map, DEMAND_PATH, MAP_BYTES},
+    preview,
     remote::{Archive, Mapbox},
     renderer::{MapRenderer, Position},
-    route::{RouteTracker, MAX_LATITUDE},
+    route::RouteTracker,
     tiles::{HybridTiles, Remote},
     Error,
 };
+use openpilot_navd::position::{CarPark, CarrotFix, GpsFix, ParkedPosition, Sample};
 use openpilot_messaging::{runtime::SubMaster, state::Options};
 use std::{
     path::{Path, PathBuf},
@@ -69,39 +73,41 @@ fn store_root() -> PathBuf {
     }
 }
 
-struct Fix {
-    latitude: f64,
-    longitude: f64,
-    speed: f64,
-    time: f64,
-}
-
-/// carrot `navigation_position`: the phone/vehicle fusion in carrotMan,
-/// else the freshest GPS fix.
-fn position(sub: &SubMaster, now: f64) -> Option<Fix> {
+/// What the shared parked-position fusion (`openpilot_navd::position`) reads,
+/// as mapsd.py's SubMaster gives it.
+fn sample(sub: &SubMaster, now: f64) -> Sample {
     let state = &sub.state;
+    let mut sample = Sample {
+        now,
+        ..Sample::default()
+    };
     if let Ok(topic) = state.topic("carrotMan") {
-        if topic.seen && topic.valid && (0. ..0.5).contains(&(now - topic.receive_time)) {
+        if topic.seen {
             if let Some(event::Which::CarrotMan(Ok(c))) = topic.event().ok().and_then(|e| e.which().ok()) {
                 let c: carrot_man::Reader = c;
-                let source = c.get_position_source().ok().and_then(|s| s.to_str().ok()).unwrap_or("");
-                let fix = c.get_position_fix_mono_time() as f64 * 1e-9;
-                let pos = c.get_position_mono_time() as f64 * 1e-9;
-                let (lat, lon, angle, speed) = (f64::from(c.get_x_pos_lat()), f64::from(c.get_x_pos_lon()), f64::from(c.get_x_pos_angle()), f64::from(c.get_x_pos_speed()));
-                if (source.is_empty() || c.get_position_heading_valid())
-                    && fix > 0. && (0. ..2.).contains(&(now - fix)) && (0. ..0.5).contains(&(now - pos))
-                    && [lat, lon, angle, speed].iter().all(|v| v.is_finite())
-                    && lat.abs() <= MAX_LATITUDE && lon.abs() <= 180.
-                {
-                    return Some(Fix { latitude: lat, longitude: lon, speed: (speed / 3.6).max(0.), time: pos });
-                }
+                sample.carrot = Some(CarrotFix {
+                    valid: topic.valid,
+                    received: topic.receive_time,
+                    position_source_empty: c
+                        .get_position_source()
+                        .ok()
+                        .and_then(|s| s.to_str().ok())
+                        .unwrap_or("")
+                        .is_empty(),
+                    heading_valid: c.get_position_heading_valid(),
+                    fix_mono_ns: c.get_position_fix_mono_time(),
+                    position_mono_ns: c.get_position_mono_time(),
+                    latitude: f64::from(c.get_x_pos_lat()),
+                    longitude: f64::from(c.get_x_pos_lon()),
+                    angle: f64::from(c.get_x_pos_angle()),
+                    speed: f64::from(c.get_x_pos_speed()),
+                });
             }
         }
     }
-    let mut best: Option<Fix> = None;
     for name in ["gpsLocation", "gpsLocationExternal"] {
         let Ok(topic) = state.topic(name) else { continue };
-        if !topic.seen || !topic.valid || !(0. ..2.).contains(&(now - topic.receive_time)) {
+        if !topic.seen {
             continue;
         }
         let Ok(e) = topic.event() else { continue };
@@ -109,14 +115,59 @@ fn position(sub: &SubMaster, now: f64) -> Option<Fix> {
             Ok(event::Which::GpsLocation(Ok(g))) | Ok(event::Which::GpsLocationExternal(Ok(g))) => g,
             _ => continue,
         };
-        let (lat, lon, speed) = (gps.get_latitude(), gps.get_longitude(), f64::from(gps.get_speed()));
-        if gps.get_has_fix() && [lat, lon, speed].iter().all(|v| v.is_finite()) && lat.abs() <= MAX_LATITUDE && lon.abs() <= 180.
-            && best.as_ref().is_none_or(|b| topic.receive_time > b.time)
-        {
-            best = Some(Fix { latitude: lat, longitude: lon, speed: speed.max(0.), time: topic.receive_time });
+        sample.gps.push(GpsFix {
+            valid: topic.valid,
+            has_fix: gps.get_has_fix(),
+            received: topic.receive_time,
+            log_mono_time: topic.log_mono_time,
+            latitude: gps.get_latitude(),
+            longitude: gps.get_longitude(),
+            bearing: f64::from(gps.get_bearing_deg()),
+            speed: f64::from(gps.get_speed()),
+        });
+    }
+    if let Ok(topic) = state.topic("carState") {
+        if topic.seen {
+            if let Some(event::Which::CarState(Ok(car))) = topic.event().ok().and_then(|e| e.which().ok()) {
+                sample.car = Some(CarPark {
+                    valid: topic.valid,
+                    alive: topic.alive,
+                    received: topic.receive_time,
+                    park: car.get_gear_shifter() == Ok(car_state::GearShifter::Park),
+                    standstill: car.get_standstill(),
+                    v_ego: f64::from(car.get_v_ego()),
+                });
+            }
         }
     }
-    best
+    sample
+}
+
+/// mapsd.py's demand, checked once a second: an eGPU, a Jetlink/driving nav
+/// graph (DEMAND_PATH), the cluster HUD's nav-model view, or a web page.
+fn demand(params: &openpilot_params::Params) -> bool {
+    let model = std::fs::metadata(DEMAND_PATH)
+        .and_then(|m| m.modified())
+        .ok()
+        .and_then(|m| std::time::SystemTime::now().duration_since(m).ok())
+        .is_some_and(|age| age < Duration::from_secs(3));
+    params.get_bool("UsbGpuActive").unwrap_or(false)
+        || model
+        || text(params, "ClusterHudScreenMode") == "7"
+        || preview::fresh(Path::new(preview::WEB_DEMAND_PATH))
+}
+
+/// Auxiliary work shares only the little cores, at normal priority: never
+/// compete with camera, control, radar, driving model or DM on cores 4..7.
+fn little_cores() {
+    let mut set = rustix::thread::CpuSet::new();
+    for core in 0..4 {
+        set.set(core);
+    }
+    if let Err(error) = rustix::thread::sched_setaffinity(None, &set) {
+        eprintln!("mapsd: little-core affinity: {error}");
+    }
+    let _ = rustix::process::nice(15);
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -124,11 +175,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     for signal in [signal_hook::consts::SIGTERM, signal_hook::consts::SIGINT] {
         signal_hook::flag::register(signal, Arc::clone(&stop))?;
     }
-    // Auxiliary work: little cores, low priority (as carrot's mapsd).
-    let _ = rustix::process::nice(15);
+    little_cores();
     let params = openpilot_params::Params::for_runtime()?;
     let mut sub = SubMaster::for_runtime(
-        &["carrotMan", "gpsLocation", "gpsLocationExternal", "navRoute", "navInstructionCarrot"],
+        &["carrotMan", "gpsLocation", "gpsLocationExternal", "navRoute", "navInstructionCarrot", "carState"],
         Options::default(),
     )?;
     let mut renderer = MapRenderer::default();
@@ -138,9 +188,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut route: Vec<[f64; 2]> = Vec::new();
     let mut route_id = 0u64;
     let mut tracker: Option<RouteTracker> = None;
+    let mut position = ParkedPosition::default();
     let (mut next_render, mut next_config, mut was_ready) = (0f64, 0f64, false);
+    let (mut demand_checked, mut wanted, mut retry_at, mut next_preview) = (0f64, false, 0f64, 0f64);
     let black = vec![0u8; MAP_BYTES];
     let out = Path::new(output::PATH);
+    let preview_dir = Path::new(preview::PREVIEW_PATH).parent().unwrap_or(Path::new("/dev/shm"));
     while !stop.load(Ordering::Relaxed) {
         sub.update(Duration::from_millis(100))?;
         let now = monotonic();
@@ -151,6 +204,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 remote_key = key;
                 let clock: Box<dyn FnMut() -> f64 + Send> = Box::new(monotonic);
                 tiles = HybridTiles::new(&store_root(), source, clock)?;
+                retry_at = 0.;
+                next_render = 0.;
             }
         }
         if let Ok(topic) = sub.state.topic("navRoute") {
@@ -170,47 +225,75 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
         }
-        let demand = std::fs::metadata(DEMAND_PATH)
-            .and_then(|m| m.modified())
-            .ok()
-            .and_then(|m| std::time::SystemTime::now().duration_since(m).ok())
-            .is_some_and(|age| age < Duration::from_secs(3));
-        let fix = position(&sub, now);
+        let fix = position.update(&sample(&sub, now), 0.5);
         let instruction = sub.state.topic("navInstructionCarrot").ok().is_some_and(|t| t.seen && t.valid && (0. ..2.).contains(&(now - t.receive_time)));
-        let ready = demand && tracker.is_some() && fix.is_some() && instruction;
-        if now < next_render && !(was_ready && !ready) {
+        if now >= demand_checked {
+            wanted = demand(&params);
+            demand_checked = now + 1.;
+        }
+        let ready = wanted && tracker.is_some() && fix.is_some() && instruction;
+        if now < next_render && (ready || !was_ready) {
             was_ready = ready;
             continue;
         }
         was_ready = ready;
         let started = monotonic();
         let mut map = Map { route_id, rendered_ns: (started * 1e9) as u64, valid: false, image: black.clone() };
-        if ready {
+        let mut reason = if !wanted {
+            "idle"
+        } else if tracker.is_none() {
+            "route"
+        } else if fix.is_none() {
+            "position"
+        } else if !instruction {
+            "instruction"
+        } else {
+            "tiles"
+        };
+        if ready && now >= retry_at {
             let fix = fix.expect("ready");
             let advance = fix.speed * (now - fix.time).max(0.);
-            if let Some((lon, lat, bearing)) = tracker.as_mut().and_then(|t| t.update_pose(fix.longitude, fix.latitude, advance, 50.)) {
-                match renderer.render(&mut tiles, Position { latitude: lat, longitude: lon, bearing }, Some(&route)) {
-                    Ok(result) if result.valid() => {
-                        map.valid = true;
-                        map.image = result.image;
+            match tracker.as_mut().and_then(|t| t.update_pose(fix.longitude, fix.latitude, advance, 50.)) {
+                Some((lon, lat, bearing)) => {
+                    match renderer.render(&mut tiles, Position { latitude: lat, longitude: lon, bearing }, Some(&route)) {
+                        Ok(result) if result.valid() => {
+                            map.valid = true;
+                            map.image = result.image;
+                            reason = "ready";
+                        }
+                        Ok(_) => reason = "tiles",
+                        Err(error) => {
+                            eprintln!("mapsd: map unavailable; retry in 30 seconds: {error}");
+                            retry_at = monotonic() + 30.;
+                        }
                     }
-                    Ok(_) => {}
-                    Err(error) => eprintln!("mapsd: map unavailable: {error}"),
                 }
+                None => reason = "route_position",
             }
         }
-        let elapsed = monotonic() - started;
+        let finished = monotonic();
+        let elapsed = finished - started;
         if elapsed >= 0.5 {
             map.valid = false;
             map.image.fill(0);
+            reason = "slow";
         }
         // At most 10 Hz, ~10% of one core (carrot render_interval).
         let interval = (elapsed * 10.).max(0.1);
-        next_render = monotonic() + if map.valid { interval } else { interval.max(1.) };
-        if demand || ready {
+        next_render = finished + if map.valid { interval } else { interval.max(1.) };
+        if wanted || ready {
             if let Err(error) = output::write(out, &map) {
                 eprintln!("mapsd: write map: {error}");
             }
+        }
+        // The shared preview for Carrot Web and the cluster HUD, twice a
+        // second. Both of its readers create demand, so with none nobody can
+        // be looking and the PNG work is skipped.
+        if wanted && finished >= next_preview {
+            if let Err(error) = preview::write(&map.image, 256, 256, reason, preview_dir) {
+                eprintln!("mapsd: write preview: {error}");
+            }
+            next_preview = finished + 0.5;
         }
     }
     Ok(())

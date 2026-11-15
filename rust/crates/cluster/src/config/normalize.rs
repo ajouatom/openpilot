@@ -3,7 +3,7 @@ use super::{
     CLUSTER_SCREEN_MODE_DEBUG, CLUSTER_SCREEN_MODE_DEBUG_GRAPH,
     CLUSTER_SCREEN_MODE_DEBUG_GRAPH_RIGHT, CLUSTER_SCREEN_MODE_DEBUG_SYSTEM,
     CLUSTER_SCREEN_MODE_DEFAULT, CLUSTER_SCREEN_MODE_FULLSCREEN_3D, CLUSTER_SCREEN_MODE_NAVI,
-    CLUSTER_SCREEN_MODE_TRIP_REPORT,
+    CLUSTER_SCREEN_MODE_NAV_MODEL, CLUSTER_SCREEN_MODE_TRIP_REPORT,
 };
 use openpilot_ui_application::params::typed::integer_text;
 
@@ -52,6 +52,7 @@ pub fn normalize_cluster_screen_mode(value: &str) -> i64 {
             CLUSTER_SCREEN_MODE_TRIP_REPORT
         }
         "navi" | "navigation" => CLUSTER_SCREEN_MODE_NAVI,
+        "nav-model" => CLUSTER_SCREEN_MODE_NAV_MODEL,
         _ => integer_text(&normalized)
             .and_then(|v| v.parse::<i64>().ok())
             .filter(|value| {
@@ -64,9 +65,31 @@ pub fn normalize_cluster_screen_mode(value: &str) -> i64 {
                     CLUSTER_SCREEN_MODE_DEBUG_GRAPH_RIGHT,
                     CLUSTER_SCREEN_MODE_TRIP_REPORT,
                     CLUSTER_SCREEN_MODE_NAVI,
+                    CLUSTER_SCREEN_MODE_NAV_MODEL,
                 ]
                 .contains(value)
             })
             .unwrap_or(CLUSTER_SCREEN_MODE_DEFAULT),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn nav_model_mode_is_accepted_as_carrot_takes_it() {
+        assert_eq!(
+            normalize_cluster_screen_mode("7"),
+            CLUSTER_SCREEN_MODE_NAV_MODEL
+        );
+        assert_eq!(
+            normalize_cluster_screen_mode(" nav-model "),
+            CLUSTER_SCREEN_MODE_NAV_MODEL
+        );
+        assert_eq!(
+            normalize_cluster_screen_mode("8"),
+            CLUSTER_SCREEN_MODE_DEFAULT
+        );
     }
 }

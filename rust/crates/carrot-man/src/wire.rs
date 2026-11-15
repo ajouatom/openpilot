@@ -143,6 +143,12 @@ pub fn carrot(
     Ok(capnp::serialize::write_message_to_words(&output))
 }
 
+/// carrot_serv `_external_navigation_connected`: connection freshness, not
+/// active guidance.
+fn external_navigation_connected(state: &CarrotServ) -> bool {
+    state.navi_active || state.nav.active_count > 0 || state.nav.active_kisa_count > 0
+}
+
 pub fn instruction(
     state: &CarrotServ,
     decision: &Decision,
@@ -196,10 +202,40 @@ pub fn instruction(
             item.set_type(next.0);
             item.set_modifier(next.1);
         }
-    } else if let Some(fallback) = fallback {
+    } else if let Some(fallback) = fallback.filter(|_| !external_navigation_connected(state)) {
+        // carrot_serv.py: with no external navigation connected, navd's
+        // (Mapbox) instruction is republished, valid, so a destination set on
+        // Carrot Web drives the N16 navigation inputs without a phone app.
+        event.set_valid(true);
         event.set_nav_instruction_carrot(fallback)?;
     } else {
         event.init_nav_instruction_carrot();
     }
     Ok(capnp::serialize::write_message_to_words(&output))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn serv() -> CarrotServ {
+        let settings = serde_json::from_value(serde_json::json!({"bump_speed":0.,"bump_time":0.,"bump_end_distance":0.,"control_end":0.,"rear_hold_distance":0.,"control_mode":0,"vehicle_can_control":0,"school_control":false,"camera_control_mode":0,"safety_factor":0.,"deceleration":0.,"countdown_mode":0,"turn_speed_mode":0,"map_turn_factor":0.,"auto_turn_speed":0.,"auto_turn_map_change":0,"auto_turn_control":0,"auto_turn_end":0.,"curve_lower_limit":0.,"is_metric":true,"road_limit_offset":0.,"curve_factor":0.,"language":"en"})).unwrap();
+        CarrotServ::new(settings)
+    }
+
+    /// navd's instruction stands in only while no external navigation is
+    /// connected, as carrot_serv's `elif not _external_navigation_connected()`.
+    #[test]
+    fn navd_instruction_only_without_external_navigation() {
+        let mut state = serv();
+        assert!(!external_navigation_connected(&state));
+        state.navi_active = true;
+        assert!(external_navigation_connected(&state));
+        state.navi_active = false;
+        state.nav.active_count = 1;
+        assert!(external_navigation_connected(&state));
+        state.nav.active_count = 0;
+        state.nav.active_kisa_count = 1;
+        assert!(external_navigation_connected(&state));
+    }
 }

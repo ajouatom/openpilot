@@ -4,15 +4,22 @@ use serde_json::Value;
 
 #[derive(Clone, Debug)]
 pub struct Config {
+    /// Mapbox's API host (a fixture server in tests).
     pub host: String,
-    pub token: Option<String>,
 }
 
-#[derive(Clone, Copy, Debug)]
-pub struct Position {
-    pub latitude: f64,
-    pub longitude: f64,
-    pub bearing: f64,
+/// One 1 Hz update's inputs, as navd.py's `update` reads them.
+#[derive(Clone, Debug, Default)]
+pub struct Tick {
+    /// Monotonic seconds.
+    pub now: f64,
+    /// `ParkedPosition.update`: the fused position, or none.
+    pub position: Option<crate::position::NavigationPosition>,
+    /// carrotMan valid, alive and `activeCarrot > 0`: an external navigation
+    /// guides, so navd publishes nothing valid and drops its own route.
+    pub external: bool,
+    /// `MAPBOX_TOKEN` or `MapboxPublicKey`; empty for none.
+    pub token: String,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -61,6 +68,8 @@ pub enum Diagnostic {
     },
     DestinationReached,
     SpeedLimit(f64),
+    /// Mapbox answered with a route navd refuses (sizes, coordinates).
+    InvalidRoute(Error),
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -78,7 +87,13 @@ pub enum RequestError {
 pub trait Ports {
     fn parameter(&mut self, name: &str) -> Result<Option<String>, Error>;
     fn remove_parameter(&mut self, name: &str) -> Result<(), Error>;
-    fn request(&mut self, url: &str) -> Result<Value, RequestError>;
+    /// `/dev/shm/params`: the session-scoped `NavDestinationTemporary`.
+    fn memory_parameter(&mut self, name: &str) -> Result<Option<String>, Error>;
+    fn remove_memory_parameter(&mut self, name: &str) -> Result<(), Error>;
+    /// Starts the one route request off the 1 Hz loop.
+    fn submit(&mut self, url: &str) -> Result<(), Error>;
+    /// That request's result once it is done; None while it runs.
+    fn poll(&mut self) -> Option<Result<Value, RequestError>>;
     fn instruction(&mut self, message: &Instruction) -> Result<(), Error>;
     fn route(&mut self, coordinates: &[Coordinate]) -> Result<(), Error>;
     fn diagnostic(&mut self, event: Diagnostic);

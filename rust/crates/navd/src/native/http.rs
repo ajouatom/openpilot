@@ -25,21 +25,27 @@ enum Error {
     Text(#[from] openpilot_registration::Error),
     #[error("route request exceeded 30 redirects")]
     RedirectLimit,
+    #[error("route response exceeds 8 MB")]
+    TooLarge,
 }
+
+/// navd.py `requests.get(..., timeout=(3, 8))` and its 8 MB body limit.
+const CONNECT_TIMEOUT: Duration = Duration::from_secs(3);
+const READ_TIMEOUT: Duration = Duration::from_secs(8);
+const MAX_BODY: u64 = 8 * 1024 * 1024;
 
 fn get_inner(url: &str) -> Result<Response, Error> {
     let mut url = url::Url::parse(url)?;
-    let timeout = Duration::from_secs(10);
     let config = ureq::Agent::config_builder()
         .http_status_as_error(false)
         .max_redirects(0)
         .max_redirects_will_error(false)
-        .timeout_connect(Some(timeout))
+        .timeout_connect(Some(CONNECT_TIMEOUT))
         .timeout_global(None)
         .max_idle_connections(0)
         .user_agent("python-requests/2.34.2")
         .build();
-    let agent = socket_timeout_agent(config, timeout);
+    let agent = socket_timeout_agent(config, READ_TIMEOUT);
     let mut cookies = cookie_store::CookieStore::default();
     for redirects in 0..=30 {
         let mut request = agent
@@ -86,7 +92,14 @@ fn get_inner(url: &str) -> Result<Response, Error> {
             .unwrap_or("")
             .to_owned();
         let mut bytes = Vec::new();
-        response.body_mut().as_reader().read_to_end(&mut bytes)?;
+        response
+            .body_mut()
+            .as_reader()
+            .take(MAX_BODY + 1)
+            .read_to_end(&mut bytes)?;
+        if bytes.len() as u64 > MAX_BODY {
+            return Err(Error::TooLarge);
+        }
         bytes = decompress(bytes, &encoding)?;
         if let Some(location) = location.filter(|_| matches!(status, 301 | 302 | 303 | 307 | 308)) {
             if redirects == 30 {

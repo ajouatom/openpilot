@@ -57,14 +57,6 @@ impl Stop {
             default(duration) => self.check(),
         }
     }
-
-    pub fn receive<T>(&self, receiver: &Receiver<T>) -> Result<T, Error> {
-        self.check()?;
-        select! {
-            recv(self.receiver) -> _ => Err(Error::Interrupted),
-            recv(receiver) -> result => result.map_err(|_| Error::Runtime("HTTP worker stopped")),
-        }
-    }
 }
 
 impl Drop for Stop {

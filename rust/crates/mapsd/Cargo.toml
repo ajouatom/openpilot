@@ -21,7 +21,8 @@ openpilot-cereal = { path = "../cereal", optional = true }
 openpilot-params = { path = "../params", optional = true }
 signal-hook = { version = "0.3", optional = true }
 capnp = { version = "=0.27.2", optional = true }
-rustix = { version = "1", features = ["time", "process"], optional = true }
+rustix = { version = "1", features = ["time", "process", "thread"], optional = true }
+openpilot-navd = { path = "../navd" }
 
 [[bin]]
 name = "openpilot-mapsd"

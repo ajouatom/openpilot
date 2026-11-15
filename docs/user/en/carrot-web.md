@@ -259,3 +259,19 @@ are cleaned up automatically while offroad. A running retired model remains prot
 until the next boot selects the default and delivery switches the installed active model.
 Jetson cleanup waits for an offroad connection and preserves an ONNX used by any available
 model. Only the selected model is loaded into GPU memory.
+
+### Navigation map and destination search (`/navigation`)
+
+Open it with **Nav Map / 지도 검색** on the main page. With a Mapbox Public key saved under Settings → Network,
+search for a destination and select it. The selected place is used only for the current drive and is cleared
+when the drive ends or the device restarts; **Clear Mapbox destination** clears it at once.
+
+External navigation (such as the Carrot navigation app) takes priority while it is connected. Without it, the
+comma computes the route with Mapbox and publishes its guidance, which, with the route map, feeds a navigation
+model such as N16 directly. NOO therefore works from a destination chosen on the web, without a phone app. The
+position is the phone's while it is fresh, otherwise the freshest GPS fix, and the last position is kept while
+the car stands in P.
+
+The left panel shows the black-and-white route map the navigation model receives. It is rendered only while
+this page is open, Cluster HUD mode is `7`, or a navigation model or eGPU uses it. Without a destination, a
+position or guidance, the page shows why.

@@ -88,6 +88,13 @@ pub fn event(logger: &mut Logger, event: Diagnostic) {
             );
             println!("navd route limited: {original} -> {sent}");
         }
+        Diagnostic::InvalidRoute(error) => {
+            text(
+                logger,
+                Level::Warning,
+                format!("navd: invalid Mapbox route response: {error}"),
+            );
+        }
         Diagnostic::DestinationReached => {
             text(logger, Level::Warning, "Destination reached".into());
             println!("Destination reached");

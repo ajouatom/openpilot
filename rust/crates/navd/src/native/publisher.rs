@@ -1,15 +1,8 @@
-use super::{diagnostics, timestamp};
-use crate::{
-    geometry::{limit_route_points, Coordinate},
-    route::Diagnostic,
-    wire, Error,
-};
-use openpilot_logging::producer::{Factory, Logger};
+use crate::Error;
 use openpilot_messaging::runtime::PubMaster;
 use std::{
-    sync::mpsc::{self, Receiver, RecvTimeoutError, SyncSender},
+    sync::mpsc::{self, Receiver, SyncSender},
     thread::{self, JoinHandle},
-    time::{Duration, Instant},
 };
 
 enum Command {
@@ -18,8 +11,6 @@ enum Command {
         bytes: Vec<u8>,
         done: SyncSender<Result<(), Error>>,
     },
-    Geometry(Result<Vec<Coordinate>, String>),
-    Resend(Instant),
 }
 
 pub struct Publisher {
@@ -28,7 +19,7 @@ pub struct Publisher {
 }
 
 impl Publisher {
-    pub fn new(factory: Factory) -> Result<Self, Error> {
+    pub fn new() -> Result<Self, Error> {
         let (sender, receiver) = mpsc::sync_channel(1);
         let (ready, readiness) = mpsc::sync_channel(1);
         let worker = thread::Builder::new()
@@ -47,7 +38,7 @@ impl Publisher {
                 if ready.send(Ok(())).is_err() {
                     return;
                 }
-                run(&mut publisher, &mut factory.logger(), receiver);
+                run(&mut publisher, receiver);
             })?;
         readiness
             .recv()
@@ -77,16 +68,6 @@ impl Publisher {
             .recv()
             .map_err(|_| Error::Runtime("publisher acknowledgement closed"))?
     }
-
-    pub fn geometry(&self, coordinates: Result<Vec<Coordinate>, Error>) -> Result<(), Error> {
-        self.command(Command::Geometry(
-            coordinates.map_err(|error| error.to_string()),
-        ))
-    }
-
-    pub fn resend(&self) -> Result<(), Error> {
-        self.command(Command::Resend(Instant::now() + Duration::from_secs(5)))
-    }
 }
 
 impl Drop for Publisher {
@@ -100,71 +81,17 @@ impl Drop for Publisher {
     }
 }
 
-fn send_route(
-    publisher: &mut PubMaster,
-    logger: &mut Logger,
-    geometry: &Result<Vec<Coordinate>, String>,
-) -> Result<(), Error> {
-    let geometry = match geometry {
-        Ok(geometry) => geometry,
-        Err(error) => {
-            eprintln!("navd route timer: {error}");
-            return Ok(());
-        }
-    };
-    let limited = limit_route_points(geometry, 4096)?;
-    if geometry.len() > limited.len() {
-        diagnostics::event(
-            logger,
-            Diagnostic::RouteLimited {
-                original: geometry.len(),
-                sent: limited.len(),
-            },
-        );
-    }
-    publisher.send("navRouteNavd", &wire::route(&limited, timestamp()?)?)?;
-    Ok(())
-}
-
-fn run(publisher: &mut PubMaster, logger: &mut Logger, receiver: Receiver<Command>) {
-    let mut geometry = Ok(Vec::new());
-    let mut deadlines: Vec<Instant> = Vec::new();
-    let mut connected = true;
-    loop {
-        let next = deadlines.first().copied();
-        let received = if connected {
-            match next {
-                Some(deadline) => {
-                    receiver.recv_timeout(deadline.saturating_duration_since(Instant::now()))
-                }
-                None => receiver.recv().map_err(|_| RecvTimeoutError::Disconnected),
-            }
-        } else if let Some(deadline) = next {
-            thread::sleep(deadline.saturating_duration_since(Instant::now()));
-            Err(RecvTimeoutError::Timeout)
-        } else {
-            break;
-        };
-        match received {
-            Ok(Command::Message {
-                service,
-                bytes,
-                done,
-            }) => {
-                let result = publisher.send(service, &bytes).map_err(Error::from);
-                if done.send(result).is_err() {
-                    eprintln!("navd publication receiver closed");
-                }
-            }
-            Ok(Command::Geometry(value)) => geometry = value,
-            Ok(Command::Resend(deadline)) => deadlines.push(deadline),
-            Err(RecvTimeoutError::Disconnected) => connected = false,
-            Err(RecvTimeoutError::Timeout) => {
-                if let Err(error) = send_route(publisher, logger, &geometry) {
-                    eprintln!("navd route timer: {error}");
-                }
-                deadlines.remove(0);
-            }
+fn run(publisher: &mut PubMaster, receiver: Receiver<Command>) {
+    // The engine resends the route itself every 5 s (navd.py `resend_at`).
+    while let Ok(Command::Message {
+        service,
+        bytes,
+        done,
+    }) = receiver.recv()
+    {
+        let result = publisher.send(service, &bytes).map_err(Error::from);
+        if done.send(result).is_err() {
+            eprintln!("navd publication receiver closed");
         }
     }
 }

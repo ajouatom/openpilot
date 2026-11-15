@@ -3,6 +3,7 @@
 //! vector tiles that are kept locally and refreshed from a remote archive.
 pub mod output;
 pub mod pmtiles;
+pub mod preview;
 #[cfg(feature = "native")]
 pub mod remote;
 pub mod renderer;

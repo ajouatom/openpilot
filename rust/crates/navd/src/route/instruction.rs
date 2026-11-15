@@ -136,6 +136,7 @@ impl RouteEngine {
                     > 25.
                 {
                     ports.remove_parameter("NavDestination")?;
+                    ports.remove_memory_parameter("NavDestinationTemporary")?;
                     self.clear_route(ports)?;
                 }
             }

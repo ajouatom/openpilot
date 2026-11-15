@@ -133,6 +133,9 @@ pub(crate) async fn dispatch(
         let timestamp = app.ssh_timestamp;
         return Ok(crate::ssh_keys::handle(request, app, online, timestamp).await);
     }
+    if crate::navigation::matches(&path) {
+        return Ok(crate::navigation::handle(request, app).await);
+    }
     if crate::mapbox_tokens::matches(&path, request.method()) {
         let online = Arc::clone(&app.mapbox_online);
         return Ok(crate::mapbox_tokens::handle(request, app, online).await);

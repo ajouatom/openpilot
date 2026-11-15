@@ -28,6 +28,7 @@ impl ClusterUiRenderer {
                 | CLUSTER_SCREEN_MODE_DEBUG_SYSTEM
                 | CLUSTER_SCREEN_MODE_DEBUG_GRAPH_RIGHT
                 | CLUSTER_SCREEN_MODE_TRIP_REPORT
+                | crate::config::CLUSTER_SCREEN_MODE_NAV_MODEL
         ) {
             return NAVI_WORLD_VIEW_SHIFT_X * self.width / super::DESIGN_WIDTH;
         }

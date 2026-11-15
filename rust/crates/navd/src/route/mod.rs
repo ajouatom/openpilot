@@ -4,14 +4,25 @@ mod recompute;
 mod request;
 use crate::{
     geometry::{limit_route_points, Coordinate},
+    position::NavigationPosition,
     Error,
 };
 pub use message::{
-    Config, Diagnostic, Instruction, Maneuver, Ports, Position, RequestError, SpeedLimitSign,
+    Config, Diagnostic, Instruction, Maneuver, Ports, RequestError, SpeedLimitSign, Tick,
 };
-pub use request::{parameter_coordinate, Endpoint};
+pub use request::{coordinate_from, parameter_coordinate, Endpoint};
 use serde_json::{json, Value};
 
+/// The route request in flight and what it was asked for: a result for an
+/// older destination, token or waypoints is dropped.
+#[derive(Debug)]
+pub struct Pending {
+    pub destination: Endpoint,
+    pub token: String,
+    pub waypoints: String,
+}
+
+/// carrot's `navd.py` `RouteEngine`.
 pub struct RouteEngine {
     pub last_position: Option<Endpoint>,
     pub last_bearing: Option<f64>,
@@ -25,7 +36,13 @@ pub struct RouteEngine {
     pub recompute_countdown: u64,
     pub ui_pid: Option<i32>,
     pub reroute_counter: u64,
-    pub carrot_route_active: bool,
+    pub mapbox_token: String,
+    pub was_external: bool,
+    /// The route goes out again every 5 s (navd.py `resend_at`).
+    pub resend_at: Option<f64>,
+    pub pending: Option<Pending>,
+    /// Last destination announced, so a pending request does not repeat it.
+    announced: Option<Coordinate>,
     config: Config,
 }
 
@@ -53,54 +70,104 @@ impl RouteEngine {
             recompute_countdown: 0,
             ui_pid: None,
             reroute_counter: 0,
-            carrot_route_active: false,
+            mapbox_token: String::new(),
+            was_external: false,
+            resend_at: None,
+            pending: None,
+            announced: None,
             config,
         })
     }
 
-    pub fn update_ui_pid(&mut self, pid: Option<i32>) -> bool {
+    /// A restarted UI gets the route again in 5 s (navd.py).
+    pub fn update_ui_pid(&mut self, pid: Option<i32>, now: f64) -> bool {
         let Some(pid) = pid else {
             return false;
         };
         let restarted = self.ui_pid.is_some_and(|old| old != 0 && old != pid);
+        if restarted {
+            self.resend_at = Some(now + 5.);
+        }
         self.ui_pid = Some(pid);
         restarted
     }
 
-    pub fn update<P: Ports>(&mut self, position: Position, ports: &mut P) -> Result<(), Error> {
-        if let Err(error) = self.update_location(position) {
-            ports.diagnostic(Diagnostic::ComputeFailed(error));
-            return Ok(());
-        }
-        if !self.carrot_route_active {
-            if let Err(error) = self
-                .recompute_route(ports)
-                .and_then(|()| self.send_instruction(ports))
-            {
-                if matches!(error, Error::Interrupted) {
-                    return Err(error);
-                }
-                ports.diagnostic(Diagnostic::ComputeFailed(error));
+    pub fn update<P: Ports>(&mut self, tick: Tick, ports: &mut P) -> Result<(), Error> {
+        self.refresh_token(&tick.token, ports)?;
+        self.update_location(tick.position)?;
+        match self.resend_at {
+            None => self.resend_at = Some(tick.now + 5.),
+            Some(at) if tick.now >= at => {
+                self.send_route(ports)?;
+                self.resend_at = Some(tick.now + 5.);
             }
+            Some(_) => {}
+        }
+        if let Err(error) = self.poll_route(ports) {
+            if matches!(error, Error::Interrupted) {
+                return Err(error);
+            }
+            ports.diagnostic(Diagnostic::ComputeFailed(error));
+        }
+        if tick.external {
+            self.was_external = true;
+            return ports.instruction(&Instruction::default());
+        }
+        if self.was_external {
+            self.was_external = false;
+            self.clear_route(ports)?;
+            self.reset_recompute_limits();
+        }
+        if !self.gps_ok {
+            return ports.instruction(&Instruction::default());
+        }
+        if let Err(error) = self
+            .recompute_route(ports)
+            .and_then(|()| self.send_instruction(ports))
+        {
+            if matches!(error, Error::Interrupted) {
+                return Err(error);
+            }
+            ports.diagnostic(Diagnostic::ComputeFailed(error));
         }
         Ok(())
     }
 
-    fn update_location(&mut self, position: Position) -> Result<(), Error> {
-        if position.latitude != 0. && position.longitude != 0. {
-            self.last_bearing = Some(position.bearing);
+    fn refresh_token<P: Ports>(&mut self, token: &str, ports: &mut P) -> Result<(), Error> {
+        if token != self.mapbox_token {
+            self.mapbox_token = token.to_owned();
+            self.clear_route(ports)?;
+            self.reset_recompute_limits();
+        }
+        Ok(())
+    }
+
+    /// The last position stays when there is none now (tunnels).
+    fn update_location(&mut self, position: Option<NavigationPosition>) -> Result<(), Error> {
+        self.gps_ok = position.is_some();
+        self.localizer_valid = self.gps_ok;
+        if let Some(position) = position {
             self.last_position = Some(Endpoint::new(Coordinate::new(
                 position.latitude,
                 position.longitude,
             ))?);
-            self.localizer_valid = true;
-            self.gps_ok = true;
-        } else {
-            self.localizer_valid = false;
-            self.gps_ok = false;
-            self.carrot_route_active = false;
+            self.last_bearing = Some(position.bearing);
         }
         Ok(())
+    }
+
+    /// The session-scoped destination Carrot Web sets, else the persistent one.
+    pub fn destination_from_params<P: Ports>(
+        &self,
+        ports: &mut P,
+    ) -> Result<(Option<Endpoint>, Option<Value>), Error> {
+        if let Some(value) = ports
+            .memory_parameter("NavDestinationTemporary")?
+            .filter(|value| !value.is_empty())
+        {
+            return coordinate_from(Some(value));
+        }
+        parameter_coordinate(ports, "NavDestination")
     }
 
     pub fn send_route<P: Ports>(&self, ports: &mut P) -> Result<(), Error> {
@@ -160,6 +227,8 @@ impl RouteEngine {
             "gps_ok":self.gps_ok,"localizer_valid":self.localizer_valid,"nav_destination":self.nav_destination.as_ref().map(point),
             "step_idx":self.step_idx,"route":self.route,"route_geometry":geometry,"recompute_backoff":self.recompute_backoff,
             "recompute_countdown":self.recompute_countdown,"ui_pid":self.ui_pid,"reroute_counter":self.reroute_counter,
-            "carrot_route_active":self.carrot_route_active})
+            "was_external":self.was_external,"pending":self.pending.is_some()})
     }
 }
+#[cfg(test)]
+mod tests;

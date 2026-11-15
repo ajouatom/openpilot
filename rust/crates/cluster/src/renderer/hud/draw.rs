@@ -3,7 +3,7 @@ use crate::config::{
     CLUSTER_SCREEN_MODE_DEBUG, CLUSTER_SCREEN_MODE_DEBUG_GRAPH,
     CLUSTER_SCREEN_MODE_DEBUG_GRAPH_RIGHT, CLUSTER_SCREEN_MODE_DEBUG_SYSTEM,
     CLUSTER_SCREEN_MODE_DEFAULT, CLUSTER_SCREEN_MODE_FULLSCREEN_3D, CLUSTER_SCREEN_MODE_NAVI,
-    CLUSTER_SCREEN_MODE_TRIP_REPORT,
+    CLUSTER_SCREEN_MODE_NAV_MODEL, CLUSTER_SCREEN_MODE_TRIP_REPORT,
 };
 use crate::models::ClusterUiState;
 use crate::renderer::navigation::policy::{live_panel_visible, map_frame_present};
@@ -47,6 +47,11 @@ impl ClusterUiRenderer {
         lights: (bool, bool),
     ) -> Result<()> {
         let mode = self.effective_screen_mode(state);
+        if mode == CLUSTER_SCREEN_MODE_NAV_MODEL {
+            self.draw_driving_hud_content(state, mode, lights)?;
+            self.hud_stage("hud.nav_model_map", Self::draw_nav_model_map)?;
+            return self.draw_status_footer(state, true);
+        }
         if mode == CLUSTER_SCREEN_MODE_NAVI {
             self.draw_navi_dashboard(state)?;
             return self.draw_status_footer(state, true);

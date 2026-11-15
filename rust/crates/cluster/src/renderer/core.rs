@@ -52,6 +52,7 @@ pub struct ClusterUiRenderer {
     pub(super) guidance_hash: String,
     pub(super) media: BTreeMap<String, super::media::CachedMedia>,
     pub(super) media_support: super::media_support::MediaSupport,
+    pub(super) nav_model: super::nav_model::NavModelMap,
 }
 
 impl ClusterUiRenderer {
@@ -100,6 +101,7 @@ impl ClusterUiRenderer {
             guidance_hash: String::new(),
             media: BTreeMap::new(),
             media_support: super::media_support::MediaSupport::default(),
+            nav_model: super::nav_model::NavModelMap::default(),
             options,
         };
         value.set_theme_mode(&theme_mode);
@@ -173,6 +175,7 @@ impl ClusterUiRenderer {
         self.navi_guidance_size = None;
         self.guidance_hash.clear();
         self.media.clear();
+        self.nav_model.clear();
         self.strokes.clear();
         self.stroke_order.clear();
         self.pending_strokes.clear();
@@ -263,7 +266,7 @@ impl ClusterUiRenderer {
     }
     #[must_use]
     pub fn panel_swap_active(&self) -> bool {
-        self.panel_layout == 1 && !matches!(self.screen_mode, 3 | 6)
+        self.panel_layout == 1 && !matches!(self.screen_mode, 3 | 6 | 7)
     }
     #[must_use]
     pub fn information_panel_x(&self, x: f64) -> f64 {

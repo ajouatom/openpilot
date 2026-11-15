@@ -15,6 +15,7 @@ mod media_draw;
 mod media_hardware;
 mod media_support;
 mod media_yuv;
+mod nav_model;
 pub mod navigation;
 pub mod nv12;
 mod output;

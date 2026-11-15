@@ -1,4 +1,5 @@
 use super::{Config, Ports};
+use crate::position::MAX_LATITUDE;
 use crate::{
     geometry::Coordinate,
     json::{field, number},
@@ -54,7 +55,12 @@ pub fn parameter_coordinate<P: Ports>(
     ports: &mut P,
     name: &str,
 ) -> Result<(Option<Endpoint>, Option<Value>), Error> {
-    let Some(value) = ports.parameter(name)? else {
+    coordinate_from(ports.parameter(name)?)
+}
+
+/// `coordinate_from_param` on a parameter's text.
+pub fn coordinate_from(value: Option<String>) -> Result<(Option<Endpoint>, Option<Value>), Error> {
+    let Some(value) = value else {
         return Ok((None, None));
     };
     let value: Value = serde_json::from_str(&value)?;
@@ -85,37 +91,51 @@ fn number_text(value: &Value) -> Result<String, Error> {
     }
 }
 
+/// navd.py's waypoint check: at most 23 `[lon, lat]` pairs, finite and on
+/// the map. None when the parameter cannot be used (no request then).
+fn waypoints(text: &str) -> Option<Vec<String>> {
+    if text.is_empty() {
+        return Some(Vec::new());
+    }
+    let value: Value = serde_json::from_str(text).ok()?;
+    let list = value.as_array()?;
+    if list.len() > 23 {
+        return None;
+    }
+    let mut pairs = Vec::with_capacity(list.len());
+    for waypoint in list {
+        let pair = waypoint.as_array().filter(|pair| pair.len() == 2)?;
+        let (lon, lat) = (pair[0].as_f64()?, pair[1].as_f64()?);
+        if !lon.is_finite() || !lat.is_finite() || lon.abs() > 180. || lat.abs() > MAX_LATITUDE {
+            return None;
+        }
+        pairs.push(format!(
+            "{},{}",
+            number_text(&pair[0]).ok()?,
+            number_text(&pair[1]).ok()?
+        ));
+    }
+    Some(pairs)
+}
+
+/// The Directions request, or None for waypoints navd.py refuses.
 pub(super) fn route_url<P: Ports>(
     ports: &mut P,
     endpoints: (&Endpoint, &Endpoint),
-    settings: (&Config, Option<f64>),
-) -> Result<String, Error> {
+    settings: (&Config, &str, Option<f64>, &str),
+) -> Result<Option<String>, Error> {
     let (position, destination) = endpoints;
-    let (config, bearing) = settings;
+    let (config, token, bearing, waypoint_text) = settings;
     let language = ports
         .parameter("LanguageSetting")?
-        .map(|text| text.replace("main_", ""));
+        .filter(|text| !text.is_empty())
+        .unwrap_or_else(|| "en".to_owned())
+        .replace("main_", "");
+    let Some(middle) = waypoints(waypoint_text) else {
+        return Ok(None);
+    };
     let mut coordinates = vec![position.pair()];
-    if let Some(waypoints) = ports
-        .parameter("NavDestinationWaypoints")?
-        .filter(|value| !value.is_empty())
-    {
-        let waypoints: Value = serde_json::from_str(&waypoints)?;
-        for waypoint in waypoints
-            .as_array()
-            .ok_or(Error::Field("NavDestinationWaypoints"))?
-        {
-            let pair = waypoint.as_array().ok_or(Error::Field("waypoint"))?;
-            if pair.len() != 2 {
-                return Err(Error::Field("waypoint"));
-            }
-            coordinates.push(format!(
-                "{},{}",
-                number_text(&pair[0])?,
-                number_text(&pair[1])?
-            ));
-        }
-    }
+    coordinates.extend(middle);
     coordinates.push(destination.pair());
     let mut url = url::Url::parse(&format!(
         "{}/directions/v5/mapbox/driving-traffic/{}",
@@ -124,9 +144,7 @@ pub(super) fn route_url<P: Ports>(
     ))?;
     {
         let mut query = url.query_pairs_mut();
-        if let Some(token) = &config.token {
-            query.append_pair("access_token", token);
-        }
+        query.append_pair("access_token", token);
         for (key, value) in [
             ("annotations", "maxspeed"),
             ("geometries", "geojson"),
@@ -137,9 +155,7 @@ pub(super) fn route_url<P: Ports>(
         ] {
             query.append_pair(key, value);
         }
-        if let Some(language) = language {
-            query.append_pair("language", &language);
-        }
+        query.append_pair("language", &language);
         query.append_pair("waypoints", &format!("0;{}", coordinates.len() - 1));
         if let Some(bearing) = bearing {
             let bearing = (bearing + 360.).rem_euclid(360.);
@@ -150,5 +166,5 @@ pub(super) fn route_url<P: Ports>(
             );
         }
     }
-    Ok(url.into())
+    Ok(Some(url.into()))
 }
