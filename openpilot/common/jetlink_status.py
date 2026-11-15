@@ -90,6 +90,8 @@ def preparation_text(link, model):
             'waiting-host': '응답 대기 중', 'usb-probe': '응답 확인 중',
             'transport-selection': '연결 장치 확인 중'}.get(phase, '연결 대기')
   if link.get('state') == 'loading':
+    if phase == 'resident-wait':
+      return '모델 준비 대기 · USB 유지'
     if phase == 'waiting':
       message = str((link.get('preparation') or {}).get('message') or '')
       if 'ignition off' in message.lower():
@@ -113,7 +115,7 @@ def diagnostics():
             'severity': 'unknown', 'reason': preparation_text(link, model), 'addresses': [], 'temp_c': None,
             'active': bool(model.get('active')), 'fresh': False}
   preparation = link.get('preparation') or {}
-  if link.get('state') == 'loading' and preparation.get('stage') == 'waiting':
+  if link.get('state') == 'loading' and preparation.get('stage') in ('waiting', 'resident-wait'):
     result['reason'] = (result['reason'] + ' · ' + str(preparation.get('message') or '')[:160]).rstrip(' ·')
   if link.get('state') == 'updating' and result['label'] == 'jetSON':
     text, style = update_badge(link.get('host_update') or {})

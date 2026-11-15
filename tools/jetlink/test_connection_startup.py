@@ -180,3 +180,13 @@ def test_ready_host_explains_local_warp_then_actual_model_use(reports):
   model.update(warp_preparing=False, active=True)
   status.MODEL_STATUS.write_text(json.dumps(model))
   assert status.badge() == ('jetSON 사용 중', 'active')
+
+
+def test_resident_model_wait_explains_retained_usb(reports):
+  reports('loading')
+  link = json.loads(status.LINK_STATUS.read_text())
+  link['preparation'] = {'stage': 'resident-wait',
+                         'message': 'Waiting for resident Jetson model; new model setup requires ignition off'}
+  status.LINK_STATUS.write_text(json.dumps(link))
+  assert status.badge() == ('jetSON 모델 준비 대기 · USB 유지', 'loading')
+  assert 'new model setup requires ignition off' in status.diagnostics()['reason']

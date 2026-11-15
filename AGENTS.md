@@ -1,5 +1,18 @@
 # Repository memory
 
+- 2026-11-15: PreparationDeferred previously unwound daemon.main and closed the
+  USB/network owner even when only engine readiness/offroad admission was pending.
+  EngineHost.preload and its worker outlive Session.close; reconnect does not
+  itself restart preparation. Jetson prepare now retains its session, polls STATE
+  for the exact resident SHA onroad, resumes verified ENGINE_REQ when resident or
+  offroad, and handles an ignition change/stale HELLO without unwinding. New setup
+  remains offroad-gated. Setup timeout uses the existing client900s default with
+  one-second status/connection checks; inference deadlines are untouched. Real
+  transport errors, invalid replies, failed engines and mismatched contracts still
+  fail. UI reports resident wait with USB retained. Protocol2/3 framed regressions,
+  ignition changes and a simulated40s build covered;217 local related checks pass.
+  No reporter device access, physical USB test or confirmed readiness root cause.
+
 - 2026-11-15: Reporter Ioniq5 b4dcfe6ce00fe149 route1c/13..15 on16df8e63
   contains three stationary P/onroad minutes, controls disabled.120 distinct
   connection transitions,24 PreparationDeferred/waiting cycles averaging7.393s,
