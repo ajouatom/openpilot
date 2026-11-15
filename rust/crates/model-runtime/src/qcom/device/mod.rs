@@ -174,8 +174,18 @@ impl<D: Driver> Device<D> {
         let buffer = self
             .command_buffer
             .ok_or(Error::Contract("QCOM command allocation"))?;
-        for (index, word) in commands.iter().enumerate() {
-            self.write(buffer, index * 4, &word.to_le_bytes())?;
+        // One range check for the whole stream: written word by word through
+        // `write` (activity, index and range checks, a Result each) this loop
+        // was the largest user-space cost of driving-modeld (simpleperf).
+        let memory = self
+            .allocations
+            .get_mut(buffer)
+            .ok_or(Error::Contract("QCOM buffer index"))?
+            .bytes_mut()
+            .get_mut(..size)
+            .ok_or(Error::Contract("QCOM buffer range"))?;
+        for (bytes, word) in memory.chunks_exact_mut(4).zip(commands) {
+            bytes.copy_from_slice(&word.to_le_bytes());
         }
         let pointer = self.address(buffer, 0, size)?;
         let result = self
