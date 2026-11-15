@@ -32,7 +32,7 @@ def test_onroad_wait_uses_state_then_exact_engine_on_same_stream(monkeypatch, ve
   result = mac.prepare(client, remote, lambda: False, lambda: True, lambda *args: reports.append(args))
   assert result == SPEC and client.spec == SPEC and remote['loaded'] == SPEC.sha256
   assert client.t is stream and not stream.closed and sleeps == [.5, .5]
-  assert sum(stage == 'resident-wait' for stage, _, _ in reports) == 2
+  assert sum(stage == 'resident-wait' for stage, _, _ in reports) == 4
   requests = MemoryStream(version, bytes(stream.out))
   assert [requests.recv(1).msg_type for _ in range(3)] == [P.Msg.STATE_REQ, P.Msg.STATE_REQ, P.Msg.ENGINE_REQ]
   assert not requests.incoming  # No second HELLO, upload or close/reopen.
@@ -126,3 +126,20 @@ def test_build_failure_restores_transport_and_callbacks():
   with pytest.raises(LinkError, match='bad engine'):
     mac.prepare(client, peer(), lambda: True, lambda: True, lambda *args: None)
   assert client.t is stream and client.progress_cb is None and client._should_stop() is False
+
+
+def test_slow_state_replies_refresh_throttled_status_before_three_second_expiry(monkeypatch):
+  clock, reports, polls = [0.], [], []
+  def progress(*args):
+    if not reports or clock[0] - reports[-1] >= 1.:
+      reports.append(clock[0])
+  def state():
+    polls.append(True)
+    clock[0] += 2. if len(polls) % 2 == 0 else 0.
+    return {'loaded': SPEC.sha256 if len(polls) == 6 else None, 'engine_state': 'none'}
+  def sleep(duration):
+    clock[0] += duration
+  monkeypatch.setattr(mac.time, 'sleep', sleep)
+  client = NS(t=object(), state=state, ensure_engine=lambda *a, **kw: SPEC)
+  assert mac.prepare(client, peer(), lambda: False, lambda: True, progress) == SPEC
+  assert len(polls) == 6 and max(b - a for a, b in zip(reports, reports[1:])) < 3.
