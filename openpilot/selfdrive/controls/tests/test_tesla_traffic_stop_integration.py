@@ -19,7 +19,7 @@ def carrot_for(mode="acc", stop_distance=6.):
   return NS(mode=mode, comfort_brake=2.5, stop_distance=stop_distance, v_cruise=20., stop_dist=1000.,
             trafficStopDistanceAdjust=100., trafficStopModelLeadOffset=2.,
             get_T_FOLLOW=lambda *args: 1.45, jerk_factor=1., leadAccelResponse=0,
-            autoNaviSpeedDecelRate=1., lane_change_active=False, myDrivingMode=3)
+            autoNaviSpeedDecelRate=1., lane_change_active=False, myDrivingMode=3, stopGoAssist=0)
 
 
 def solve(native, *, mode="acc", distance=None, stop_distance=6., lead=False, reset=False):
@@ -125,6 +125,34 @@ def planner_factory(native, monkeypatch):
       return planner
     return planner, sm, carrot, update
   return create
+
+
+@pytest.mark.parametrize('blocked', [None, 'force_decel', 'second_lead'])
+def test_complete_planner_stop_go_preserves_other_obstacles(planner_factory, blocked):
+  cases = []
+  for mode in (1, 2):
+    planner, sm, carrot, update = planner_factory('hyundai', False, speed=.5)
+    carrot.stopGoAssist = mode
+    carrot.xState, carrot.trafficState = NS(name='lead'), NS(name='off')
+    planner.since_standstill = 0.
+    radar = log.RadarState.new_message()
+    radar.leadOne = {'status':True, 'radar':True, 'radarTrackId':1, 'dRel':3.3,
+                     'vLead':1., 'vLeadK':1., 'aLeadK':.4, 'aLeadTau':1.5}
+    if blocked == 'second_lead':
+      radar.leadTwo = {'status':True, 'radar':True, 'radarTrackId':2, 'dRel':2.8,
+                       'vLead':0., 'vLeadK':0., 'aLeadTau':1.5}
+    sm['radarState'] = radar.as_reader()
+    sm['controlsState'].forceDecel = blocked == 'force_decel'
+    outputs = []
+    for i in range(8):
+      update(i * .05)
+      assert planner.mpc.solution_status == 0
+      outputs.append((planner.output_a_target, planner.output_should_stop))
+    cases.append(outputs)
+  if blocked:
+    np.testing.assert_allclose(cases[0], cases[1], atol=1e-6)
+  else:
+    assert any(accel == pytest.approx(1.2) and not stop for accel, stop in cases[1])
 
 
 @pytest.mark.parametrize("brand", ["hyundai", "toyota", "volkswagen", "tesla"])

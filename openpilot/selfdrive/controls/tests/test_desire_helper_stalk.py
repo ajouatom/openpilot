@@ -483,7 +483,7 @@ class TestKickModelOwnership:
     from opendbc.car.hyundai.carcontroller import CarController, BLINKER_PULSE_FRAMES
     from opendbc.car.hyundai.lane_crossing import LaneCrossing
     cc = self.cc = self.cc or SimpleNamespace(
-      blinker_control=True, blinker_kick_model=True, lane_crossing=LaneCrossing(), blinker_side=0, blinker_pulse_end=0,
+      blinker_control=True, kick_output_ready=True, blinker_kick_model=True, lane_crossing=LaneCrossing(), blinker_side=0, blinker_pulse_end=0,
       frame=0, yellow_until=[0, 0], lane_change_prev='off', model_pulse=False, blinker_pulse_start=0, model_hold={}, model_flashes=0, params=SimpleNamespace(STEER_THRESHOLD=250))
     md, kicks, start = self.md, [], cc.frame
     for j in range(start, start + frames):
