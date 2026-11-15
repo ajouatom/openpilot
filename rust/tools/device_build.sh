@@ -128,6 +128,27 @@ export CARGO_HOME=$store/cargo-home CARGO_TARGET_DIR=$store/target CARGO_INCREME
 export CARGO_PROFILE_RELEASE_LTO=false CARGO_PROFILE_RELEASE_CODEGEN_UNITS=16 CARGO_PROFILE_RELEASE_DEBUG=0
 export OPENPILOT_BUILD_STORE=$store
 export CC=/usr/bin/gcc CXX=$root/rust/tools/device_cxx.sh AR=/usr/bin/ar RANLIB=/usr/bin/ranlib
+# Isolated CPUs (isolcpus) take no compile unless one is pinned there.
+pinned=
+if [[ -f /AGNOS ]]; then
+  pinned=$(python3 -I -c '
+cores = []
+try:
+  text = open("/sys/devices/system/cpu/isolated").read().strip()
+  isolated = {c for part in text.split(",") if part
+              for c in range(int(part.split("-")[0]), int(part.split("-")[-1]) + 1)}
+  for core in (6, 7):
+    if core in isolated and open(f"/sys/devices/system/cpu/cpu{core}/online").read().strip() == "1":
+      cores.append(str(core))
+except (OSError, ValueError):
+  pass
+print(" ".join(cores))
+')
+fi
+if [[ -n $pinned ]]; then
+  export DEVICE_BUILD_PINNED_CORES=$pinned RUSTC_WRAPPER=$root/rust/tools/device_rustc.sh
+  status "Using isolated CPUs $pinned for compiles"
+fi
 # Collect more often; generated code does not change.
 export CXXFLAGS='--param ggc-min-expand=20 --param ggc-min-heapsize=32768'
 export HOST_CC=$CC HOST_CXX=$CXX HOST_AR=$AR HOST_RANLIB=$RANLIB
