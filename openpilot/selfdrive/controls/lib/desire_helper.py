@@ -178,17 +178,18 @@ class DesireHelper:
   # ─────────────────────────────────────────────
   # blinkers/ATC (원본 로직 유지, side 계산은 별개)
   # ─────────────────────────────────────────────
-  def _update_driver_blinker(self, carstate):
-    st = carstate.leftBlinker * 1 + carstate.rightBlinker * 2
-    st = self.boundary_indicator.filter_lamp(st)
-    if self.tesla_auto_signals:
+  def _update_driver_blinker(self, carstate, *, valid=True):
+    lamps = carstate.leftBlinker * 1 + carstate.rightBlinker * 2
+    st = self.boundary_indicator.filter_lamp(lamps)
+    if self.tesla_auto_signals or self.kick_supported and self.boundary_indicator.blocked:
+      driver_lamps = lamps if self.kick_supported else st
       driver = int(getattr(carstate, "turnSignalDriverDirection", 0))
-      driver_valid = bool(getattr(carstate, "turnSignalDriverValid", False))
+      driver_valid = valid and bool(getattr(carstate, "turnSignalDriverValid", False))
       counts = (getattr(carstate, "leftBlinkerStalkCount", 0), getattr(carstate, "rightBlinkerStalkCount", 0))
       last, self._driver_signal_counts = self._driver_signal_counts, counts
       left_press, right_press = (counts[0] != last[0], counts[1] != last[1]) if last else (False, False)
       press = (BLINKER_LEFT if left_press else BLINKER_RIGHT) if left_press != right_press else BLINKER_NONE
-      if st == 3:
+      if driver_lamps == 3:
         self._manual_signal_direction = BLINKER_NONE
         self._manual_signal_grace = 0.0
       elif not driver_valid:
@@ -199,7 +200,8 @@ class DesireHelper:
         self._manual_signal_direction = driver or press
         self._manual_signal_grace = 1.0
         st = self._manual_signal_direction
-      elif st == self._manual_signal_direction and st:
+      elif driver_lamps == self._manual_signal_direction and driver_lamps:
+        st = self._manual_signal_direction
         self._manual_signal_grace = 0.5
       elif st != 3 and self._manual_signal_grace > DT_MDL:
         self._manual_signal_grace -= DT_MDL
@@ -208,6 +210,11 @@ class DesireHelper:
         self._manual_signal_direction = BLINKER_NONE
         self._manual_signal_grace = 0.0
         st = BLINKER_NONE
+    elif self.kick_supported:
+      self._manual_signal_direction = BLINKER_NONE
+      self._manual_signal_grace = 0.0
+      self._driver_signal_counts = (getattr(carstate, 'leftBlinkerStalkCount', 0),
+                                    getattr(carstate, 'rightBlinkerStalkCount', 0))
     changed = st != self.driver_blinker_state
     self.driver_blinker_state = st
 
@@ -216,7 +223,7 @@ class DesireHelper:
       enabled = False
     return st, changed, enabled
 
-  def _update_stalk(self, carstate) -> int:
+  def _update_stalk(self, carstate, *, valid=True) -> int:
     """Side of a turn-signal lever press since the last update (BLINKER_LEFT/RIGHT), else BLINKER_NONE.
 
     The lamp-based blinker cannot show a press while the lamp is already flashing (one press flashes
@@ -228,10 +235,10 @@ class DesireHelper:
     last, self.stalk_counts = self.stalk_counts, counts
     if last is None:
       return BLINKER_NONE
-    if self.tesla_auto_signals:
+    if self.tesla_auto_signals or self.kick_supported and self.boundary_indicator.blocked:
       left_press, right_press = counts[0] != last[0], counts[1] != last[1]
       if (carstate.leftBlinker and carstate.rightBlinker) or \
-         not getattr(carstate, "turnSignalDriverValid", False) or left_press == right_press:
+         not valid or not getattr(carstate, "turnSignalDriverValid", False) or left_press == right_press:
         return BLINKER_NONE
       direction = BLINKER_LEFT if left_press else BLINKER_RIGHT
       driver = getattr(carstate, "turnSignalDriverDirection", 0)
@@ -445,9 +452,11 @@ class DesireHelper:
     self._check_desire_state(modeldata, carstate, self.maneuver_type)
 
     # blinkers
-    driver_st, driver_changed, driver_enabled = self._update_driver_blinker(carstate)
-    physical_stalk_press = self._update_stalk(carstate)
-    stalk_press = self.boundary_indicator.filter_lamp(physical_stalk_press)
+    driver_input_valid = not self.kick_supported or indicator_valid and carstate.canValid
+    driver_st, driver_changed, driver_enabled = self._update_driver_blinker(carstate, valid=driver_input_valid)
+    physical_stalk_press = self._update_stalk(carstate, valid=driver_input_valid)
+    stalk_press = (physical_stalk_press if self.kick_supported and getattr(carstate, 'turnSignalDriverValid', False)
+                   else self.boundary_indicator.filter_lamp(physical_stalk_press))
     lever = getattr(carstate, "blinkerLever", 0)
     forced_turn = self.lever_forced_turn.update(lever, getattr(carstate, "blinkerLamp", 0))
     if self.lever_wait.update(self.laneChangeLeverWait, stalk_press, lever, driver_st, self.lane_change_state,
