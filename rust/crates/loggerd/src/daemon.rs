@@ -89,8 +89,16 @@ pub fn run(environment: Environment) -> Result<(), Error> {
     let mut byte_count = 0_u64;
     let mut receive_buffer = Vec::new();
     let started = clock::now()?;
+    // Logging needs no low latency: scan the ~140 queues at most every 10 ms
+    // and drain what came meanwhile, instead of once per message (~1,150 a
+    // second, 21 % of a core on a comma 3X; see msgq's poll_not_before).
+    const BATCH: Duration = Duration::from_millis(10);
+    let mut last_poll = std::time::Instant::now();
     while signal.load(Ordering::Relaxed) == 0 {
-        for index in subscribers.poll_ready(Duration::from_millis(1000))? {
+        let ready =
+            subscribers.poll_ready_not_before(Duration::from_millis(1000), last_poll + BATCH)?;
+        last_poll = std::time::Instant::now();
+        for index in ready {
             if signal.load(Ordering::Relaxed) != 0 {
                 break;
             }

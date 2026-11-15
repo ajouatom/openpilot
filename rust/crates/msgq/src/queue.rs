@@ -310,7 +310,7 @@ impl Queue {
     }
 }
 
-pub(crate) use crate::notification_wait::poll;
+pub(crate) use crate::notification_wait::{poll, poll_not_before};
 
 #[cfg(test)]
 mod tests {

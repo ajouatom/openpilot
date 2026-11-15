@@ -58,6 +58,30 @@ pub(crate) fn poll(
     result
 }
 
+/// `poll`, but returning no earlier than `not_before`. Notifications that
+/// arrive meanwhile stay pending (SIGUSR2 blocked, so they coalesce into one),
+/// and the queues are scanned once at the end rather than once per message: a
+/// subscriber of ~140 queues woke ~1,150 times a second and spent ~180 us a
+/// wake reading every queue's shared header. Only for a subscriber that can
+/// wait (loggerd); control loops keep `poll`.
+pub(crate) fn poll_not_before(
+    timeout_ms: i32,
+    not_before: Instant,
+    mut ready: impl FnMut() -> Result<bool, Error>,
+) -> Result<(), Error> {
+    if timeout_ms < -1 {
+        return Err(Error::Invalid("invalid poll timeout"));
+    }
+    let mask = NotificationMask::block()?;
+    let now = Instant::now();
+    if not_before > now {
+        std::thread::sleep(not_before - now);
+    }
+    let result = wait(timeout_ms, &mut ready, mask.0);
+    mask.restore()?;
+    result
+}
+
 fn wait(
     timeout_ms: i32,
     ready: &mut impl FnMut() -> Result<bool, Error>,
@@ -86,6 +110,28 @@ fn wait(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn not_before_waits_out_the_interval_then_scans_once() {
+        let original = SigSet::thread_get_mask().unwrap();
+        let start = Instant::now();
+        let mut scans = 0;
+        poll_not_before(1000, start + Duration::from_millis(30), || {
+            scans += 1;
+            Ok(true)
+        })
+        .unwrap();
+        assert!(start.elapsed() >= Duration::from_millis(30));
+        assert_eq!(
+            scans, 1,
+            "a ready queue is found by the one scan after the interval"
+        );
+        assert_eq!(SigSet::thread_get_mask().unwrap(), original);
+        // A deadline already past costs no wait.
+        let start = Instant::now();
+        poll_not_before(1000, start - Duration::from_millis(5), || Ok(true)).unwrap();
+        assert!(start.elapsed() < Duration::from_millis(20));
+    }
 
     #[test]
     fn caller_mask_is_restored_after_ready_error_and_unwind() {
