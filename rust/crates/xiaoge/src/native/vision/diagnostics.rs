@@ -147,7 +147,9 @@ pub fn resources(shared: Arc<Shared>) {
                     "cpu"
                 } else if backends.len() == 2 && backends[0] == backends[1] {
                     backends[0]
-                } else if backends.contains(&"opencl-fp32") {
+                } else if backends.contains(&"opencl-fp32")
+                    || backends.iter().any(|backend| backend.starts_with("tablet"))
+                {
                     "mixed"
                 } else {
                     "pending"

@@ -1,6 +1,7 @@
 mod blindspot;
 mod geometry;
 mod lane;
+mod remote;
 mod session;
 pub use blindspot::BlindspotModel;
 pub use geometry::Geometry;

@@ -73,6 +73,10 @@ pub struct Client<T: Transport> {
     wifi: Option<crate::wifi::Publisher>,
     app_request_pending: bool,
     client_nonce: Option<String>,
+    /// Carrot's auxiliary vision (`crate::aux`): set when this link may carry it.
+    aux: Option<std::sync::Arc<crate::aux::Hub>>,
+    /// The App said `carrot_aux_v1` and the session is up: the hub is live.
+    aux_live: bool,
     pub status: std::sync::Arc<std::sync::Mutex<Value>>,
     pub hello_complete: std::sync::Arc<std::sync::atomic::AtomicBool>,
 }
@@ -168,6 +172,8 @@ impl<T: Transport> Client<T> {
             wifi: None,
             app_request_pending: false,
             client_nonce: None,
+            aux: None,
+            aux_live: false,
             status: std::sync::Arc::new(std::sync::Mutex::new(json!({}))),
             hello_complete: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
         }
@@ -280,6 +286,34 @@ impl<T: Transport> Client<T> {
         self.report("ready", "ready", None, Some(&state));
         Ok(())
     }
+    /// Lets this link carry carrot's auxiliary vision when the App offers it.
+    pub fn set_aux(&mut self, hub: std::sync::Arc<crate::aux::Hub>) {
+        self.aux = Some(hub);
+    }
+    /// One auxiliary message, right after a driving reply (`crate::aux`).
+    fn pump_aux(&mut self) -> Result<(), Error> {
+        if !self.aux_live {
+            return Ok(());
+        }
+        let Some(next) = self.aux.as_ref().and_then(|hub| hub.next_outbound()) else {
+            return Ok(());
+        };
+        self.send(
+            next.0,
+            &next.1,
+            Deadline::after(Duration::from_millis(250))?,
+        )?;
+        Ok(())
+    }
+    fn deliver_aux(&self, message: &Message) -> bool {
+        if !crate::aux::is_aux(message.header.kind) {
+            return false;
+        }
+        if let Some(hub) = &self.aux {
+            hub.deliver(message.header.kind, &message.payload);
+        }
+        true
+    }
     pub fn set_connected_check(
         &mut self,
         connected: std::sync::Arc<dyn Fn() -> bool + Send + Sync>,
@@ -310,6 +344,7 @@ impl<T: Transport> Client<T> {
             );
             match self.transport.receive(poll) {
                 Err(Error::Deadline) => continue,
+                Ok(message) if self.deliver_aux(&message) => continue,
                 result => return result,
             }
         }
@@ -450,6 +485,9 @@ impl<T: Transport> Client<T> {
             if message.header.kind == kind && message.header.sequence == sequence {
                 return Ok(message);
             }
+            if self.deliver_aux(&message) {
+                continue;
+            }
             if message.header.kind == 13 {
                 if let Some(session) = &self.session {
                     crate::selection::check_loaded(
@@ -515,6 +553,7 @@ impl<T: Transport> Client<T> {
             self.provision_wifi(true)?;
         }
         self.boot_update(&hello)?;
+        let aux_offered = hello[crate::aux::CAPABILITY] == true;
         let path = if self.transport.gadget() {
             "usb"
         } else {
@@ -715,6 +754,12 @@ impl<T: Transport> Client<T> {
         }
         // Held until the device is parked; see idle_inner.
         self.app_request_pending = follows_app;
+        if aux_offered {
+            if let Some(hub) = &self.aux {
+                hub.set_live(true);
+                self.aux_live = true;
+            }
+        }
         self.last_frame = None;
         self.telemetry_at = 0;
         self.idle_at = crate::now_ns().saturating_add(2_000_000_000);
@@ -936,7 +981,8 @@ impl<T: Transport> Client<T> {
 }
 impl<T: Transport> Backend for Client<T> {
     fn after_reply(&mut self) -> Result<(), Error> {
-        self.provision_wifi(false)
+        self.provision_wifi(false)?;
+        self.pump_aux()
     }
     fn idle(&mut self) -> Result<(), Error> {
         Client::idle(self)
@@ -987,6 +1033,12 @@ impl<T: Transport> Backend for Client<T> {
         self.dead
     }
     fn close(&mut self) {
+        if self.aux_live {
+            self.aux_live = false;
+            if let Some(hub) = &self.aux {
+                hub.set_live(false);
+            }
+        }
         if !self.dead {
             self.dead = true;
             self.wifi = None;

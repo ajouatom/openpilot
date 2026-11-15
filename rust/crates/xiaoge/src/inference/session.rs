@@ -109,6 +109,9 @@ pub struct Session {
     error: String,
     fallback_reason: String,
     initialization_ms: f64,
+    /// `OnnxComputeMode` 3: the Jetlink App runs the model; `net` stays on
+    /// the CPU for every frame the App cannot take.
+    remote: super::remote::Remote,
 }
 impl Session {
     pub fn load(path: &Path) -> Result<Self, Error> {
@@ -127,6 +130,7 @@ impl Session {
             error: String::new(),
             fallback_reason: String::new(),
             initialization_ms: 0.0,
+            remote: super::remote::Remote::default(),
         })
     }
     pub fn loaded(&self) -> bool {
@@ -142,7 +146,7 @@ impl Session {
         }
         let started = Instant::now();
         // Loading/freeing a GPU net also belongs to the single Xiaoge GPU owner gate.
-        let needs_gate = mode != ComputeMode::Cpu || had_gpu;
+        let needs_gate = matches!(mode, ComputeMode::Gpu | ComputeMode::Compare) || had_gpu;
         let lock = needs_gate.then(|| GPU_WORK.lock());
         self.shadow = None;
         self.shadow_outputs = None;
@@ -152,6 +156,7 @@ impl Session {
         self.backend_report = json!({"execution_status":"not_run"});
         self.fallback_reason.clear();
         self.error.clear();
+        self.remote = super::remote::Remote::default();
         let requested = if self.selection.wants_gpu() {
             DnnTarget::OpenClFp32
         } else {
@@ -169,7 +174,7 @@ impl Session {
                 self.net = Some(net);
                 self.refresh_report();
             }
-            Err(error) if mode != ComputeMode::Cpu => self.fallback(error.to_string()),
+            Err(error) if self.selection.wants_gpu() => self.fallback(error.to_string()),
             Err(error) => {
                 self.net = None;
                 self.error = error.to_string();
@@ -205,10 +210,26 @@ impl Session {
         }
     }
     pub fn status(&self) -> Value {
-        json!({"mode":self.selection.requested.value(),
-            "effective_backend":if self.selection.wants_gpu(){self.backend_report["effective_target"].as_str().unwrap_or("pending")}else{"cpu"},
+        let effective = if self.selection.wants_gpu() {
+            self.backend_report["effective_target"]
+                .as_str()
+                .unwrap_or("pending")
+                .to_owned()
+        } else if self.selection.wants_tablet() && self.remote.last_error.is_empty() {
+            self.remote
+                .device()
+                .map_or_else(|| "tablet".to_owned(), |device| format!("tablet {device}"))
+        } else {
+            "cpu".to_owned()
+        };
+        let mut status = json!({"mode":self.selection.requested.value(),
+            "effective_backend":effective,
             "fallback_reason":self.fallback_reason,"loaded":self.loaded(),"error":self.error,
-            "initialization_ms":self.initialization_ms,"backend_report":self.backend_report})
+            "initialization_ms":self.initialization_ms,"backend_report":self.backend_report});
+        if self.selection.wants_tablet() {
+            status["tablet"] = self.remote.status();
+        }
+        status
     }
     pub fn begin_frame(&mut self) {
         self.timing = ForwardTiming::default();
@@ -293,6 +314,16 @@ impl Session {
         input: TensorView<'_>,
         names: &[String],
     ) -> Result<Vec<Tensor>, Error> {
+        if self.selection.wants_tablet() {
+            match self.remote.run(&self.path, input, names) {
+                Ok(outputs) => {
+                    self.fallback_reason.clear();
+                    return Ok(outputs);
+                }
+                // This frame runs on the comma's CPU, as before the tablet.
+                Err(reason) => self.fallback_reason = reason,
+            }
+        }
         let first = self
             .net
             .as_mut()

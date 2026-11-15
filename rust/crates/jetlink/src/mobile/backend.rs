@@ -149,6 +149,9 @@ impl Backend for MobileBackend {
             Client::app(transport, self.cache.clone())
         };
         client.status = Arc::clone(&self.status);
+        if !self.legacy {
+            client.set_aux(crate::aux::shared());
+        }
         let owner = Arc::clone(&self.owner);
         let cancel = Arc::clone(&self.cancel);
         client.set_connected_check(Arc::new(move || {

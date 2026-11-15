@@ -69,6 +69,7 @@ pre{white-space:pre-wrap;word-break:break-word}.ok{color:#4ade80}.bad{color:#f87
             <option value="0" data-i18n="computeCpu">CPU（默认）</option>
             <option value="1" data-i18n="computeGpu">GPU FP32（测试）</option>
             <option value="2" data-i18n="computeCompare">GPU + CPU 对比诊断</option>
+            <option value="3" data-i18n="computeTablet">Jetlink 平板（GPU）</option>
           </select>
         </label>
         <p data-i18n="computeHint">对比诊断每 10 秒增加一次 CPU 计算；请单独比较普通 GPU 模式的资源占用。</p>
@@ -213,6 +214,7 @@ const zh={
   computeCpu:"CPU（默认）",
   computeGpu:"GPU FP32（测试）",
   computeCompare:"GPU + CPU 对比诊断",
+  computeTablet:"Jetlink 平板（GPU）",
   computeHint:"对比诊断每 10 秒增加一次 CPU 计算；请单独比较普通 GPU 模式的资源占用。",
   activationHint:"在 Carrot Web 设置中搜索 ONNX 并开启车道与盲点识别。行驶前等待摄像头是正常状态。",
   vision_unavailable:"无法连接识别服务。请确认 Carrot Web 设置中的 ONNX 车道与盲点识别已开启；本页会自动重试。",
@@ -277,6 +279,7 @@ const en={
   computeCpu:"CPU (default)",
   computeGpu:"GPU FP32 (test)",
   computeCompare:"GPU + CPU comparison diagnostics",
+  computeTablet:"Jetlink tablet (GPU)",
   computeHint:"Comparison diagnostics add one CPU inference per stream every 10 seconds. Measure normal GPU mode separately.",
   activationHint:"Search for ONNX in Carrot Web settings to enable lane and BSD detection. Waiting for cameras before driving starts is normal.",
   vision_unavailable:"Cannot connect to the detection service. Check that ONNX Lane and BSD Detection is enabled in Carrot Web settings; this page will reconnect automatically.",
@@ -341,6 +344,7 @@ const ko={
   computeCpu:"CPU (기본)",
   computeGpu:"GPU FP32 (테스트)",
   computeCompare:"GPU + CPU 비교 진단",
+  computeTablet:"Jetlink 태블릿 (GPU)",
   computeHint:"비교 진단은 스트림마다 10초에 한 번 CPU 계산을 추가합니다. 평상시 자원 사용량은 일반 GPU 모드로 비교하세요.",
   activationHint:"Carrot Web 설정에서 ONNX를 검색해 차선·BSD 인식을 켜세요. 주행 시작 전에는 카메라 대기가 정상입니다.",
   vision_unavailable:"인식 서비스에 연결하지 못했습니다. Carrot Web 설정에서 ONNX 차선·BSD 인식이 켜져 있는지 확인하세요. 이 화면은 자동으로 다시 연결합니다.",

@@ -10,6 +10,10 @@ pub enum ComputeMode {
     Cpu = 0,
     Gpu = 1,
     Compare = 2,
+    /// The Jetlink App's device (`openpilot_jetlink::aux`): the tablet's GPU
+    /// runs the same ONNX model while the comma runs only pre/post-processing,
+    /// and any frame the App cannot take runs on the comma's CPU.
+    Tablet = 3,
 }
 
 impl ComputeMode {
@@ -20,6 +24,7 @@ impl ComputeMode {
         {
             Some("1") => Self::Gpu,
             Some("2") => Self::Compare,
+            Some("3") => Self::Tablet,
             _ => Self::Cpu,
         }
     }
@@ -33,8 +38,9 @@ impl ComputeMode {
             Some(0.0) => Ok(Self::Cpu),
             Some(1.0) => Ok(Self::Gpu),
             Some(2.0) => Ok(Self::Compare),
+            Some(3.0) => Ok(Self::Tablet),
             _ => Err(Error::Invalid(
-                "computeMode must be 0 (CPU), 1 (GPU), or 2 (GPU comparison)",
+                "computeMode must be 0 (CPU), 1 (GPU), 2 (GPU comparison) or 3 (Jetlink tablet)",
             )),
         }
     }
@@ -62,8 +68,12 @@ impl Selection {
     pub fn fail_gpu(&mut self) {
         self.gpu_failed = true;
     }
+    /// The comma's own OpenCL GPU; the tablet mode keeps a CPU net locally.
     pub fn wants_gpu(&self) -> bool {
-        self.requested != ComputeMode::Cpu && !self.gpu_failed
+        matches!(self.requested, ComputeMode::Gpu | ComputeMode::Compare) && !self.gpu_failed
+    }
+    pub fn wants_tablet(&self) -> bool {
+        self.requested == ComputeMode::Tablet
     }
 }
 

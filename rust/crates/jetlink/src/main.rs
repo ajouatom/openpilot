@@ -318,6 +318,14 @@ fn run() -> Result<(), EntryError> {
     rustix::fs::flock(&lock, rustix::fs::FlockOperation::NonBlockingLockExclusive)
         .map_err(std::io::Error::from)?;
     let params = Arc::new(Params::for_runtime()?);
+    // Carrot's auxiliary vision: xiaoge asks here for its camera models to run
+    // on the App. Without the socket xiaoge keeps running them on the CPU.
+    if let Err(error) = openpilot_jetlink::aux::serve_local(
+        openpilot_jetlink::aux::shared(),
+        Path::new(openpilot_jetlink::aux::SOCKET),
+    ) {
+        eprintln!("jetlink aux socket: {error}");
+    }
     let stop = Arc::new(AtomicBool::new(false));
     signal_hook::flag::register(signal_hook::consts::SIGINT, Arc::clone(&stop))?;
     signal_hook::flag::register(signal_hook::consts::SIGTERM, Arc::clone(&stop))?;
