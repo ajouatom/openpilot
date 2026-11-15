@@ -418,7 +418,10 @@ class CarController(CarControllerBase):
       Mode 0: held through Starting / Finishing like the I5 PE cluster blink hold: until the car centre is 60 % of a lane
       width into the new lane (no crossing seen: the end of the change), at most MODEL_HOLD_MAX_FRAMES.
       Modes 2/3/4: a fixed 3/5/7 flashes (MODEL_FLASH_FRAMES each) that also run past a completed change, like the stock
-      one-touch; a cancelled change still cuts them."""
+      one-touch; a cancelled change still cuts them.
+    - Modes 2/3/4 also count the driver-crossing pulse on classic CAN (cgw_kick) only: there carState reads the stock CGW1,
+      which never shows our forged lamp (Palisade, K5 P tests). CAN-FD reads the real lamp back as the driver's blinker, so a
+      longer unowned pulse there could start a second change: it stays BLINKER_PULSE_FRAMES."""
     drive = CS.out.gearShifter == structs.CarState.GearShifter.drive
     lamp = CS.out.leftBlinker or CS.out.rightBlinker
     # lane changes are banned in a tunnel announced as no-lane-change, and for 20 s after a roundabout sign (carstate)
@@ -456,7 +459,7 @@ class CarController(CarControllerBase):
             hyundaicanfd._blink_hold_change(md, self.blinker_side, self.model_hold)):
         self.blinker_pulse_end = max(self.blinker_pulse_end, self.frame + MODEL_HOLD_GAP_FRAMES)
     if side:
-      length = self.model_flashes * MODEL_FLASH_FRAMES if model and self.model_flashes else BLINKER_PULSE_FRAMES
+      length = self.model_flashes * MODEL_FLASH_FRAMES if self.model_flashes and (model or self.cgw_kick) else BLINKER_PULSE_FRAMES
       self.blinker_side, self.blinker_pulse_end, self.model_pulse = side, self.frame + length, model
       self.blinker_pulse_start, self.model_hold = self.frame, {}
     return self.frame < self.blinker_pulse_end

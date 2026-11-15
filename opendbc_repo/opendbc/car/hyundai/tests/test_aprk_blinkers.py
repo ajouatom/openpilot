@@ -45,7 +45,7 @@ class Ecu:
 def make_cc(control=True, test=0, spas=0, ecu=None, mode=1, model=True):
   cc = SimpleNamespace(blinker_control=control, blinker_test=test, blinker_kick_mode=mode, aprk_state=0, aprk_frame=0, aprk_nanos=0, aprk_acked=False,
                          lane_crossing=Crossing(), blinker_side=0, blinker_pulse_end=0, frame=0, yellow_until=[0, 0],
-                         blinker_kick_model=model, lane_change_prev="off", model_pulse=False, blinker_pulse_start=0, model_hold={}, model_flashes=0,
+                         blinker_kick_model=model, lane_change_prev="off", model_pulse=False, blinker_pulse_start=0, model_hold={}, model_flashes=0, cgw_kick=False,
                          CAN=SimpleNamespace(ECAN=0, ACAN=1), packer=CANPacker('hyundai_canfd_generated'), params=SimpleNamespace(STEER_THRESHOLD=250),
                          spas_steer_test=spas, spas_angle=0., aprk_buses=(), ecu=ecu or Ecu())
   cc.kick_pulse = lambda CS: CarController.kick_pulse(cc, CS)
@@ -398,6 +398,23 @@ def test_palisade_counted_flashes_on_cgw1():
   sent = cgw_step(cc, 60, md=RIGHT) + cgw_step(cc, 40, md=fin) + cgw_step(cc, 200, md=OFF)
   lamp = [bool(dat[7] & 0x40) for _, _, dat, _ in sent]  # right lamp bit (cgw_frame)
   assert sum(1 for was, now in zip([False] + lamp, lamp) if now and not was) == 3
+
+
+@pytest.mark.parametrize("flashes", [0, 3, 5, 7])
+def test_driver_crossing_counted_on_classic_only(flashes):
+  # classic: carState reads the stock CGW1, never our lamp -> the driver-crossing pulse may count like a one-touch
+  cc = make_cc()
+  cc.model_flashes, cc.cgw_kick = flashes, True
+  start = cc.frame
+  sent = cgw_step(cc, 800, cross=3)
+  lamp = [bool(dat[2] & 0x08) for _, _, dat, _ in sent]  # left lamp bit (cgw_frame)
+  assert sum(1 for was, now in zip([False] + lamp, lamp) if now and not was) == (flashes or 2)
+  assert cc.blinker_pulse_end - start == (flashes * carcontroller.MODEL_FLASH_FRAMES or carcontroller.BLINKER_PULSE_FRAMES)
+  # CAN-FD reads the real lamp back as the driver's blinker: the unowned driver pulse stays 1 s
+  cc = make_cc()
+  cc.model_flashes = flashes
+  step(cc, 5, D, 60, cross=3)
+  assert cc.blinker_pulse_end - cc.blinker_pulse_start == carcontroller.BLINKER_PULSE_FRAMES
 
 
 def test_palisade_model_lane_change_kick_on_cgw1():
