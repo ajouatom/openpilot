@@ -29,21 +29,31 @@ started=$SECONDS
 export LD_LIBRARY_PATH="$root/rust/bin/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 
 ui=
+feeder=
 recovery=
+# The spinner reads its text only between frames, after it has the display.
+# Writing to it directly stopped the whole build where the display never came
+# up or stalled (C3X lite: comma logo, idle CPUs, 6999 answering): the pipe
+# filled and cargo's output with it. Lines go to a file and tail feeds them,
+# so only tail waits on the spinner.
+status_file=$store/spinner.status
 stop_ui() {
-  exec 8>&- 2>/dev/null
+  [[ -n $feeder ]] && kill "$feeder" 2>/dev/null
   [[ -n $ui ]] && kill "$ui" 2>/dev/null
   [[ -n $recovery ]] && kill "$recovery" 2>/dev/null
   ui=
+  feeder=
   recovery=
 }
 start_ui() {
   [[ -z $ui && -x rust/bin/openpilot-spinner ]] || return 0
   local fifo=$store/spinner.fifo
   rm -f "$fifo" && mkfifo "$fifo" || return 0
+  : > "$status_file"
   rust/bin/openpilot-spinner --source-root "$root" < "$fifo" >> "$log" 2>&1 &
   ui=$!
-  exec 8> "$fifo"
+  tail -n +1 -F "$status_file" 2>/dev/null > "$fifo" &
+  feeder=$!
   if [[ -x rust/bin/openpilot-carrot-recovery ]]; then
     rust/bin/openpilot-carrot-recovery --port 6999 >> "$log" 2>&1 &
     recovery=$!
@@ -51,13 +61,14 @@ start_ui() {
 }
 status() {
   echo "[$((SECONDS - started))s] $1" >> "$log"
-  [[ -n $ui ]] && echo "$1" >&8
+  [[ -n $ui ]] && echo "$1" >> "$status_file"
 }
 fail() {
   status "$1"
+  [[ -n $feeder ]] && kill "$feeder" 2>/dev/null
   [[ -n $ui ]] && kill "$ui" 2>/dev/null
   ui=
-  exec 8>&- 2>/dev/null
+  feeder=
   if [[ -x rust/bin/openpilot-text-window ]]; then
     rust/bin/openpilot-text-window --source-root "$root" \
       --text "openpilot failed to build
@@ -190,7 +201,7 @@ compile() {
     case $line in
       *Compiling*)
         done=$((done + 1))
-        [[ -n $ui ]] && echo "Compiling ${line##*Compiling } · $done" >&8
+        [[ -n $ui ]] && echo "Compiling ${line##*Compiling } · $done" >> "$status_file"
         ;;
     esac
   done < <(
