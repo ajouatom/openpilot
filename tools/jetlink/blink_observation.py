@@ -22,7 +22,9 @@ def allowed(cs, cc, md, source, now, holding=False, tap_echo=False):
       minimum_speed = MANUAL_INDICATOR_MIN_SPEED
     return (direction != 0 and not cs.leftBlinker and not cs.rightBlinker and cs.vEgo >= minimum_speed and
             str(md.meta.laneChangeState) in ('off', 'preLaneChange') and
-            (source in ('model_turn', 'manual_turn') or adjacent_lane(cs, md, direction, now)))
+            # The manual boundary observer already admitted this exact fresh
+            # crossing. A newer marking label must not discard its one-shot edge.
+            (source in ('manual', 'model_turn', 'manual_turn') or adjacent_lane(cs, md, direction, now)))
   except (AttributeError, TypeError, ValueError):
     return False
 

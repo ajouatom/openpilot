@@ -27,6 +27,8 @@ Boundary retreat must persist for 0.15s to cancel tracking, and new indications 
 
 With a continuous target boundary and recent driver intent, a brief jump of the opposite boundary can wait up to 0.15s for valid samples. New indication pauses during the gap and requires consistent movement of both boundaries afterward.
 
+An invalid lane width pauses new approach admission. An established approach can continue when valid geometry returns within 0.15s of its last valid sample. Lane admission for a manual crossing is decided by the detector. The output stage checks request freshness, vehicle state and driver cancellation.
+
 ## Manual turn indicator (trial)
 
 `ManualTurnIndicator` is a separate option in the Lane Change (Auto Turn) settings group, OFF by default. It supports Ioniq 5 PE with a supported indicator adapter and `AutoBlinkerControl=1·2`. Driver observation operates independently of ATC, navigation and lateral-control activation. Its lamp feedback receives automatic-steering request isolation.

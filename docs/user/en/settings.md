@@ -294,6 +294,8 @@ See [Radar tracks and corner radar](radar.md) before changing radar modes.
 
 ### Indicator Control
 
+Manual lane-change detection retains an established approach when valid width returns within 0.15s of the last valid observation. The output stage uses the detector’s lane-admission decision. [Detailed behavior](lane-change.md)
+
 Settings > Vehicle & Hardware > Indicator Control contains Automatic Indication, Output Device and Lever Behavior. Automatic Indication contains `AutoBlinkerControl`, `ManualLaneChangeIndicator`, `ManualTurnIndicator`, `ModelDesireIndicator` and `ModelPathIndicator`. Output Device contains `CanfdBlinkerKick`, `CanfdBlinkerKickMode`, `CanfdBlinkerControl` and `CanfdBlinkerTest`. Lever Behavior contains `BlinkerLatchedTurn` and `LaneChangeLeverWait`.
 
 **Panda/SPAS Indicator Output** (`CanfdBlinkerKick`) transmits requests from the common indication policy through Panda. It supports IONIQ 5 PE, IONIQ 9 and Azera / Grandeur GN7 with camera-SCC CAN-FD. Manual lane changes, manual turns, model observations, navigation turns and voice lane changes use the existing common settings for starting, holding and ending indication. Physical lever input and stale inputs stop transmission. An ended request requires a new request to restart.

@@ -236,3 +236,61 @@ No vehicle write or CAN actuation is part of this follow-up.
 
 Private before/after evidence and all-route tables are indexed in
 `.analysis/archive/2026-11-15/indicator-fixes/INDEX.md`.
+
+
+## November 17 retained-log follow-up
+
+The evening November 16 route and two morning November 17 routes add 23 full-log
+segments and matching camera segments to the retained audit. The comparison now
+covers 55 routes, 426 identified segments and 477,798 aligned observer inputs.
+Complete messages from truncated historical tails are retained. The recent
+11ef/2 tail is also incomplete. File hashes match the downloaded source bytes.
+
+Three corrections are applied.
+
+- Invalid lane width supplies no new admission evidence. An established approach
+  keeps its last valid sample through the existing 150 ms continuity limit.
+  Invalid samples reset adjacent-lane admission time, so intermittent invalid
+  geometry cannot accumulate enough time to establish a new approach.
+- A fresh manual crossing already admitted by the model uses that decision at the
+  common output stage. The duplicate adjacency lookup is removed for this source.
+  The source still validates observation identity, isolation, freshness, vehicle
+  state, ownership, physical input and competing requests.
+- Native Kick samples the caller's clock after reading the worker socket. A source
+  publication arriving during the read can otherwise look future-dated and revoke
+  the request. A bounded request-end diagnostic records freshness, continuation,
+  opposite-lamp and readiness state once per ended request.
+
+With the external-output minimum, the accepted detector changes requests from
+324 to 325. All 324 previous starts, sides, sources and ends agree exactly. The
+added left request at 11ee/6+41.508s corresponds to a visually confirmed manual
+crossing. With the existing native minimum the comparison is 323 to 324, again
+with all existing starts, sides, sources and ends exact. Nine deterministic regression cases reproduce on a31a59ca2d before
+correction, including four bounded width gaps, three source transports with a
+changed marking label, and initial/continuing native socket timestamp races.
+The source-loop comparison covers 96 ordinary USB, BLE and Kick scenarios with
+768 identical outgoing packet records. Changed-label recovery is tested through
+the complete source loop separately.
+
+Broader candidates were rejected during replay and video review. Accumulating
+steering during rearm adds indications while avoiding parked cars. Keeping invalid
+width samples as admission evidence adds an unconfirmed indication at 11ee/9.
+Extending every native returned/relabelled observation to two seconds suppresses
+five historical requests in the fixed-input native counterfactual and introduces
+a different turn request. The normal-completion-only minimum remains in effect.
+The two recent short native right outputs have two raw CAN lamp on-pulses each.
+
+Unresolved cases include the unknown OEM left marking and model relabels at
+11f0/5, the close left/right yard entry at 11f0/8, and additional intersection
+geometry misses. The interrupted native handshake at 11ef/1 has no recorded worker
+receive timing, so the socket race is a verified defect and a candidate cause,
+not a proven diagnosis of that historical event. Its physical correction requires
+new vehicle evidence. Startup admission at 11ee/0 is also unresolved.
+
+The replay fixes recorded motion and supplies bounded synthetic receiver context.
+It does not reproduce live SubMaster delivery, changed vehicle motion or physical
+lamp response. No whole-corpus false-positive rate is claimed. Local focused
+checks pass 1,249 cases with nine platform-specific skips. Native/full CI is
+checked after publication. Private evidence is retained under
+`.analysis/scratch/2026-11-17-indicator-fixes` and
+`.analysis/scratch/2026-11-17-indicators`.
