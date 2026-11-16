@@ -46,6 +46,7 @@ def make_cc(control=True, test=0, spas=0, ecu=None, mode=1, model=True):
   cc = SimpleNamespace(blinker_control=control, blinker_test=test, blinker_kick_mode=mode, aprk_state=0, aprk_frame=0, aprk_nanos=0, aprk_acked=False,
                          lane_crossing=Crossing(), blinker_side=0, blinker_pulse_end=0, frame=0, yellow_until=[0, 0],
                          blinker_kick_model=model, lane_change_prev="off", model_pulse=False, blinker_pulse_start=0, model_hold={}, model_flashes=0, cgw_kick=False, cgw_trial=0, cgw_last_tx=-carcontroller.CGW_REARM_FRAMES,
+                         remote_blinker=0, remote_pulse=False,
                          CAN=SimpleNamespace(ECAN=0, ACAN=1), packer=CANPacker('hyundai_canfd_generated'), params=SimpleNamespace(STEER_THRESHOLD=250),
                          spas_steer_test=spas, spas_angle=0., aprk_buses=(), ecu=ecu or Ecu())
   cc.kick_pulse = lambda CS: CarController.kick_pulse(cc, CS)
@@ -590,3 +591,29 @@ def test_driver_crossing_pulse_is_never_counted(flashes):
   step(cc, 5, D, 60, cross=3)
   assert cc.blinker_pulse_end - cc.blinker_pulse_start == carcontroller.BLINKER_PULSE_FRAMES
 
+
+def test_remote_blinker_press_blinks_in_park_without_kick():
+  # Bluetooth remote blinkerLeft (card -> remote_blinker 3) with CanfdBlinkerKick off, parked: one stock one-touch
+  cc = make_cc(control=False)
+  cc.remote_blinker = 3
+  length = carcontroller.REMOTE_FLASHES * carcontroller.MODEL_FLASH_FRAMES
+  sent = step(cc, length + 100, P, 0)
+  assert set(spas2(cc, sent)) == {3} and length - 5 <= len(spas2(cc, sent)) <= length
+  assert uds(sent)[-2:] == [(DEFAULT, 0), (DEFAULT, 1)] and cc.aprk_state == carcontroller.APRK_IDLE
+  assert not cc.remote_pulse and cc.remote_blinker == 0
+  assert step(cc, 100, P, 0) == []  # nothing more without another press
+
+
+def test_remote_blinker_press_on_classic_cgw1_in_park():
+  cc = make_cc(control=False)
+  cc.cgw_kick, cc.remote_blinker = True, 4
+  sent = cgw_step(cc, carcontroller.REMOTE_FLASHES * carcontroller.MODEL_FLASH_FRAMES + 20, gear=P)
+  assert sent and all(addr == 0x541 for _, addr, _, _ in sent)
+  assert cgw_step(cc, 50, gear=P) == []
+
+
+def test_crossing_kick_still_needs_drive_and_the_key():
+  cc = make_cc(control=False)
+  assert step(cc, 50, D, 60, cross=3) == []  # no remote press, Kick off: nothing
+  cc = make_cc()
+  assert step(cc, 50, P, 0, cross=3) == []  # Kick on but parked: a crossing never kicks

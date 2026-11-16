@@ -725,3 +725,14 @@ def test_dbc_listed_split_matches_the_gates():
   assert hyundaicanfd._dbc_listed("ALERTS_5", hyundaicanfd.ENGAGE_POPUP) and hyundaicanfd._dbc_listed("ALERTS_5", hyundaicanfd.DISENGAGE_POPUP)
   assert hyundaicanfd._dbc_listed("ALERTS_3", 18)  # CHECK_SURROUNDINGS
   assert not hyundaicanfd._dbc_listed("ALERTS_5", 9) and not hyundaicanfd._dbc_listed(*hyundaicanfd.TUNNEL_REFUSAL_TEXT)
+
+
+@pytest.mark.parametrize("test, dashed", [(0, False), (1, False), (2, True), (3, True)])
+def test_ioniq9_cluster_test_opens_dashed_lanes_only_on_ioniq9(monkeypatch, test, dashed):
+  # Ioniq9ClusterTest 2/3: the IONIQ 9 gets the dashed codes the confirmed clusters get; other cars never read the key
+  monkeypatch.setattr(hyundaicanfd, "Params", lambda: SimpleNamespace(get_int=lambda key: test))
+  assert hyundaicanfd._dashed_lane_line(2, 10, CAR.HYUNDAI_IONIQ_9) == (8 if dashed else 2)
+  assert hyundaicanfd._dashed_lane_line(2, 10, CAR.KIA_EV9) == 2
+  assert hyundaicanfd._ioniq9_cluster_test(CAR.KIA_EV9) == 0
+  assert bool(hyundaicanfd._ioniq9_cluster_test(CAR.HYUNDAI_IONIQ_9) & 1) == (test in (1, 3))
+

@@ -1103,6 +1103,12 @@ NON_DBC_CLUSTER_VALUE_CARS = (CAR.HYUNDAI_IONIQ_5_PE, CAR.HYUNDAI_AZERA_7TH_GEN,
 DASHED_LANE_CARS = NON_DBC_CLUSTER_VALUE_CARS
 
 
+def _ioniq9_cluster_test(car):
+  # Ioniq9ClusterTest (Joongyu Lab, IONIQ 9 only, cleared at manager start): 1 HDP icon, 2 dashed lane codes, 3 both, so
+  # the owner can look at values this cluster is not confirmed to draw. Read only on an IONIQ 9.
+  return Params().get_int("Ioniq9ClusterTest") if car == CAR.HYUNDAI_IONIQ_9 else 0
+
+
 def _dbc_listed(field, value):
   if not hasattr(_dbc_listed, "values"):
     from opendbc.can import CANDefine  # here: opendbc.can imports back into opendbc.car at module load
@@ -1112,7 +1118,7 @@ def _dbc_listed(field, value):
 
 def _dashed_lane_line(color, lane_line, car=None):
   # 0x161 dashed codes seen on the Ioniq 5 PE cluster: 8 white, 10 green (no orange dashed)
-  if car in DASHED_LANE_CARS and lane_line // 10 > 0 and lane_line % 10 in (0, 5):  # camera: dashed / DLM inner dashed (color 0 = no lane info)
+  if (car in DASHED_LANE_CARS or _ioniq9_cluster_test(car) & 2) and lane_line // 10 > 0 and lane_line % 10 in (0, 5):  # camera: dashed / DLM inner dashed (color 0 = no lane info)
     return {2: 8, 6: 10}.get(color, color)
   return color
 
@@ -1711,7 +1717,8 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
 
         msg = _cluster_test_msg(packer, "CCNC_0x162", CAN.ECAN, values, rx_counter, test_field, test_value)
         # HDP icon while cruise or steering is engaged; bit 188 has no DBC name: checked clusters only
-        if (getattr(CP, "carFingerprint", None) in NON_DBC_CLUSTER_VALUE_CARS and (CC.enabled or lat_active) and
+        car = getattr(CP, "carFingerprint", None)
+        if ((car in NON_DBC_CLUSTER_VALUE_CARS or _ioniq9_cluster_test(car) & 1) and (CC.enabled or lat_active) and
             HDP_ICON_BIT not in CLUSTER_TEST_BITS.get(test_field, ())):
           msg = _set_raw_bits(msg, (HDP_ICON_BIT,), 1)
         ret.append(msg)

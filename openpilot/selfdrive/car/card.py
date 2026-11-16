@@ -33,6 +33,7 @@ from openpilot.selfdrive.car.hyundai_spas import SpasSignals
 from openpilot.selfdrive.car.aprk_diag import AprkDiag, RESERVED as APRK_DIAG_RESERVED
 from openpilot.system.hardware import HARDWARE
 from openpilot.selfdrive.car.hyundai_kick import KickOutput
+from openpilot.selfdrive.carrot.bluetooth.model import CommandReader
 from openpilot.selfdrive.controls.lib.lateral_readiness import LateralStartupGate
 from openpilot.selfdrive.controls.lib.desire_lib.tesla_turn import turn_signal_context
 from openpilot.selfdrive.carrot.xiaoge.xiaoge_vision import (
@@ -153,6 +154,9 @@ class Car:
     self.native_voice_indicator = NativeVoiceIndicator(stock_signal) if stock_signal else None
     self.spas_signals = SpasSignals(self.CP, self.params)
     self.kick_output = KickOutput(self.CP, self.params)
+    # Bluetooth remote blinkerLeft/Right: Hyundai blinks it natively (carcontroller Kick path, any gear). The Jetson
+    # USB2CAN path (tools/jetlink/blink_source.py) reads the same journal on its own; readers do not consume events.
+    self.remote_blinker = CommandReader('blinker') if hasattr(self.CI.CC, 'remote_blinker') else None
     self.spas_signal_status = None
     self.spas_signal_log_at = 0.
     self.aprk_diag = AprkDiag(self.CP, self.params, HARDWARE.get_device_type(), cloudlog.event)
@@ -468,6 +472,8 @@ class Car:
                       all(self.sm.valid[k] and self.sm.alive[k] and 0 <= time.monotonic()-self.sm.recv_time[k] < .2
                           for k in ('carControl', 'modelV2')))
         self.CI.CC.kick_output_ready = self.kick_output.update(kick_valid, time.monotonic())
+      if self.remote_blinker is not None and (action := self.remote_blinker.read()) in ('blinkerLeft', 'blinkerRight'):
+        self.CI.CC.remote_blinker = 3 if action == 'blinkerLeft' else 4
       self.last_actuators_output, can_sends = self.CI.apply(CC, now_nanos, model_v2, radar_state)
       if self.aprk_diag.busy:
         can_sends = [m for m in can_sends if m[0] not in APRK_DIAG_RESERVED]

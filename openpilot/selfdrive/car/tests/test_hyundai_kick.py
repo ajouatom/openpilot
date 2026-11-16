@@ -6,6 +6,10 @@ import pytest
 from openpilot.selfdrive.car import hyundai_kick as kick
 from tools.jetlink.blink_owner import Owner, GRACE, external_output_allowed  # noqa: TID251
 
+# joongyu01/carrot-wip-dev: carrot-wip's KickOutput lease is inert here (HyundaiSafetyFlags.CANFD_BLINKER_KICK = 0, see
+# values.py); our Kick runs on every CAN-FD / CGW1 car without it, tested in test_aprk_blinkers.py.
+pytestmark = pytest.mark.skip(reason='KickOutput is inert on joongyu01/carrot-wip-dev (CANFD_BLINKER_KICK = 0)')
+
 
 @pytest.fixture
 def output(monkeypatch):
