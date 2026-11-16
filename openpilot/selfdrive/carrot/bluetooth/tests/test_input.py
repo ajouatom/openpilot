@@ -371,3 +371,12 @@ def test_cancelled_holds_allow_short_presses_but_never_long():
   assert decoder.flush(3.0) == [] and not decoder.active_longs  # cancelled: no long while held
   assert blocked_feed(decoder, [(1, 115, 0), (0, 0, 0)], 3.0) == []  # a long press released while blocked: nothing
 
+
+def test_hazard_is_a_remote_action_on_the_blinker_journal(tmp_path):
+  # card reads the 'blinker' journal (hazard -> CanfdHazardTest); jetlink blink_source only takes blinkerLeft/Right there
+  validate_config({'devices': {'AA:BB:CC:DD:EE:FF': {'name': 'r', 'profile': 'generic', 'enabled': True,
+                                                     'mapping': {'key:115': 'hazard'}}}})
+  writer = CommandWriter(tmp_path)
+  writer.send('AA:BB:CC:DD:EE:FF', 'hazard', 1.0)
+  assert [e['action'] for e in writer.events['blinker']] == ['hazard'] and not writer.events['cruise']
+

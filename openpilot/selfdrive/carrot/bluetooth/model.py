@@ -11,7 +11,7 @@ CONFIG_PATH = Path('/data/carrot/bluetooth.json')
 RUNTIME = Path('/dev/shm/carrot-bluetooth')
 REMOTE_BUTTONS = ('accelCruise', 'decelCruise', 'gapAdjustCruise', 'lfaButton', 'cancel')
 ACTIONS = ('none', *REMOTE_BUTTONS, *(button + 'Long' for button in REMOTE_BUTTONS),
-           'laneLeft', 'laneRight', 'blinkerLeft', 'blinkerRight', 'paddleDecel', 'carrotCruise')
+           'laneLeft', 'laneRight', 'blinkerLeft', 'blinkerRight', 'paddleDecel', 'carrotCruise', 'hazard')
 DOUBLE_SECONDS = 0.35
 LONG_SECONDS = 0.7
 REPEAT_SECONDS = 0.5
@@ -315,7 +315,8 @@ class CommandWriter:
         self.publish(channel)
 
   def send(self, mac, action, now, hold=None, repeat=False):
-    channel = 'blinker' if action in ('blinkerLeft', 'blinkerRight') else 'lane' if action in ('laneLeft', 'laneRight') else 'cruise'
+    channel = ('blinker' if action in ('blinkerLeft', 'blinkerRight', 'hazard') else 'lane' if action in ('laneLeft', 'laneRight')
+               else 'cruise')
     self._append(channel, mac, action, now, hold, repeat)
 
   def attention(self, mac, action, now):

@@ -5,6 +5,7 @@ import { mappingButtons, gestureToken, splitGesture, learnEvents, BUTTON_ACTIONS
 test("physical indicators and optional gestures preserve independent mappings", () => {
   assert.ok(REMOTE_ACTIONS.includes("blinkerLeft"));
   assert.ok(REMOTE_ACTIONS.includes("blinkerRight"));
+  assert.ok(REMOTE_ACTIONS.includes("hazard"));
   assert.ok(REMOTE_ACTIONS.includes("laneLeft"));
   const mapping = { left: "blinkerLeft", "left@long": "blinkerRight" };
   assert.deepEqual(gestureOptions({ mapping }), { double: false, long: true });
