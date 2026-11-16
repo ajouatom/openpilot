@@ -35,6 +35,7 @@ class Ecu:
 
 def make_cc(ecu=None, mode=1):
   return SimpleNamespace(blinker_control=True, kick_output_ready=True, kick_direction=0,
+    kick_request_id=None, aprk_request_id=None,
     blinker_kick_mode=mode, aprk_state=0, aprk_frame=0, aprk_nanos=0, aprk_acked=False,
     blinker_side=0, frame=0, CAN=SimpleNamespace(ECAN=0, ACAN=1),
     packer=CANPacker('hyundai_canfd_generated'), aprk_buses=(), ecu=ecu or Ecu())
@@ -53,8 +54,9 @@ def run(cc, frames, out):
   return sent
 
 
-def step(cc, frames, direction=0, gear=D, left=False, right=False):
+def step(cc, frames, direction=0, gear=D, left=False, right=False, request=None):
   cc.kick_direction = direction
+  cc.kick_request_id = (request or str(direction)) if direction else None
   return run(cc, frames, lambda: SimpleNamespace(out=SimpleNamespace(
     gearShifter=gear, leftBlinker=left, rightBlinker=right)))
 
@@ -123,6 +125,16 @@ def test_acknowledged_ecu_must_stay_quiet():
   sent = step(cc, 5, 3)
   assert uds(sent)[-2:] == [(DEFAULT, 0), (DEFAULT, 1)]
   assert not spas2(cc, step(cc, 50, 3))
+
+
+def test_fresh_request_after_failure_gets_one_new_handshake():
+  cc = make_cc(ecu=Ecu(answers=False), mode=0)
+  step(cc, 100, 3, request='first')
+  assert cc.aprk_state == carcontroller.APRK_FAILED
+  cc.ecu.answers = True
+  sent = step(cc, 30, 3, request='second')
+  assert uds(sent)[:2] == [(EXT, 0), (EXT, 1)]
+  assert set(spas2(cc, sent)) == {3}
 
 
 def test_direction_change_releases_previous_session_first():

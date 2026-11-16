@@ -267,7 +267,7 @@ def test_native_indicator_requires_enabled_vehicle_interface():
   from opendbc.car.volkswagen.values import VolkswagenFlags
   from openpilot.selfdrive.car.voice_indicator import native_indicator
 
-  cp = SimpleNamespace(brand='volkswagen', flags=0, passive=False)
+  cp = SimpleNamespace(brand='volkswagen', flags=0, passive=False, safetyConfigs=[])
   assert native_indicator(cp) is None
   cp.flags = VolkswagenFlags.STOCK_EA_PRESENT
   assert native_indicator(cp) == 'EA_02'

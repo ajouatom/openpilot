@@ -227,6 +227,7 @@ class CarController(CarControllerBase):
     self.blinker_kick_mode = 1  # CanfdBlinkerKickMode: 0 only after an ack; anything else (a stored 2/3 too) is 1, piggyback
     self.aprk_state, self.aprk_frame, self.aprk_nanos, self.aprk_acked, self.aprk_buses = APRK_IDLE, 0, 0, False, ()
     self.kick_direction = 0  # Fresh common-policy request, supplied by card.
+    self.kick_request_id = self.aprk_request_id = None
     self.blinker_side = 0
 
     self.activateCruise = 0
@@ -279,10 +280,12 @@ class CarController(CarControllerBase):
     opposite = CS.out.rightBlinker if direction == 3 else CS.out.leftBlinker
     want = (self.blinker_control and self.kick_output_ready and direction in (3, 4) and
             CS.out.gearShifter == structs.CarState.GearShifter.drive and not opposite)
-    if want and self.blinker_side != direction and self.aprk_buses:
-      # Finish the previous direction's ECU session before accepting a new one.
+    if self.kick_request_id != self.aprk_request_id:
+      # A fresh policy request gets one handshake, including after an earlier
+      # failed request. A continuing request never repeatedly retries the ECU.
       ret += [CanData(APRK_ADDR, APRK_DEFAULT_SESSION, bus) for bus in self.aprk_buses]
       self.aprk_state, self.aprk_buses = APRK_IDLE, ()
+      self.aprk_request_id = self.kick_request_id
     self.blinker_side = direction if want else 0
     now, stock, ack = getattr(CS, "can_nanos", 0), getattr(CS, "aprk_stock_nanos", 0), getattr(CS, "aprk_ack_nanos", 0)
 

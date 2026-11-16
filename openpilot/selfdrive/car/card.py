@@ -465,6 +465,7 @@ class Car:
         self.CI.CC.kick_output_ready = self.kick_output.update(kick_valid, kick_now)
         self.CI.CC.kick_direction = self.kick_output.request(
           CS, kick_now, self.initialized_prev, self.CI.CC.kick_output_ready)
+        self.CI.CC.kick_request_id = self.kick_output.request_id
       self.last_actuators_output, can_sends = self.CI.apply(CC, now_nanos, model_v2, radar_state)
       can_sends = self.kick_output.isolate(can_sends, model_v2, time.monotonic())
       if self.tesla_signals.configured:
