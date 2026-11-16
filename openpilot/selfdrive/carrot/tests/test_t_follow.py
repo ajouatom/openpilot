@@ -231,8 +231,14 @@ def test_actual_update_resolves_response_after_refresh_on_every_gap_change(mode,
   tree = ast.parse(source.read_text(encoding='utf-8'))
   planner_class = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == 'CarrotPlanner')
   update = next(n for n in planner_class.body if isinstance(n, ast.FunctionDef) and n.name == 'update')
-  # Run the production refresh/selection prefix without hardware or navigation.
-  update.body = update.body[:3]
+  # Select the actual refresh/selection statements even when earlier signal
+  # admission logic is added to the production method.
+  start = next(i for i, node in enumerate(update.body)
+               if isinstance(node, ast.Expr) and isinstance(node.value, ast.Call)
+               and ast.unparse(node.value.func) == 'self._params_update')
+  end = next(i for i, node in enumerate(update.body)
+             if isinstance(node, ast.Assign) and any(ast.unparse(target) == 'self.leadAccelResponse' for target in node.targets))
+  update.body = update.body[start:end + 1]
   namespace = {'get_lead_response_for_gap': get_lead_response_for_gap, 'get_mode_lead_response': get_mode_lead_response}
   exec(compile(ast.Module(body=[update], type_ignores=[]), str(source), 'exec'), namespace)
   planner = SimpleNamespace(leadAccelResponseBase=0, leadAccelResponseTF=[5, 3, 0, -1], myDrivingMode=mode)
