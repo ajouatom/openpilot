@@ -32,6 +32,7 @@ from openpilot.selfdrive.car.tesla_lane_signals import TeslaLaneSignals
 from openpilot.selfdrive.car.hyundai_spas import SpasSignals
 from openpilot.selfdrive.car.aprk_diag import AprkDiag, RESERVED as APRK_DIAG_RESERVED
 from openpilot.system.hardware import HARDWARE
+from openpilot.selfdrive.car.hyundai_kick import KickOutput
 from openpilot.selfdrive.controls.lib.lateral_readiness import LateralStartupGate
 from openpilot.selfdrive.controls.lib.desire_lib.tesla_turn import turn_signal_context
 from openpilot.selfdrive.carrot.xiaoge.xiaoge_vision import (
@@ -151,6 +152,7 @@ class Car:
     stock_signal = native_indicator(self.CP)
     self.native_voice_indicator = NativeVoiceIndicator(stock_signal) if stock_signal else None
     self.spas_signals = SpasSignals(self.CP, self.params)
+    self.kick_output = KickOutput(self.CP, self.params)
     self.spas_signal_status = None
     self.spas_signal_log_at = 0.
     self.aprk_diag = AprkDiag(self.CP, self.params, HARDWARE.get_device_type(), cloudlog.event)
@@ -249,6 +251,7 @@ class Car:
     self.CI.CS.speedcam_engaged = self.sm['carControl'].enabled
     self.CI.CS.speedcam_v_cruise = self.v_cruise_helper.v_cruise_kph
     CS = self.CI.update(can_list)
+    self.kick_output.observe_driver(can_list, CS, time.monotonic())
     self.spas_signals.observe(can_list, time.monotonic())
     if self.aprk_diag.busy:
       self.aprk_diag.observe(can_list, time.clock_gettime(time.CLOCK_BOOTTIME))
@@ -460,9 +463,15 @@ class Car:
         CC.leftBlinker = CC.rightBlinker = False
         CC.assistantLaneSignalId = ''
         CC = CC.as_reader()
+      if self.kick_output.configured:
+        kick_valid = (CS.canValid and not impact_reboot and model_v2 is not None and
+                      all(self.sm.valid[k] and self.sm.alive[k] and 0 <= time.monotonic()-self.sm.recv_time[k] < .2
+                          for k in ('carControl', 'modelV2')))
+        self.CI.CC.kick_output_ready = self.kick_output.update(kick_valid, time.monotonic())
       self.last_actuators_output, can_sends = self.CI.apply(CC, now_nanos, model_v2, radar_state)
       if self.aprk_diag.busy:
         can_sends = [m for m in can_sends if m[0] not in APRK_DIAG_RESERVED]
+      can_sends = self.kick_output.isolate(can_sends, model_v2, time.monotonic())
       if self.tesla_signals.configured:
         fresh = all(self.sm.seen[s] and self.sm.alive[s] and self.sm.valid[s] and
                     0 <= time.monotonic() - self.sm.recv_time[s] <= 0.2 for s in ('carControl', 'modelV2'))

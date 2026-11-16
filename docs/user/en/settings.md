@@ -269,6 +269,8 @@ For Hyundai/Kia CANFD openpilot longitudinal control, aReqRaw and aReqValue beco
 On supported Tesla vehicles, [automatic cruise set-speed adjustment](tesla.md#automatic-cruise-speed) requires the additional vehicle bus, **alpha longitudinal** (`AlphaLongitudinalEnabled`) and Carrot Web's `TeslaAutoSpeedLimit`. The new switch defaults to OFF and requires a full restart after changes. Navigation/Carrot speed control still takes precedence and pauses DAS-based adjustment until it ends and the limit is stable again; any manual pause remains in effect. Turning the right speed wheel pauses it; an opposite-direction wheel gesture within one second or disengaging and re-engaging resumes it. OFF stops automatic wheel output without disabling manual scrolling.
 
 <a id="vehicle-hardware"></a>
+Departure boost and soft stopping apply when the first lead constrains the MPC and no second lead is present. Forced deceleration retains existing braking. Departure boost respects the current target speed and acceleration limit.
+
 ## Vehicle and hardware
 
 These settings describe the car, harness, and device hardware configuration. Do not enable them merely as a display experiment.

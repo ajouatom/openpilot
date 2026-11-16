@@ -841,6 +841,11 @@ static bool hyundai_canfd_rx_tx_hook(const CANPacket_t *to_push, CANPacket_t *to
   int addr = GET_ADDR(to_push);
   bool send = false;
   if ((GET_BUS(to_push) == 0) && ((addr == 0x165) || (addr == 0x16A))) {
+    // carrot-wip 00d9cae3: only a well-formed stock frame (length, checksum) carries our held frame
+    if ((GET_LEN(to_push) != ((addr == 0x165) ? 24 : 32)) ||
+        (hyundai_canfd_get_checksum(to_push) != hyundai_common_canfd_compute_checksum(to_push))) {
+      return false;
+    }
     HyundaiSpasPiggyback *pb = &hyundai_spas_pb[(addr == 0x165) ? 0 : 1];
     uint32_t now = microsecond_timer_get();
     pb->stock_us = now;

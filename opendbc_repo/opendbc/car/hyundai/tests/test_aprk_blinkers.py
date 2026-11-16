@@ -580,3 +580,13 @@ def test_crossing_kick_waits_out_a_model_lane_change():
   assert set(spas2(cc, model_step(cc, 30, lc("preLaneChange", "left")))) == {3}
   cc = make_cc()
   assert set(spas2(cc, model_step(cc, 30, None, cross=4))) == {4}  # no modelV2: as before
+
+
+@pytest.mark.parametrize("flashes", [0, 3, 5, 7])
+def test_driver_crossing_pulse_is_never_counted(flashes):
+  # carState reads the real lamp back as the driver's blinker: the unowned driver pulse stays 1 s in every model mode
+  cc = make_cc()
+  cc.model_flashes = flashes
+  step(cc, 5, D, 60, cross=3)
+  assert cc.blinker_pulse_end - cc.blinker_pulse_start == carcontroller.BLINKER_PULSE_FRAMES
+

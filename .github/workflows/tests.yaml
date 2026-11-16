@@ -136,7 +136,16 @@ jobs:
             openpilot/selfdrive/controls/tests/test_lateral_startup_control.py \
             openpilot/selfdrive/controls/tests/test_controlsd_publish.py \
             openpilot/common/tests/test_params.py::test_always_lateral_manager_preserves_existing_default_and_saved_choice
-      - name: Bosch provider regression tests
+      - name: PR580 startup and longitudinal integration
+        run: |
+          python -m pytest -o addopts='' -q \
+            openpilot/system/tests/test_build_cache.py \
+            openpilot/system/tests/test_rebuild_cleanup.py \
+            openpilot/selfdrive/controls/tests/test_stop_go_assist.py \
+            openpilot/selfdrive/controls/tests/test_lead_close_brake.py \
+            opendbc_repo/opendbc/car/hyundai/tests/test_stock_cruise_adopt.py \
+            opendbc_repo/opendbc/car/hyundai/tests/test_camera_set_speed_sync.py
+      - name: Bosch provider replay regression tests
         run: |
           python -m pytest -o addopts='' -q \
             opendbc_repo/opendbc/car/hyundai/tests/test_radar.py \

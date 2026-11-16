@@ -292,6 +292,8 @@ class CarController(CarControllerBase):
     self.depart_jerk = False
     self.blinker_control = False
     self.blinker_kick_mode = 1  # CanfdBlinkerKickMode: 0 only after an ack, 1 panda piggyback, 2 direct 25 Hz, 3 direct 100 Hz
+    # set by card's KickOutput only on the CANFD_BLINKER_KICK harness (carrot-wip's KICK_CARS); our Kick does not gate on it
+    self.kick_output_ready = False
     self.blinker_kick_model = False  # CanfdBlinkerKickModelMode != 1: also kick on a model lane change start (kick_pulse)
     self.model_flashes = 0  # CanfdBlinkerKickModelMode 2/3/4 -> 3/5/7 flashes; 0 = hold through the change
     self.blinker_test = 0  # CanfdBlinkerMenuTest: 1 left, 2 right (menu test, any speed/gear)
@@ -428,7 +430,11 @@ class CarController(CarControllerBase):
     - Modes 2/3/4 also count the driver-crossing pulse on classic CAN (cgw_kick) only: there carState reads the stock CGW1,
       which never shows our forged lamp (Palisade, K5 P tests). CAN-FD reads the real lamp back as the driver's blinker, so a
       longer unowned pulse there could start a second change: it stays BLINKER_PULSE_FRAMES."""
-    drive = CS.out.gearShifter == structs.CarState.GearShifter.drive
+    # carrot-wip 00d9cae3 gates, kept without its KickOutput lease: no Kick during a cruise CANCEL latch, while the driver
+    # works the lever, or with a trailer
+    drive = (CS.out.gearShifter == structs.CarState.GearShifter.drive and
+             not getattr(CS.out, 'cruiseCancelState', False) and not getattr(CS.out, 'blinkerLever', False) and
+             not getattr(CS.out, 'trailerConnected', False))
     lamp = CS.out.leftBlinker or CS.out.rightBlinker
     # lane changes are banned in a tunnel announced as no-lane-change, and for 20 s after a roundabout sign (carstate)
     tunnel = getattr(CS.out, "naviTunnel", False) or getattr(CS.out, "naviRoundabout", False)
@@ -468,6 +474,8 @@ class CarController(CarControllerBase):
       length = self.model_flashes * MODEL_FLASH_FRAMES if self.model_flashes and (model or self.cgw_kick) else BLINKER_PULSE_FRAMES
       self.blinker_side, self.blinker_pulse_end, self.model_pulse = side, self.frame + length, model
       self.blinker_pulse_start, self.model_hold = self.frame, {}
+    if not drive:
+      self.blinker_pulse_end, self.model_pulse = min(self.blinker_pulse_end, self.frame), False
     return self.frame < self.blinker_pulse_end
 
   def restart_pulse(self):
@@ -514,7 +522,12 @@ class CarController(CarControllerBase):
     # stream with its own counter runs on bus 1 (10-30)
     spas = (self.spas_steer_test != 0 and CS.out.gearShifter == structs.CarState.GearShifter.park and
             CS.out.standstill and not CS.out.steeringPressed)
-    want = self.blinker_test in (1, 2) or (self.blinker_control and drive and pulse) or spas
+    # carrot-wip 00d9cae3: never against the other side's lamp; a Kick that may not run cuts its pulse
+    opposite = CS.out.rightBlinker if self.blinker_side == 3 else CS.out.leftBlinker
+    kick = self.blinker_control and drive and pulse and not opposite
+    if not kick:
+      self.blinker_pulse_end, self.model_pulse = min(self.blinker_pulse_end, self.frame), False
+    want = self.blinker_test in (1, 2) or kick or spas
     now, stock, ack = getattr(CS, "can_nanos", 0), getattr(CS, "aprk_stock_nanos", 0), getattr(CS, "aprk_ack_nanos", 0)
 
     def give_back():

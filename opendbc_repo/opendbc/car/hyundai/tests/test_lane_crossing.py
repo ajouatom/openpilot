@@ -1,6 +1,24 @@
 from types import SimpleNamespace
+import pytest
 
 from opendbc.car.hyundai.lane_crossing import LaneCrossing
+
+
+@pytest.mark.parametrize('bad', ['left_empty', 'right_empty', 'short_probs', 'nan_left', 'nan_prob'])
+def test_incomplete_model_does_not_crash_or_poison_later_observations(bad):
+  observer = LaneCrossing()
+  model = md(0, 1.7, 1.7)
+  if bad.endswith('_empty'):
+    model.laneLines[1 if bad == 'left_empty' else 2].y = []
+  elif bad == 'short_probs':
+    model.laneLineProbs = [1.]
+  elif bad == 'nan_left':
+    model.laneLines[1].y = [float('nan')]
+  else:
+    model.laneLineProbs[2] = float('nan')
+  assert observer.update(model, 0., True, 300) == 0
+  outputs = [observer.update(md(i + 1, *f), (i + 1) * .05, True, 300) for i, f in enumerate(lane_change_left())]
+  assert outputs.count(3) == 1
 
 
 def md(frame, left, right, prob=1.0, rprob=None, edges=None, outer=0.):

@@ -1,3 +1,5 @@
+import math
+
 # Manual lane change without the blinker: the car starting to cross a lane line, from modelV2 lane lines.
 # Tuned offline on our rlogs (log_analyze/reports/auto_blinker_20261027/cross_sim.py): 10-26 2 h drive caught 35/38
 # lamp-free crossings above 30 km/h, median 1.05 s before the centre crossed, 7 false; 10-24 holdout 2/2, 3 false.
@@ -38,7 +40,12 @@ class LaneCrossing:
     torque: carState.steeringTorque; given, a crossing also needs the driver pushing toward it."""
     if torque is not None:
       self.torque = [(ht, hq) for ht, hq in self.torque if t - ht < TORQUE_S] + [(t, torque)]
-    if md is None or len(md.laneLines) < 3 or not len(md.laneLines[1].y) or md.frameId == self.frame_id:
+    if md is None or md.frameId == self.frame_id:
+      return 0
+    if (len(md.laneLines) < 3 or len(md.laneLineProbs) < 3 or
+        any(not len(md.laneLines[i].y) or not math.isfinite(md.laneLines[i].y[0]) or
+            not math.isfinite(md.laneLineProbs[i]) for i in (1, 2))):
+      self.hold = t
       return 0
     self.frame_id = md.frameId
     y = {i: abs(md.laneLines[i].y[0]) for i in (1, 2)}

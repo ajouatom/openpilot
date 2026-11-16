@@ -99,14 +99,16 @@ def planner_hook():
   return namespace['apply_stop_go_assist']
 
 
-def run_hook(mode, xstate='lead', traffic='off', should_stop=False, v=0.0, a=0.2, lead_=None, standstill=False):
-  planner = SimpleNamespace(since_standstill=0.5, dt=0.05, mpc=SimpleNamespace(mode='acc'), output_a_target=a,
+def run_hook(mode, xstate='lead', traffic='off', should_stop=False, v=0.0, a=0.2, lead_=None, standstill=False,
+             source='lead0', second_lead=False, force_slow=False, v_cruise=10.0, accel_max=1.65):
+  planner = SimpleNamespace(since_standstill=0.5, dt=0.05, mpc=SimpleNamespace(mode='acc', source=source), output_a_target=a,
                             output_should_stop=should_stop, output_v_target_now=v, a_desired=a)
   cs = SimpleNamespace(standstill=standstill, gasPressed=False, brakePressed=False, vEgo=v)
-  sm = {'carState': cs, 'radarState': SimpleNamespace(leadOne=lead_ or lead(3.9, vLead=0.5, aLeadK=0.6))}
+  sm = {'carState': cs, 'radarState': SimpleNamespace(leadOne=lead_ or lead(3.9, vLead=0.5, aLeadK=0.6),
+                                                   leadTwo=SimpleNamespace(status=second_lead))}
   carrot = SimpleNamespace(stopGoAssist=mode, soft_hold_active=0, lane_change_active=False, stop_distance=STOP, v_cruise=10.0,
                            xState=SimpleNamespace(name=xstate), trafficState=SimpleNamespace(name=traffic))
-  planner_hook()(planner, sm, carrot, False, 1.65, (10, 0))
+  planner_hook()(planner, sm, carrot, False, accel_max, (10, 0), v_cruise, force_slow)
   return planner
 
 
@@ -147,3 +149,21 @@ def test_hook_tracks_time_since_standstill():
 
 def test_hook_boost_mode_also_guards():
   assert run_hook(2, v=0.9, a=-0.3, lead_=lead(STOP + 0.58)).output_a_target == pytest.approx(-0.81 / 1.16)
+
+
+@pytest.mark.parametrize('kw', [dict(force_slow=True), dict(source='cruise'), dict(source='lead1'),
+                                dict(source='e2e'), dict(second_lead=True), dict(v_cruise=0), dict(accel_max=0)])
+def test_departure_preserves_other_stop_constraints(kw):
+  p = run_hook(2, a=-0.4, should_stop=True, **kw)
+  assert p.output_a_target == -0.4 and p.output_should_stop
+
+
+@pytest.mark.parametrize('kw', [dict(force_slow=True), dict(source='e2e'), dict(second_lead=True)])
+def test_soft_stop_preserves_other_braking_constraints(kw):
+  p = run_hook(3, v=0.5, a=-1.2, lead_=lead(STOP + 1), **kw)
+  assert p.output_a_target == -1.2
+
+
+def test_departure_respects_cruise_speed():
+  p = run_hook(2, a=0, v_cruise=0.025)
+  assert p.output_a_target == pytest.approx(0.5)

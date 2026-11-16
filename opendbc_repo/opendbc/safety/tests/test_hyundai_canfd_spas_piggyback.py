@@ -80,6 +80,19 @@ def test_a_stale_held_frame_is_dropped():
   assert d.stock(SPAS2, 2) is None
 
 
+def test_bad_stock_frame_cannot_release_a_pending_command():
+  d = Device()
+  d.stock(SPAS2, 1)
+  assert d.tx(SPAS2, 10) == (True, True)
+  bad = bytearray(frame(SPAS2, 2, None, 0).dat)
+  bad[0] ^= 1
+  for data in (bytes(8), bytes(bad)):
+    pkt = libsafety_py.make_CANPacket(SPAS2, 0, data)
+    out = libsafety_py.ffi.new("CANPacket_t *")
+    assert not d.s.safety_rx_tx_hook(pkt, out)
+  assert d.stock(SPAS2, 2) == bytes(frame(SPAS2, 3, "left", 0).dat)
+
+
 def test_invalid_frames_are_neither_sent_nor_held():
   d = Device()
   d.stock(SPAS2, 1)

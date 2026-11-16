@@ -156,7 +156,8 @@ def test_host_ignores_old_sequence_and_does_not_start_without_negotiation():
   assert host.worker is None
 
 
-def test_sender_uses_separate_bounded_message_and_expires_clock_anchor(monkeypatch):
+@pytest.mark.parametrize('blocked', ['clock', 'CanfdBlinkerKick', 'CanfdBlinkerControl'])
+def test_sender_uses_separate_bounded_message_and_expires_clock_anchor(monkeypatch, blocked):
   clock, sent = [1.], []
   monkeypatch.setattr(protocol.time, 'monotonic', lambda: clock[0])
   value = {'stamp':1., 'ok':True, 'events':[{'id':'one','time':.95,'direction':'left'}]}
@@ -174,7 +175,8 @@ def test_sender_uses_separate_bounded_message_and_expires_clock_anchor(monkeypat
   kind, _, parts = sent[0]
   assert kind == protocol.DATA and len(parts) == 1 and isinstance(parts[0],bytes)
   assert json.loads(parts[0])['events'][0]['deadline'] == pytest.approx(100.35)
-  clock[0] = 4.1
+  clock[0] = 4.1 if blocked == 'clock' else 1.1
+  sender.params = SimpleNamespace(get_bool=lambda name: name in ('IsOnroad', blocked))
   value['stamp'] = clock[0]
   sender.send(client)
   assert len(sent) == 2 and json.loads(sent[-1][2][0])['ok'] is False
