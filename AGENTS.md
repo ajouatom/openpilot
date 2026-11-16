@@ -1,5 +1,18 @@
 # Repository memory
 
+- 2026-11-16: Owner requests common indicator decisions for USB2CAN/B1 and
+  Panda/SPAS Kick, with settings grouped under Vehicle & Hardware / Indicator
+  Control. Kick now consumes the existing blink_source policy through a local
+  worker; retains exclusive lease, journal/model isolation and verified driver
+  lever priority. Remove separate LaneCrossing detector and model pulse/count
+  settings. Keep CanfdBlinkerKick as output selection and KickMode as transport
+  choice; existing common setting values/defaults govern indication (mode0 stays
+  automatic-off). Retire KickModelMode without migrating it into common choices.
+  Source-loop A/B on baseline90430cd1d3:48 comparisons/384 packet records exact;
+  shared observer, turn, USB/B1 transport algorithms unchanged. Local1013pass/
+  7platform skips. Physical SPAS continuous hold, lamp release and vehicle behavior
+  unverified; no vehicle writes. Native/full CI validation follows this commit.
+
 - 2026-11-15: Complete retained indicator audit uses baseline b12855935aa,
   403 identified full-log segments/52routes/452218 aligned model frames.
   TBT D+standstill tiny-negative speed invalidates three journeys. Preserve

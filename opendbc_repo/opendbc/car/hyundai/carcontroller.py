@@ -8,7 +8,6 @@ from opendbc.car import Bus, CanData, DT_CTRL, apply_driver_steer_torque_limits,
 from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.hyundai import hyundaicanfd, hyundaican
 from opendbc.car.hyundai.carstate import CarState
-from opendbc.car.hyundai.lane_crossing import LaneCrossing
 from opendbc.car.hyundai.stopping import CanfdStopping
 from opendbc.car.hyundai.steering_handover import SteeringHandover
 from opendbc.car.carlog import carlog
@@ -61,20 +60,6 @@ APRK_DEFAULT_SESSION = bytes([0x02, 0x10, 0x01, 0, 0, 0, 0, 0])
 APRK_IDLE, APRK_ASK, APRK_WAIT_QUIET, APRK_ACTIVE, APRK_FAILED = range(5)
 APRK_REPLY_FRAMES = int(0.4 / DT_CTRL)
 APRK_QUIET_NANOS = 100_000_000
-# kick: ~2 flashes when the driver starts crossing a lane line without the blinker (lane_crossing.py).
-# The BCM ran on ~1.2 s after the command stopped (EV4 10-26), so a 1 s command gives about two flashes.
-BLINKER_PULSE_FRAMES = int(1.0 / DT_CTRL)
-# CanfdBlinkerKickModelMode 0 holds its pulse through the change like the CCNC blink hold (hyundaicanfd._blink_hold_change):
-# renewed by this gap every frame it still holds, never past the max (DesireHelper owns the lamp for 12 s)
-MODEL_HOLD_GAP_FRAMES = int(0.2 / DT_CTRL)
-MODEL_HOLD_MAX_FRAMES = int(10.0 / DT_CTRL)
-# No kick across a yellow (centre) line. The camera color drops to 0 while the line is crossed (10-30 seg 22: 10 -> 2
-# at the kick), so a yellow seen on that side in the last 2 s counts (10-30 seg 1: kick over yellow dashed 20)
-YELLOW_HOLD_FRAMES = int(2.0 / DT_CTRL)
-# CanfdBlinkerKickModelMode 2/3/4: 3/5/7 flashes like the stock one-touch setting, one stock flash cycle each
-# (0.35 s on / 0.35 s off)
-MODEL_FLASH_FRAMES = 2 * int(0.35 / DT_CTRL)
-MODEL_FLASH_COUNTS = {2: 3, 3: 5, 4: 7}
 CANFD_JERK_ERROR_DELAY = 0.5
 CANFD_JERK_ERROR_FILTER_TIME = 0.4
 CANFD_JERK_ERROR_DEADBAND = 0.25
@@ -240,13 +225,9 @@ class CarController(CarControllerBase):
     self.blinker_control = False
     self.kick_output_ready = False  # card owns the shared USB/BLE/native output lease
     self.blinker_kick_mode = 1  # CanfdBlinkerKickMode: 0 only after an ack; anything else (a stored 2/3 too) is 1, piggyback
-    self.blinker_kick_model = False  # CanfdBlinkerKickModelMode != 1: also kick on a model lane change start (kick_pulse)
-    self.model_flashes = 0  # CanfdBlinkerKickModelMode 2/3/4 -> 3/5/7 flashes; 0 = hold through the change
     self.aprk_state, self.aprk_frame, self.aprk_nanos, self.aprk_acked, self.aprk_buses = APRK_IDLE, 0, 0, False, ()
-    self.lane_crossing, self.blinker_side, self.blinker_pulse_end = LaneCrossing(), 0, 0
-    self.lane_change_prev, self.model_pulse = "off", False  # last modelV2 laneChangeState; pulse from the model trigger
-    self.blinker_pulse_start, self.model_hold = 0, {}  # pulse start frame; _blink_hold_change state
-    self.yellow_until = [0, 0]  # left, right
+    self.kick_direction = 0  # Fresh common-policy request, supplied by card.
+    self.blinker_side = 0
 
     self.activateCruise = 0
     self.button_wait = 12
@@ -292,79 +273,17 @@ class CarController(CarControllerBase):
     self.steerDeltaUpOrg = self.steerDeltaUp = self.steerDeltaUpLC = self.params.STEER_DELTA_UP
     self.steerDeltaDownOrg = self.steerDeltaDown = self.steerDeltaDownLC = self.params.STEER_DELTA_DOWN
 
-  def kick_pulse(self, CS):
-    """CanfdBlinkerKick trigger: starts a pulse (BLINKER_PULSE_FRAMES at least) toward blinker_side (3 left, 4 right) with
-    the lamp off, in D. True while a pulse runs.
-    - the driver crossing a lane line (lane_crossing), excluding yellow lines and an ongoing model lane change.
-    - CanfdBlinkerKickModelMode (not 1): modelV2 laneChangeState rising to laneChangeStarting (remote, app, voice, navigation), only
-      when that side's indicatorIsolationMask bit rides in the same modelV2: DesireHelper owned the lamp on that frame, so
-      the kicked lamp cannot read back as the driver's blinker (EV4 10-26: a lamp held through the change never went off,
-      and a kick lamp without the mask started a change). Not in a cruise CANCEL latch; cut when the change is cancelled.
-      Mode 0: held through Starting / Finishing like the I5 PE cluster blink hold: until the car centre is 60 % of a lane
-      width into the new lane (no crossing seen: the end of the change), at most MODEL_HOLD_MAX_FRAMES.
-      Modes 2/3/4: a fixed 3/5/7 flashes (MODEL_FLASH_FRAMES each) that also run past a completed change, like the stock
-      one-touch; a cancelled change still cuts them.
-    - The driver-crossing pulse stays BLINKER_PULSE_FRAMES. card waits for modeld's lamp-isolation acknowledgement
-      before transmitting SPAS frames for either source."""
-    drive = (CS.out.gearShifter == structs.CarState.GearShifter.drive and self.kick_output_ready and
-             not getattr(CS.out, 'cruiseCancelState', False) and not getattr(CS.out, 'blinkerLever', False) and
-             not getattr(CS.out, 'trailerConnected', False))
-    lamp = CS.out.leftBlinker or CS.out.rightBlinker
-    md = getattr(CS, "modelV2", None)
-    meta = md.meta if md is not None else None
-    state = str(meta.laneChangeState) if meta is not None else None  # None: no fresh modelV2, not a transition
-    changing = state in ("laneChangeStarting", "laneChangeFinishing")
-    side = self.lane_crossing.update(md, self.frame * DT_CTRL,
-                                     self.blinker_control and drive and not lamp and not changing,
-                                     CS.out.steeringTorque, torque_min=self.params.STEER_THRESHOLD)  # the car's steeringPressed threshold
-    for i, line in enumerate((CS.out.leftLaneLine, CS.out.rightLaneLine)):
-      if line // 10 == 2:  # camera color: 0 none, 1 white, 2 yellow, 3 blue
-        self.yellow_until[i] = self.frame + YELLOW_HOLD_FRAMES
-    if side and self.frame < self.yellow_until[side - 3]:
-      side = 0
-    model = False
-    if state is not None:
-      prev = self.lane_change_prev
-      bit = {"left": 1, "right": 2}.get(str(meta.laneChangeDirection), 0)  # boundary_indicator.own() bits
-      # no yellow-line guard: the model FSM already decided to change lanes there
-      model = (state == "laneChangeStarting" and self.lane_change_prev != state and bit and self.blinker_control and
-               self.blinker_kick_model and drive and not lamp and
-               not getattr(CS.out, "cruiseCancelState", False) and bool(meta.indicatorIsolationMask & bit))
-      self.lane_change_prev = state
-      if model:
-        side = bit + 2
-      elif self.model_flashes and prev == "laneChangeFinishing" and state != prev:
-        # completed (to off, or to a queued next change's preLaneChange): the counted flashes run out like a stock one-touch
-        self.model_pulse = False
-      elif state == "off" and self.model_pulse and self.frame < self.blinker_pulse_end:
-        self.blinker_pulse_end = self.frame  # the change was cancelled: so is its lamp
-      elif (self.model_pulse and not self.model_flashes and changing and self.frame < self.blinker_pulse_end and
-            self.frame - self.blinker_pulse_start < MODEL_HOLD_MAX_FRAMES and
-            hyundaicanfd._blink_hold_change(md, self.blinker_side, self.model_hold)):
-        self.blinker_pulse_end = max(self.blinker_pulse_end, self.frame + MODEL_HOLD_GAP_FRAMES)
-    if side:
-      length = self.model_flashes * MODEL_FLASH_FRAMES if self.model_flashes and model else BLINKER_PULSE_FRAMES
-      self.blinker_side, self.blinker_pulse_end, self.model_pulse = side, self.frame + length, model
-      self.blinker_pulse_start, self.model_hold = self.frame, {}
-    if not drive:
-      self.blinker_pulse_end, self.model_pulse = min(self.blinker_pulse_end, self.frame), False
-    return self.frame < self.blinker_pulse_end
-
-  def restart_pulse(self):
-    """The APRK handshake ate the start of the pulse: run its full length again from now (1 s, or a counted 3/5/7)."""
-    length = self.blinker_pulse_end - self.blinker_pulse_start
-    self.blinker_pulse_start, self.blinker_pulse_end = self.frame, self.frame + length
-
   def aprk_blinkers(self, CS):
     ret = []
-    drive = CS.out.gearShifter == structs.CarState.GearShifter.drive
-    pulse = self.kick_pulse(CS)
-    # the parking ECU is paused only around a kick and restored right after it. APRK is asked on both buses - bus 0
-    # ignored it 10-26, and a second SPAS1 stream with its own counter runs on bus 1 (10-30)
-    opposite = CS.out.rightBlinker if self.blinker_side == 3 else CS.out.leftBlinker
-    want = self.blinker_control and self.kick_output_ready and drive and pulse and not opposite
-    if not want:
-      self.blinker_pulse_end, self.model_pulse = min(self.blinker_pulse_end, self.frame), False
+    direction = self.kick_direction
+    opposite = CS.out.rightBlinker if direction == 3 else CS.out.leftBlinker
+    want = (self.blinker_control and self.kick_output_ready and direction in (3, 4) and
+            CS.out.gearShifter == structs.CarState.GearShifter.drive and not opposite)
+    if want and self.blinker_side != direction and self.aprk_buses:
+      # Finish the previous direction's ECU session before accepting a new one.
+      ret += [CanData(APRK_ADDR, APRK_DEFAULT_SESSION, bus) for bus in self.aprk_buses]
+      self.aprk_state, self.aprk_buses = APRK_IDLE, ()
+    self.blinker_side = direction if want else 0
     now, stock, ack = getattr(CS, "can_nanos", 0), getattr(CS, "aprk_stock_nanos", 0), getattr(CS, "aprk_ack_nanos", 0)
 
     def give_back():
@@ -389,11 +308,9 @@ class CarController(CarControllerBase):
         # each of our SPAS frames and sends it right behind the stock one (hyundai_canfd_rx_tx_hook), so the same id
         # never starts twice at once - 10-30..11-02 that collision made error frames in 78/111 kicks and bus-off in 33.
         self.aprk_state, self.aprk_frame, self.aprk_nanos, self.aprk_acked = APRK_ACTIVE, self.frame, now, False
-        self.restart_pulse()  # the reply window ate the start of the pulse
     elif self.aprk_state == APRK_WAIT_QUIET:
       if self.frame - self.aprk_frame >= APRK_QUIET_NANOS // 10_000_000 and now - stock >= APRK_QUIET_NANOS:
         self.aprk_state, self.aprk_frame, self.aprk_nanos, self.aprk_acked = APRK_ACTIVE, self.frame, now, True
-        self.restart_pulse()  # the handshake ate part of the pulse
       elif self.frame - self.aprk_frame >= APRK_REPLY_FRAMES:
         return give_back()
     elif self.aprk_state == APRK_ACTIVE:
@@ -454,8 +371,6 @@ class CarController(CarControllerBase):
       self.blinker_control = (any(cfg.safetyParam & HyundaiSafetyFlags.CANFD_BLINKER_KICK for cfg in self.CP.safetyConfigs)
                               and params.get_bool("CanfdBlinkerKick"))
       self.blinker_kick_mode = params.get_int("CanfdBlinkerKickMode")
-      model_mode = params.get_int("CanfdBlinkerKickModelMode")  # 0 hold, 1 off, 2/3/4: 3/5/7 flashes
-      self.blinker_kick_model, self.model_flashes = model_mode != 1, MODEL_FLASH_COUNTS.get(model_mode, 0)
       self.hapticFeedbackWhenSpeedCamera = int(params.get_int("HapticFeedbackWhenSpeedCamera"))
 
       self.button_spam1 = params.get_int("CruiseButtonTest1")
