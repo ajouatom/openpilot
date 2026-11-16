@@ -58,6 +58,24 @@ pub fn absent_with(size: impl Fn(u32) -> Option<usize>) -> bool {
     SPAS.iter().all(|(address, _)| size(*address).is_none())
 }
 
+/// SPAS2 direction during a no-stock trial of `length` seconds. With no
+/// stock APRK nothing returns BLINKER_CONTROL to 0, and the body controller
+/// flashes the previously seen direction once on the next start (owner's
+/// IONIQ 5 PE, 2026-11-16: right-then-left, left-then-right). Lead and end
+/// with 0.2 s of zero frames, as a stock APRK would send.
+pub fn solo_direction(
+    elapsed: f64,
+    length: f64,
+    direction: Option<Direction>,
+) -> Option<Direction> {
+    if (SOLO_ZERO..length - SOLO_ZERO).contains(&elapsed) {
+        direction
+    } else {
+        None
+    }
+}
+const SOLO_ZERO: f64 = 0.2;
+
 /// Both SPAS messages exist on `bus` with their exact lengths.
 pub fn compatible(fingerprint: &BTreeMap<u8, BTreeMap<u32, usize>>, bus: u8) -> bool {
     SPAS.iter().all(|(address, size)| {

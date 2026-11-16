@@ -339,3 +339,18 @@ fn solo_trial_frames_match_the_panda_arming_rules() {
         );
     }
 }
+
+#[test]
+fn solo_trial_leads_and_ends_with_zero_direction() {
+    for (elapsed, expected) in [
+        (0., None),
+        (0.19, None),
+        (0.2, LEFT),
+        (1.5, LEFT),
+        (2.79, LEFT),
+        (2.8, None),
+        (3.0, None),
+    ] {
+        assert_eq!(solo_direction(elapsed, 3.0, LEFT), expected, "{elapsed}");
+    }
+}

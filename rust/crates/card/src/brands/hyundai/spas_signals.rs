@@ -617,11 +617,20 @@ impl SpasSignals {
                     }
                 }
             } else {
+                let side = if [19, 20].contains(&self.test_setting) {
+                    spas::solo_direction(
+                        now - self.direct_started,
+                        self.test_until - self.direct_started,
+                        direction,
+                    )
+                } else {
+                    direction
+                };
                 for (i, (address, _)) in SPAS.iter().enumerate() {
                     sends.push(spas::frame(
                         *address,
                         self.direct_counter[i],
-                        direction,
+                        side,
                         self.session.bus,
                     ));
                     self.direct_counter[i] = self.direct_counter[i].wrapping_add(1);
