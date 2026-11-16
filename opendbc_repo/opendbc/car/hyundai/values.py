@@ -1118,6 +1118,14 @@ def is_ray_pedal_control(CP) -> bool:
           and get_pedal_interceptor_params(CP) is not None)
 
 
+def is_hda1_ccnc(CP) -> bool:
+  # HDA1 CCNC: CAN-FD camera SCC without the CANFD_HDA2 flag, which only the CanfdHDA2 setting sets (1 on the HDA2
+  # I5 PE / IONIQ 9 logs, 0 on the HDA1 Tucson / Sonata). These cameras send no lane type/colour (CAM_0x2a4/0x362).
+  flags = int(CP.flags)
+  return (CP.brand == "hyundai" and bool(flags & HyundaiFlags.CANFD) and bool(flags & HyundaiFlags.CAMERA_SCC)
+          and not flags & HyundaiFlags.CANFD_HDA2)
+
+
 if __name__ == "__main__":
   cars = []
   for platform in CAR:

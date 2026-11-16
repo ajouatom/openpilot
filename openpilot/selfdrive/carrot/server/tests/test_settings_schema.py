@@ -220,7 +220,7 @@ def test_fixed_tuning_catalog_hides_longitudinal_pid_settings(settings, brand):
   hidden = {"LongTuningKpV", "LongTuningKiV", "LongTuningKf"}
 
   filtered_groups, filtered_groups_list, filtered_categories, hidden_names = filter_settings_catalog_for_brand(
-    groups, groups_list, categories, brand, car_fingerprint="HYUNDAI_IONIQ_9",  # car tests visible: brand rule only
+    groups, groups_list, categories, brand, car_fingerprint="HYUNDAI_IONIQ_9", hda1_ccnc=True,  # car tests visible: brand rule only
   )
   visible_names = {item["name"] for items in filtered_groups.values() for item in items}
   menu_names = {
@@ -245,7 +245,7 @@ def test_other_brands_keep_longitudinal_pid_settings(settings):
   groups, by_name, groups_list = group_index(settings)
   categories = build_menu_categories(settings, by_name)
   filtered_groups, _filtered_groups_list, _filtered_categories, hidden_names = filter_settings_catalog_for_brand(
-    groups, groups_list, categories, "gm", car_fingerprint="HYUNDAI_IONIQ_9",
+    groups, groups_list, categories, "gm", car_fingerprint="HYUNDAI_IONIQ_9", hda1_ccnc=True,
   )
   visible_names = {item["name"] for items in filtered_groups.values() for item in items}
 
@@ -295,7 +295,7 @@ def test_ray_pedal_catalog_uses_identified_capability(settings, fingerprint, ped
   groups, by_name, groups_list = group_index(settings)
   categories = build_menu_categories(settings, by_name)
   filtered, counts, menu, hidden = filter_settings_catalog_for_brand(
-    groups, groups_list, categories, brand, ray_pedal_control=active_pedal, car_fingerprint="HYUNDAI_IONIQ_9")
+    groups, groups_list, categories, brand, ray_pedal_control=active_pedal, car_fingerprint="HYUNDAI_IONIQ_9", hda1_ccnc=True)
   tuning = {"LongTuningKpV", "LongTuningKiV", "LongTuningKf"}
   visible = {item["name"] for items in filtered.values() for item in items}
   menu_names = {name for category in menu for group in category["groups"]
@@ -771,3 +771,34 @@ def test_visible_cars_shows_a_car_test_only_on_that_car(settings, fingerprint, s
   assert ("Ioniq9ClusterTest" in visible) == shown and ("Ioniq9ClusterTest" in menu) == shown
   assert ("Ioniq9ClusterTest" in hidden_names) != shown
 
+
+@pytest.mark.parametrize("hda1, shown", [(True, True), (False, False)])
+def test_visible_hda1_shows_only_on_hda1_ccnc(settings, hda1, shown):
+  # CcncLaneTypeDetection carries visible_hda1: listed only when current_hda1_ccnc() is True (hidden while unknown)
+  groups, by_name, groups_list = group_index(settings)
+  categories = build_menu_categories(settings, by_name)
+  filtered_groups, _groups_list, filtered_categories, hidden_names = filter_settings_catalog_for_brand(
+    groups, groups_list, categories, "hyundai", car_fingerprint="HYUNDAI_TUCSON_4TH_GEN", hda1_ccnc=hda1,
+  )
+  visible = {item["name"] for items in filtered_groups.values() for item in items}
+  menu = {name for category in filtered_categories for group in category["groups"] for section in group["sections"]
+          for name in section["items"]}
+  assert ("CcncLaneTypeDetection" in visible) == shown and ("CcncLaneTypeDetection" in menu) == shown
+  assert ("CcncLaneTypeDetection" in hidden_names) != shown
+
+
+def test_current_hda1_ccnc_reads_car_params():
+  from openpilot.cereal import car
+  from opendbc.car.hyundai.values import HyundaiFlags
+  from openpilot.selfdrive.carrot.server.services.settings import current_hda1_ccnc
+
+  def params_for(brand, flags):
+    cp = car.CarParams.new_message(brand=brand, flags=int(flags))
+    return type("P", (), {"get": lambda self, key: cp.to_bytes() if key == "CarParamsPersistent" else None})()
+
+  hda1 = HyundaiFlags.CANFD | HyundaiFlags.CAMERA_SCC
+  assert current_hda1_ccnc(params_for("hyundai", hda1))
+  assert not current_hda1_ccnc(params_for("hyundai", hda1 | HyundaiFlags.CANFD_HDA2))  # I5 PE / IONIQ 9 (CanfdHDA2=1)
+  assert not current_hda1_ccnc(params_for("hyundai", HyundaiFlags.CANFD))  # radar SCC, no CCNC
+  assert not current_hda1_ccnc(params_for("toyota", hda1))
+  assert not current_hda1_ccnc(type("P", (), {"get": lambda self, key: None})())  # unknown car

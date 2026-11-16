@@ -95,10 +95,14 @@ def enable_xiaoge_data(started, params, CP: car.CarParams) -> bool:
   return started and params.get_bool("ShareData")
 
 def enable_ccnc_lane_type(started, params, CP: car.CarParams) -> bool:
-  # CcncLaneTypeDetection 1 (2 = Qualified4's former StripNet value, same): display-only lane type recogniser for CCNC
-  # cameras that send no lane type (HDA1: Tucson, Sonata). Off: the process is not started at all.
+  # Display-only lane type recogniser for HDA1 CCNC cameras, which send no lane type (Tucson, Sonata); any other car
+  # never starts it. CcncLaneTypeDetection > 0 picks its rate (lane_type.marking.RATES); 0 does not start it at all.
+  if not started:
+    return False
+  from opendbc.car.hyundai.values import is_hda1_ccnc
+  from openpilot.selfdrive.carrot.lane_type.marking import RATES  # json only, no OpenCV
   try:
-    return started and params.get_int("CcncLaneTypeDetection") in (1, 2)
+    return is_hda1_ccnc(CP) and params.get_int("CcncLaneTypeDetection") in RATES
   except (TypeError, ValueError):
     return False
 

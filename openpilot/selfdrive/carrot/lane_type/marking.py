@@ -1,9 +1,9 @@
 """Light helpers shared by the lane marking process and card (no OpenCV/numpy import).
 
-CcncLaneTypeDetection turns the display-only recogniser on: 0 off (existing CCNC lane display unchanged), 1 StripNet
-(frozen strip model). The value 2 (StripNet in the former 3-way selector, whose 1 was the Scanner) is still read as
-StripNet, so a stored 1 or 2 both run StripNet: the profile Scanner is no longer run on the car (2026-10-21); MODES keeps its
-name for offline replays (tools/lane_profile/replay_marking.py builds marking_daemon.Recogniser(1) itself).
+CcncLaneTypeDetection turns the display-only recogniser on and picks how often it runs (joongyu01 11-16, HDA1 CCNC cars
+only; the owner chooses by CPU): 0 off (existing CCNC lane display unchanged), 1/2/3 StripNet at RATES 5/10/20 Hz
+(20 Hz = every modelV2 frame, Qualified4's setting). The profile Scanner is no longer run on the car (2026-10-21); MODES
+keeps its name for offline replays (tools/lane_profile/replay_marking.py builds marking_daemon.Recogniser(1) itself).
 The StripNet model is assets/lane_strip_v4.* (strip_model.MODEL_NAME); the model choice setting was removed (DaBin 10-26).
 The recogniser publishes the display-filtered (two identical results within 0.4 s, 0.5 s expiry) left/right type and
 colour on customReservedRawData2; card keeps only the latest packet and the CCNC sender applies it without waiting.
@@ -13,18 +13,23 @@ import json
 PARAM = 'CcncLaneTypeDetection'
 MODES = {1: 'scanner', 2: 'stripnet'}  # Recogniser engines; the daemon only runs STRIPNET
 STRIPNET = 2
+RATES = {1: 5, 2: 10, 3: 20}  # CcncLaneTypeDetection -> StripNet runs per second
 PACKET_TYPE, PACKET_VERSION = 'ccncLaneMarking', 1
 MAX_AGE_NS = 500_000_000  # the display policy's expiry (result.MAX_AGE_NS)
 TYPES, COLORS = ('dashed', 'solid'), ('white', 'yellow')
 
 
-def mode_of(params):
-  """STRIPNET when CcncLaneTypeDetection is on (1, or the former selector's 2), else 0 (off)."""
+def rate_of(params):
+  """StripNet runs per second for CcncLaneTypeDetection (RATES), 0 when off or unknown."""
   try:
-    mode = params.get_int(PARAM)
+    return RATES.get(params.get_int(PARAM), 0)
   except (TypeError, ValueError):
     return 0
-  return STRIPNET if mode in (1, 2) else 0
+
+
+def mode_of(params):
+  """STRIPNET when CcncLaneTypeDetection is on (any RATES value), else 0 (off)."""
+  return STRIPNET if rate_of(params) else 0
 
 
 def parse(payload, received_ns):

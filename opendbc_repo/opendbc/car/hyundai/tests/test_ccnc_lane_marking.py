@@ -65,7 +65,7 @@ def test_lane_change_hold_limit_switch_replays_only(monkeypatch):
     assert d.update(2.1, 20., False, .2, True, 'dashed', 'white')[2:5] == ('dashed', 'white', False)
 
 
-def _ccnc_lanes(monkeypatch, mode, camera, mark, frame=5, display=None):
+def _ccnc_lanes(monkeypatch, mode, camera, mark, frame=5, display=None, flags=HyundaiFlags.CAMERA_SCC):
   from openpilot.cereal import log
   monkeypatch.setattr(hyundaicanfd, 'Params', lambda: SimpleNamespace(
     get_int=lambda key: mode if key == 'CcncLaneTypeDetection' else 0, get=lambda key: '0'))
@@ -83,7 +83,7 @@ def _ccnc_lanes(monkeypatch, mode, camera, mark, frame=5, display=None):
   control = structs.CarControl(latActive=True, enabled=True)
   control.hudControl.leftLaneVisible = control.hudControl.rightLaneVisible = True
   msg = hyundaicanfd.create_ccnc_messages(
-    SimpleNamespace(flags=HyundaiFlags.CAMERA_SCC, carFingerprint=CAR.HYUNDAI_TUCSON_4TH_GEN), packer, SimpleNamespace(ECAN=0, CAM=2),
+    SimpleNamespace(flags=flags, carFingerprint=CAR.HYUNDAI_TUCSON_4TH_GEN), packer, SimpleNamespace(ECAN=0, CAM=2),
     frame, control, state, control.hudControl, 0, False, False, 0, False, 0, 0)[0]
   return get_raw_value(msg[1], definition.sigs['LANELINE_LEFT']), get_raw_value(msg[1], definition.sigs['LANELINE_RIGHT'])
 
@@ -91,13 +91,23 @@ def _ccnc_lanes(monkeypatch, mode, camera, mark, frame=5, display=None):
 def test_hda1_vision_paints_dashed_and_yellow(monkeypatch):
   # HDA1 (camera colour 0): the recogniser decides the shape / colour
   assert _ccnc_lanes(monkeypatch, 1, 0, marking(left=('dashed', 'white'), right=('solid', 'yellow'))) == (8, 4)
-  assert _ccnc_lanes(monkeypatch, 2, 0, marking(left=('solid', 'white'), right=('dashed', 'white'))) == (2, 8)
+  assert _ccnc_lanes(monkeypatch, 3, 0, marking(left=('solid', 'white'), right=('dashed', 'white'))) == (2, 8)
 
 
 def test_hda1_vision_off_or_unconfirmed(monkeypatch):
   mark = marking(left=('dashed', 'white'), right=('dashed', 'white'))
   assert _ccnc_lanes(monkeypatch, 0, 0, mark) == (2, 2)  # option off: existing display
   assert _ccnc_lanes(monkeypatch, 1, 0, None) == (14, 14)  # on, nothing confirmed since start: hidden, not a white solid
+  assert _ccnc_lanes(monkeypatch, 4, 0, mark) == (2, 2)  # out-of-range value (restored backup): off, as the daemon sees it
+
+
+def test_hda2_ignores_the_setting(monkeypatch):
+  # CanfdHDA2=1 (I5 PE, IONIQ 9): no recogniser there, so a restored setting must neither paint nor hide lines
+  mark = marking(left=('dashed', 'white'), right=('solid', 'yellow'))
+  hda2 = HyundaiFlags.CAMERA_SCC | HyundaiFlags.CANFD_HDA2  # frame 0: the cached mode refreshes through the HDA2 gate
+  assert _ccnc_lanes(monkeypatch, 3, 0, mark, frame=0, flags=hda2) == (2, 2)
+  assert _ccnc_lanes(monkeypatch, 3, 0, None, frame=0, flags=hda2) == (2, 2)
+  assert _ccnc_lanes(monkeypatch, 3, 0, mark, frame=0) == (8, 4)  # same setting on HDA1 paints
 
 
 def test_camera_lane_info_wins_over_vision(monkeypatch):

@@ -21,7 +21,7 @@ import math
 import os
 import time
 
-from openpilot.selfdrive.carrot.lane_type.marking import MODES, PACKET_TYPE, PACKET_VERSION, mode_of
+from openpilot.selfdrive.carrot.lane_type.marking import MODES, PACKET_TYPE, PACKET_VERSION, STRIPNET, mode_of, rate_of
 
 PARAM_CHECK_S = 1.
 # Recorded timing (190 segments): modelV2 arrives 37-53 ms (p5-p99) after its frame, so with 50 ms frames the
@@ -155,7 +155,7 @@ class Recogniser:
   to each side's filter_input result before it leaves process(). ``strip_filter`` is for tests and replays only:
   None builds that default, another StripFilter is used instead of it, and False turns the filter off (the raw
   filter_input results, both heads). The Scanner (mode 1) has no filter unless one is passed, and ignores it."""
-  def __init__(self, mode, strip_filter=None, model=None, *, lanechange=None):
+  def __init__(self, mode, strip_filter=None, model=None, *, lanechange=None, rate_hz=20):
     self.mode = mode
     self.lanechange = lanechange_of() if lanechange is None else lanechange
     if self.lanechange not in LANECHANGE_VARIANTS:
@@ -167,9 +167,11 @@ class Recogniser:
     self.lc_frame = None
     self.lc_fresh = {}
     if strip_filter is None and mode == 2:
-      from openpilot.selfdrive.carrot.lane_type.strip_filter import COLOR_M, LATCH, LONG_M, SHORT_M, TYPE_CONF, TYPE_LATCH_M, StripFilter
+      from openpilot.selfdrive.carrot.lane_type.strip_filter import (COLOR_LATCH_FRAMES, COLOR_M, LATCH, LONG_M, SHORT_M, TYPE_CONF,
+                                                                     TYPE_LATCH_M, StripFilter)
+      # the colour latch counts processed frames (10 = 0.5 s at 20 Hz): keep about 0.5 s at a lower rate (5, 3 frames)
       strip_filter = StripFilter('asym', long_m=LONG_M, short_m=SHORT_M, color_m=COLOR_M, latch=LATCH, type_conf=TYPE_CONF,
-                                 type_latch_m=TYPE_LATCH_M)
+                                 type_latch_m=TYPE_LATCH_M, color_latch_frames=max(1, math.ceil(COLOR_LATCH_FRAMES*rate_hz/20)))
     self.strip_filter = strip_filter or None
     self.strip_extractor = None
     self.timing = {}
@@ -432,6 +434,13 @@ def packet(mode, frame_id, camera_ns, raw, confirmed, now_ns, timing, counters, 
   return data
 
 
+def due(last_ns, stamp_ns, rate_hz):
+  """Run the recogniser on this camera frame? Gated on the last processed frame's stamp, not on a frame counter, so a
+  frame lost to a mismatch / stale input / dropped buffer is retried on the next modelV2 (+50 ms) instead of a whole
+  period later; a 25 ms margin absorbs camera jitter. At 20 Hz every frame is due."""
+  return last_ns is None or not 0 < stamp_ns - last_ns < 1_000_000_000 // rate_hz - 25_000_000
+
+
 def planes(buffer):
   """Y and interleaved UV views of the shared NV12 buffer (no full-frame copy)."""
   import numpy as np
@@ -447,9 +456,10 @@ def planes(buffer):
 def main():
   from openpilot.common.params import Params
   params = Params()
-  mode = mode_of(params)
-  if mode not in MODES:
+  rate = rate_of(params)  # read once: mode and rate come from the same value
+  if not rate:
     return  # OFF: no OpenCV import, no model load, no IPC
+  mode = STRIPNET
   import cv2
   # 2 OpenCV threads (10-23 on-device benchmark, little cores, offroad): StripNet remap (KleidiCV) runs in parallel;
   # new v4 28.6 -> 22.0 ms/frame p50, p95 31.2 -> 24.8, outputs bit-identical. 3 threads had a worse p95.
@@ -482,15 +492,19 @@ def main():
   pm = messaging.PubMaster(['customReservedRawData2'])
   client = VisionIpcClient('camerad', VisionStreamType.VISION_STREAM_ROAD, False)  # every frame; FrameBuffer keeps 3
   frames = FrameBuffer()
-  recogniser, policy = Recogniser(mode, model=strip_net, lanechange=lanechange_of()), DisplayPolicy()
-  counters = {'processed': 0, 'exact': 0, 'nearest': 0, 'frame_mismatch': 0, 'stale_inputs': 0, 'errors': 0,
+  recogniser, policy = Recogniser(mode, model=strip_net, lanechange=lanechange_of(), rate_hz=rate), DisplayPolicy()
+  counters = {'processed': 0, 'skipped': 0, 'exact': 0, 'nearest': 0, 'frame_mismatch': 0, 'stale_inputs': 0, 'errors': 0,
               'drop_hold_before': 0, 'drop_frame_id_before': 0, 'drop_hold_after': 0, 'drop_frame_id_after': 0}
   odometer, last_stamp, next_param = 0., None, time.monotonic() + PARAM_CHECK_S
   while True:
     if time.monotonic() >= next_param:
       next_param = time.monotonic() + PARAM_CHECK_S
-      if mode_of(params) not in MODES:
+      new_rate = rate_of(params)
+      if not new_rate:
         break
+      if new_rate != rate:  # rate changed in the settings: fresh filters for the new period, same model
+        rate = new_rate
+        recogniser, policy = Recogniser(mode, model=strip_net, lanechange=lanechange_of(), rate_hz=rate), DisplayPolicy()
     sm.update(100)
     if not client.is_connected():
       if not client.connect(False):
@@ -515,6 +529,9 @@ def main():
     drop = buffer_drop_reason(frame_id, buffer, recv_ns, time.monotonic_ns())
     if drop:  # nothing read from the buffer yet: skip the frame, keep all state
       counters[f'drop_{drop}_before'] += 1
+      continue
+    if not due(last_stamp, frame_eof, rate):  # lower rate: card keeps the last packet (absolute expiry), SideDisplay holds
+      counters['skipped'] += 1
       continue
     start_ns, cpu_start = time.monotonic_ns(), time.thread_time_ns()
     faults_before = minor_faults()

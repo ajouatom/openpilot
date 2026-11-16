@@ -554,8 +554,8 @@ def test_hazard_test_sets_0x1ea_bit_104(monkeypatch, hazard, test_field, test_va
   )
   control = SimpleNamespace(latActive=False, enabled=False)
   hud = SimpleNamespace(leadDistance=0, leadRadar=0, leadRelSpeed=0)
-  # CanfdHazardTest only on the Ioniq 5 PE (the only cluster seen to take bit 104); the cluster test sets it on any car
-  for car, want in ((CAR.HYUNDAI_IONIQ_5_PE, expected), (CAR.KIA_EV9, expected if test_field == 129 else 0)):
+  # CanfdHazardTest on every car whose camera sends 0x1ea (Ioniq 5 PE seen; others are the owner's test)
+  for car, want in ((CAR.HYUNDAI_IONIQ_5_PE, expected), (CAR.KIA_EV9, expected)):
     (address, data, bus), = hyundaicanfd.create_ccnc_messages(SimpleNamespace(flags=HyundaiFlags.CAMERA_SCC.value, carFingerprint=car),
                                                               packer, SimpleNamespace(ECAN=0, CAM=2), 0, control, state, hud,
                                                               0, False, False, 0, False, 0, 0)
