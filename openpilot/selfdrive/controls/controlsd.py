@@ -178,13 +178,17 @@ class Controls:
     if CC.latActive and not self.lateral_started:
       self.desired_curvature = self.curvature
       self.lateral_started = True
-    if not CC.longActive:
+    # Hyundai camera SCC drops our accel under a held paddle (ACCMode 0) while the car brakes on regen. Run LoC as off then,
+    # like a gas override: longControlState off also resets the planner, so on release the plan restarts from the real
+    # speed instead of a stale target (IONIQ 9 000004c0 seg12, 11-16: vTarget +2 m/s above vEgo -> aReq +1.53 surge).
+    long_active = CC.longActive and not CS.paddlePause
+    if not long_active:
       self.LoC.reset()
 
     # accel PID loop
     pid_accel_limits = self.CI.get_pid_accel_limits(self.CP, CS.vEgo, CS.vCruise * CV.KPH_TO_MS)
     t_since_plan = (self.sm.frame - self.sm.recv_frame['longitudinalPlan']) * DT_CTRL
-    accel, aTarget, jerk = self.LoC.update(CC.longActive, CS, long_plan, pid_accel_limits, t_since_plan, self.sm['radarState'])
+    accel, aTarget, jerk = self.LoC.update(long_active, CS, long_plan, pid_accel_limits, t_since_plan, self.sm['radarState'])
     actuators.longControlState = self.LoC.long_control_state
     actuators.accel = float(accel)
     actuators.aTarget = float(aTarget)

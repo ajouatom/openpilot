@@ -1779,6 +1779,10 @@ class CarState(CarStateBase):
     # A held paddle reads 0 for 0.1-0.2 s every few frames; bridge 0.3 s so SCC does not re-engage under the
     # still-held paddle (that re-engage raised the cluster's "paddle shifter conditions not met" popup, 11-03 18:24).
     self.paddle_hold_frames = 30 if paddle_button > 0 else max(0, self.paddle_hold_frames - 1)
+    # the paddle gate of create_acc_control_scc2 (sent on CAMERA_SCC only): our accel is not applied while it holds.
+    # Moving only: at a standstill LoC is in stopping (no stale plan, no surge) and must keep the stop-lead filter,
+    # DM standstill pause and StopReq it has there.
+    ret.paddlePause = bool(self.CP.flags & HyundaiFlags.CAMERA_SCC) and self.paddle_hold_frames > 0 and not ret.standstill
 
     # Filter the Python list before the single capnp assignment: re-assigning a
     # capnp list field from itself clears the source first and zeroes every event.
