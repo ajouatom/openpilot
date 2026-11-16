@@ -52,6 +52,7 @@ class DesireHelper:
     # Only a car whose carcontroller may kick the lamp (CanfdBlinkerKick: HyundaiSafetyFlags.CANFD_BLINKER_KICK, set by
     # modeld from CarParams) takes lamp ownership for it; every other car keeps the previous lamp interpretation.
     self.kick_supported = kick_supported
+    self.manual_indicator_minimum = 0.
     self.frame = 0
 
     # FSM core
@@ -139,6 +140,7 @@ class DesireHelper:
     if self.kick_supported or self.boundary_indicator_supported and (self.frame == 1 or self.frame % 20 == 0):
       mode = self.params.get_int("AutoBlinkerControl")
       kick = self.params.get_bool("CanfdBlinkerKick")
+      self.manual_indicator_minimum = 2. if self.kick_supported and kick else 0.
       supported = self.kick_supported if kick else self.external_indicator_supported
       lamp_mode = supported and mode in (1, 2) and not self.params.get_bool("CanfdBlinkerControl")
       self.boundary_indicator_enabled = lamp_mode and self.params.get_bool("ManualLaneChangeIndicator")
@@ -419,7 +421,8 @@ class DesireHelper:
         busy=lamp_busy,
         isolation=self.boundary_indicator, manual_edge=self.boundary_indicator.request_direction, command_curvature=indicator_curvature,
         feedback=read_json(HOLD_PATH, {}) if self.model_indicator.active else None,
-        manual_turn_enabled=self.manual_turn_indicator_enabled, yaw_rate=indicator_yaw_rate)
+        manual_turn_enabled=self.manual_turn_indicator_enabled, yaw_rate=indicator_yaw_rate,
+        manual_minimum=self.manual_indicator_minimum)
 
     elif self.boundary_indicator.blocked or not self.boundary_indicator.initialized:
       # Expire a voice-owned lamp mask without enabling PE-only geometry observation.

@@ -330,9 +330,16 @@ def main(fd, spas=False, ble=False, kick=False):
         'board_lamp': bool(ble and confirmation and feedback.get('lamps') is not None),
         'tap': voice_tap.sent(now, feedback, submitted and ok)})
     if mode and not spas:
+      native_start = {}
+      if (kick and submitted and ok and hold and hold['source'] == 'observation' and
+          fresh(feedback.get('stamp'), now, .15) and feedback.get('accepted_id') == hold['id'] and
+          fresh(feedback.get('first_sent'), now, 30.)):
+        native_start = {'native_start': {'request': getattr(meta, 'observedIndicatorMonoTime', 0)/1e9,
+                                        'direction': hold['direction'], 'time': feedback['first_sent']}}
       atomic_json(HOLD_PATH, {'stamp':now, 'mode':mode, 'fingerprint':fingerprint,
                              'direction':hold['direction'] if hold and activated_id == hold['id'] else None,
                              'tap':observation_feedback.sent(now, feedback, submitted and ok),
+                             **native_start,
                              'override':activated_id is not None or now < release_until or (policy.suppressed and release_until > 0)})
     time.sleep(max(0, now+.05-time.monotonic()))
 
