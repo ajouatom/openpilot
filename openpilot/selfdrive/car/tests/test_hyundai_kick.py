@@ -29,6 +29,131 @@ def test_external_gate(onroad, spas, enabled):
   assert external_output_allowed(NS(get_bool=values.get)) == (onroad and not spas and not enabled)
 
 
+@pytest.fixture
+def source_output(output, monkeypatch):
+  gate, values = output
+  incoming, feedback = {}, []
+  worker = NS(process=NS(poll=lambda: None), latest=lambda: incoming,
+              send=lambda value: feedback.append(value), close=lambda **kw: None)
+  monkeypatch.setattr(kick, 'Process', lambda *args: worker)
+  cs = NS(canValid=True, gearShifter='drive', blinkerLever=False, leftBlinker=False, rightBlinker=False)
+  return gate, values, incoming, feedback, cs
+
+
+def hold_record(record, now, ident='hold-1', direction='left', started=None):
+  record.update(stamp=now, ok=True, events=[], hold={
+    'id': ident, 'direction': direction, 'time': now if started is None else started, 'source': 'lane'})
+
+
+def submitted(side):
+  data = bytearray(32)
+  data[16] = side << 5
+  return [(0x16A, bytes(data), 0)]
+
+
+def test_common_hold_acknowledgement_and_stop(source_output):
+  gate, _, record, feedback, cs = source_output
+  hold_record(record, 10.)
+  assert gate.request(cs, 10., True, True) == 3
+  gate.feedback(cs, 10., [])
+  assert feedback[-1]['accepted_id'] is None
+  gate.feedback(cs, 10.1, submitted(3))
+  assert feedback[-1]['accepted_id'] == 'hold-1'
+  for now in (11., 25., 60.):
+    hold_record(record, now, started=10.)
+    assert gate.request(cs, now, True, True) == 3
+  record.update(stamp=60.1, hold=None)
+  assert gate.request(cs, 60.1, True, True) == 0
+  gate.feedback(cs, 60.1, [])
+  assert feedback[-1]['accepted_id'] is None
+
+
+@pytest.mark.parametrize('fault', ['old_record', 'future_record', 'invalid', 'owner', 'lever', 'hazard', 'gear', 'opposite', 'cancel'])
+def test_interrupted_hold_cannot_resume_same_id(source_output, fault):
+  gate, _, record, _, cs = source_output
+  hold_record(record, 10.)
+  assert gate.request(cs, 10., True, True) == 3
+  hold_record(record, 10.1, started=10.)
+  record['stamp'] = 9. if fault == 'old_record' else 11. if fault == 'future_record' else 10.1
+  record['ok'] = fault != 'invalid'
+  cs.blinkerLever = fault == 'lever'
+  cs.leftBlinker = fault == 'hazard'
+  cs.rightBlinker = fault in ('hazard', 'opposite')
+  cs.gearShifter = 'park' if fault == 'gear' else 'drive'
+  if fault == 'cancel':
+    record['hold'] = None
+  assert gate.request(cs, 10.1, True, fault != 'owner') == 0
+  cs.blinkerLever = cs.leftBlinker = cs.rightBlinker = False
+  cs.gearShifter = 'drive'
+  hold_record(record, 10.2, started=10.)
+  assert gate.request(cs, 10.2, True, True) == 0
+  hold_record(record, 10.3, ident='hold-2')
+  assert gate.request(cs, 10.3, True, True) == 3
+
+
+def test_explicit_tap_is_once_and_bounded_after_handshake(source_output):
+  gate, _, record, _, cs = source_output
+  record.update(stamp=10., ok=True, hold=None, events=[{'id': 'tap', 'time':10., 'direction':'right'}])
+  assert gate.request(cs, 10., True, True) == 4
+  record.update(stamp=10.5, events=[])
+  assert gate.request(cs, 10.5, True, True) == 4
+  gate.feedback(cs, 10.5, submitted(4))
+  record['stamp'] = 11.49
+  assert gate.request(cs, 11.49, True, True) == 4
+  record['stamp'] = 11.51
+  assert gate.request(cs, 11.51, True, True) == 0
+
+
+def test_output_toggle_closes_worker_without_replaying_old_request(source_output):
+  gate, values, record, _, cs = source_output
+  hold_record(record, 10.)
+  assert gate.request(cs, 10., True, True) == 3
+  values['CanfdBlinkerKick'] = False
+  assert gate.request(cs, 10.1, True, False) == 0
+  assert gate.worker is None
+  values['CanfdBlinkerKick'] = True
+  hold_record(record, 11.2, started=10.)
+  assert gate.request(cs, 11.2, True, True) == 0
+
+
+@pytest.mark.parametrize('mode', [0, 1, 2])
+@pytest.mark.parametrize('selected', [False, True])
+@pytest.mark.parametrize('legacy_mode', [0, 1, 2, 3, 4])
+def test_common_detector_settings_match_external_output(mode, selected, legacy_mode):
+  import ast
+  from pathlib import Path
+  path = Path(__file__).parents[2] / 'controls/lib/desire_helper.py'
+  method = next(node for node in ast.walk(ast.parse(path.read_text(encoding='utf-8')))
+                if isinstance(node, ast.FunctionDef) and node.name == '_update_params_periodic')
+  scope = {'RUNTIME':Path('.'), 'read_json':lambda *args:{}, 'time':NS(monotonic=lambda:10.), 'CV':NS(KPH_TO_MS=1/3.6)}
+  exec(compile(ast.Module(body=[method], type_ignores=[]), str(path), 'exec'), scope)
+  for native in (False, True):
+    bools = dict.fromkeys(('ManualLaneChangeIndicator', 'ManualTurnIndicator', 'ModelDesireIndicator', 'ModelPathIndicator'), selected)
+    bools['CanfdBlinkerKick'] = native
+    ints = {'AutoBlinkerControl':mode, 'CanfdBlinkerKickModelMode':legacy_mode}
+    reads = []
+    def get_int(key):
+      reads.append(key)
+      return ints.get(key, 0)
+    helper = NS(frame=100, kick_supported=native, external_indicator_supported=not native,
+                boundary_indicator_supported=True, indicator_journal_time=0.,
+                params=NS(get_bool=lambda key:bools.get(key, False), get_int=get_int, get_float=lambda key:0.))
+    scope['_update_params_periodic'](helper)
+    for name in ('boundary_indicator_enabled', 'manual_turn_indicator_enabled', 'model_desire_indicator_enabled', 'model_path_indicator_enabled'):
+      assert getattr(helper, name) == (selected and mode in (1, 2))
+    assert 'CanfdBlinkerKickModelMode' not in reads
+
+
+def test_kick_uses_advertised_common_voice_route():
+  from openpilot.selfdrive.car.voice_indicator import native_indicator
+  from opendbc.car.hyundai.values import HyundaiFlags
+  flags = HyundaiFlags.CANFD | HyundaiFlags.CANFD_HDA2 | HyundaiFlags.ENABLE_BLINKERS
+  cp = NS(brand='hyundai', passive=False, flags=flags, safetyConfigs=[NS(safetyParam=32768)])
+  assert native_indicator(cp) is None
+  cp.safetyConfigs[0].safetyParam = 0
+  assert native_indicator(cp) == 'SPAS2'
+
+
 def test_toggle_and_stale_input_release_ownership(output):
   gate, values = output
   assert gate.update(True, 10.)
@@ -264,6 +389,10 @@ def test_production_card_send_boundary(output, monkeypatch, tmp_path, blocked):
   from openpilot.selfdrive.pandad import can_list_to_can_capnp
 
   gate, values = output
+  record = {}
+  hold_record(record, 10.)
+  worker = NS(process=NS(poll=lambda:None), latest=lambda:record, send=lambda value:True, close=lambda **kw:None)
+  monkeypatch.setattr(kick, 'Process', lambda *args:worker)
   values['ImpactDashcamReboot'] = blocked == 'dashcam'
   values['CanfdBlinkerKick'] = blocked != 'off'
   monkeypatch.setattr(kick, 'RUNTIME', tmp_path)
@@ -287,7 +416,7 @@ def test_production_card_send_boundary(output, monkeypatch, tmp_path, blocked):
   payload = bytearray(32)
   payload[16] = 3 << 5
   def apply(*args):
-    frames = [(0x16A, bytes(payload), 0)] if controller.kick_output_ready else []
+    frames = [(0x16A, bytes(payload), 0)] if controller.kick_output_ready and controller.kick_direction else []
     return car.CarControl.Actuators.new_message().as_reader(), frames
   stages = ('apply', 'sendcan', 'total')
   sent = []

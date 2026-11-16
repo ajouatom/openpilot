@@ -73,6 +73,9 @@ jobs:
         run: |
           python tools/signal_validation/run.py \
             openpilot/selfdrive/car/tests/test_hyundai_kick.py \
+            tools/jetlink/test_blinker_boundary.py \
+            tools/jetlink/test_manual_turn_indicator.py \
+            tools/jetlink/test_indicator_reconstruction.py \
             openpilot/selfdrive/car/tests/test_card_diagnostics.py \
             opendbc_repo/opendbc/car/hyundai/tests/test_aprk_blinkers.py \
             opendbc_repo/opendbc/car/hyundai/tests/test_camera_set_speed_sync.py \
