@@ -289,3 +289,53 @@ fn fifty_hz_no_burst_after_delayed_update() {
         assert_eq!(pair[1].1.data[2], pair[0].1.data[2].wrapping_add(1));
     }
 }
+
+#[test]
+fn no_stock_sender_is_absent_and_a_late_one_is_not() {
+    let mut s = Session::new(0);
+    assert!(s.stock_absent(5.), "never seen");
+    let t = stock(&mut s, 5., 3);
+    assert!(!s.stock_absent(t + 0.5));
+    assert!(s.stock_absent(t + 1.0), "quiet for one second");
+    // A garbage frame on a SPAS address does not count as a sender.
+    s.observe(0x165, 0, &[0; 24], t + 2.);
+    assert!(s.stock_absent(t + 2.));
+    // Another bus is not the ECAN sender.
+    let m = frame(0x16a, 0, None, 2);
+    s.observe(m.address, m.bus, &m.data, t + 3.);
+    assert!(s.stock_absent(t + 3.));
+}
+
+#[test]
+fn spas_less_fingerprint_is_eligible_only_as_absent() {
+    let none = |_: u32| None;
+    assert!(absent_with(none) && !compatible_with(none));
+    let both = |a: u32| size(a);
+    assert!(compatible_with(both) && !absent_with(both));
+    let one = |a: u32| (a == 0x165).then_some(24);
+    assert!(
+        !compatible_with(one) && !absent_with(one),
+        "a partial SPAS bus is neither"
+    );
+}
+
+#[test]
+fn solo_trial_frames_match_the_panda_arming_rules() {
+    // Panda arms on an all-zero SPAS1 (counter/CRC aside) and admits only the
+    // SPAS2 direction byte 16 as 0x60 (left) or 0x80 (right).
+    let arm = frame(0x165, 0, LEFT, 0);
+    assert!(arm.data[3..].iter().all(|b| *b == 0));
+    let left = frame(0x16a, 1, LEFT, 0);
+    let right = frame(0x16a, 1, Some(Direction::Right), 0);
+    for (f, byte) in [(left, 0x60), (right, 0x80)] {
+        assert_eq!(f.data[16], byte);
+        assert!(f.data[3..]
+            .iter()
+            .enumerate()
+            .all(|(i, b)| i + 3 == 16 || *b == 0));
+        assert_eq!(
+            u16::from_le_bytes([f.data[0], f.data[1]]),
+            checksum(0x16a, &f.data)
+        );
+    }
+}

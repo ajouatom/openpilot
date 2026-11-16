@@ -71,6 +71,19 @@ static bool hyundai_spas_park_guard(uint32_t now) {
   return ready;
 }
 
+// No stock SPAS sender (HDA1 cars without APRK): neither message for 1 s.
+static bool hyundai_spas_stock_absent(uint32_t now) {
+  bool absent = true;
+  for (int i = 0; i < 2; i++) {
+    absent = absent && ((hyundai_spas_rx_count[i] == 0U) || (get_ts_elapsed(now, hyundai_spas_rx_at[i]) >= 1000000U));
+  }
+  return absent;
+}
+
+static bool hyundai_spas_solo_ready(uint32_t now) {
+  return hyundai_spas_park_guard(now) && hyundai_spas_stock_absent(now);
+}
+
 static bool hyundai_spas_park_ready(uint32_t now) {
   return hyundai_spas_park_guard(now) && hyundai_spas_stock_idle && hyundai_spas_stock_ready(now);
 }
@@ -163,6 +176,10 @@ static void hyundai_spas_rx(const CANPacket_t *pkt, uint32_t now) {
         hyundai_spas_phase = 7U;
       }
     }
+    if ((hyundai_spas_phase == 10U) && (!hyundai_spas_solo_ready(now) ||
+        (get_ts_elapsed(now, hyundai_spas_trial_at) >= 3000000U))) {
+      hyundai_spas_phase = 7U;  // a stock sender appeared, the car moved, or 3 s passed
+    }
     if ((hyundai_spas_phase == 7U) && (get_ts_elapsed(now, hyundai_spas_trial_at) >= 30000000U)) {
       hyundai_spas_phase = 0U;
     }
@@ -220,7 +237,8 @@ static bool hyundai_spas_tx(const CANPacket_t *pkt, uint32_t now) {
   if ((addr == 0x7B1) && ok) {
     ok = (GET_LEN(pkt) == 8) && (GET_BYTES(pkt, 4, 4) == 0U);
     uint32_t cmd = GET_BYTES(pkt, 0, 4);
-    if (((hyundai_spas_phase == 6U) || (hyundai_spas_phase == 7U)) && !(ok && (cmd == 0x00011002U))) {
+    if (((hyundai_spas_phase == 6U) || (hyundai_spas_phase == 7U) || (hyundai_spas_phase == 10U)) &&
+        !(ok && (cmd == 0x00011002U))) {
       return false;
     }
     if (ok && ((cmd == 0x01002803U) || (cmd == 0x00011002U))) {
@@ -276,6 +294,22 @@ static bool hyundai_spas_tx(const CANPacket_t *pkt, uint32_t now) {
   } else if (ok && ((addr == 0x165) || (addr == 0x16A))) {
     int idx = (addr == 0x165) ? 0 : 1;
     bool cooldown = !hyundai_spas_trial_used || (get_ts_elapsed(now, hyundai_spas_trial_at) >= 30000000U);
+    // Parked three-second trial for a car with no stock SPAS sender: nothing to
+    // collide with. Armed by an all-zero SPAS1, as the stock-backed trial.
+    if (((hyundai_spas_phase == 0U) || (hyundai_spas_phase == 7U)) && cooldown &&
+        (idx == 0) && hyundai_spas_solo_ready(now)) {
+      bool arm = (GET_LEN(pkt) == 24) && hyundai_spas_crc(pkt);
+      for (int i = 3; i < GET_LEN(pkt); i++) {
+        arm = arm && (GET_BYTE(pkt, i) == 0U);
+      }
+      if (arm) {
+        hyundai_spas_phase = 10U;
+        hyundai_spas_trial_at = now;
+        hyundai_spas_trial_used = true;
+        hyundai_spas_trial_direction = 0U;
+        hyundai_spas_tx_seen[0] = hyundai_spas_tx_seen[1] = false;
+      }
+    }
     if (((hyundai_spas_phase == 0U) || (hyundai_spas_phase == 7U)) && cooldown &&
         (idx == 0) && hyundai_spas_park_ready(now)) {
       // Do not let a malformed arm packet consume or start the trial.
@@ -293,9 +327,12 @@ static bool hyundai_spas_tx(const CANPacket_t *pkt, uint32_t now) {
       }
     }
     bool patch = hyundai_spas_phase == 8U;
-    bool trial = (hyundai_spas_phase == 6U) || patch;
-    bool park_ready = patch ? (hyundai_spas_park_guard(now) && (get_ts_elapsed(now, hyundai_spas_alive) < 1500000U)) : hyundai_spas_park_ready(now);
-    if (trial && (!park_ready || (get_ts_elapsed(now, hyundai_spas_trial_at) >= 10000000U))) {
+    bool solo = hyundai_spas_phase == 10U;
+    bool trial = (hyundai_spas_phase == 6U) || patch || solo;
+    bool park_ready = solo ? hyundai_spas_solo_ready(now) :
+                      (patch ? (hyundai_spas_park_guard(now) && (get_ts_elapsed(now, hyundai_spas_alive) < 1500000U)) : hyundai_spas_park_ready(now));
+    uint32_t limit = solo ? 3000000U : 10000000U;
+    if (trial && (!park_ready || (get_ts_elapsed(now, hyundai_spas_trial_at) >= limit))) {
       hyundai_spas_phase = 7U;
       return false;
     }

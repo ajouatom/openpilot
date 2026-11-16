@@ -9,5 +9,9 @@
 #include "safety.h"
 #include "drivers/can_common.h"
 
+// Defined by panda's board/drivers/can_common.h; the CAN-FD forwarding
+// buffer flag the Hyundai safety sets. Not in this copy of can_common.h.
+bool safety_tx_buffered_for_fwd = false;
+
 // libsafety stuff
 #include "safety_helpers.h"

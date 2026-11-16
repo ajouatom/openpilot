@@ -51,6 +51,13 @@ pub fn compatible_with(size: impl Fn(u32) -> Option<usize>) -> bool {
         .all(|(address, expected)| size(*address) == Some(*expected))
 }
 
+/// Neither SPAS message exists: a car without APRK (HDA1). Only the parked
+/// no-stock trial (CanfdBlinkerTest 19/20) can run on it; the acknowledged
+/// session needs stock frames and never starts.
+pub fn absent_with(size: impl Fn(u32) -> Option<usize>) -> bool {
+    SPAS.iter().all(|(address, _)| size(*address).is_none())
+}
+
 /// Both SPAS messages exist on `bus` with their exact lengths.
 pub fn compatible(fingerprint: &BTreeMap<u8, BTreeMap<u32, usize>>, bus: u8) -> bool {
     SPAS.iter().all(|(address, size)| {
@@ -236,6 +243,14 @@ impl Session {
                 self.reply = Some((now, data[1..1 + n].to_vec()));
             }
         }
+    }
+
+    /// No stock SPAS sender: neither message valid for 1 s (HDA1 cars
+    /// without APRK). Panda's `hyundai_spas_stock_absent` uses the same bound.
+    pub fn stock_absent(&self, now: f64) -> bool {
+        self.stock
+            .iter()
+            .all(|s| !(0. ..1.).contains(&(now - s.stamp)))
     }
 
     pub fn stock_ready(&self, now: f64) -> bool {

@@ -38,10 +38,12 @@ pub fn setting_int(settings: &Params, key: &str) -> Result<i32, Error> {
                 .count();
             // Not a number (or out of range) reads as 0 like a missing value;
             // see settings_float::read for why this must not fail card.
-            Ok(std::str::from_utf8(raw.get(..sign + digits).unwrap_or_default())
-                .ok()
-                .and_then(|text| text.parse().ok())
-                .unwrap_or(0))
+            Ok(
+                std::str::from_utf8(raw.get(..sign + digits).unwrap_or_default())
+                    .ok()
+                    .and_then(|text| text.parse().ok())
+                    .unwrap_or(0),
+            )
         }
         Some(_) | None => Ok(0),
     }
@@ -72,9 +74,10 @@ pub fn parameters(input: ParamsInput<'_>) -> Result<Builder<HeapAllocator>, Erro
     // messages and are exclusive with the HDA2 blinker path.
     if detection.flags & flags::CANFD != 0
         && input.settings.get_bool("CanfdBlinkerControl")?
-        && super::spas::compatible_with(|address| {
-            super::bus::size(input.fingerprints, detection.bus.ecan, address)
-        })
+        && {
+            let size = |address| super::bus::size(input.fingerprints, detection.bus.ecan, address);
+            super::spas::compatible_with(size) || super::spas::absent_with(size)
+        }
         && detection.flags & flags::ENABLE_BLINKERS == 0
     {
         detection.flags |= flags::CANFD_SPAS_BLINKERS;

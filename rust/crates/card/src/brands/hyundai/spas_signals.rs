@@ -341,15 +341,21 @@ impl SpasSignals {
         }
         if now >= self.settings_at {
             let setting = super::parameters::setting_int(input.settings, "CanfdBlinkerTest")?;
-            if setting != self.test_setting && (1..19).contains(&setting) {
+            if setting != self.test_setting && (1..21).contains(&setting) {
                 // Consume the edge even when the parked guard fails; never run later.
                 let parked = self.parked(healthy, &input)?;
                 let direct = setting >= 5;
+                // 19/20: a car with no stock SPAS sender (HDA1, no APRK).
+                let solo = [19, 20].contains(&setting);
+                let stock_ok = if solo {
+                    self.session.stock_absent(now)
+                } else {
+                    self.session.stock_ready(now) && self.session.stock_direction == Some(0)
+                };
                 let direct_ready = !direct
                     || (now >= self.direct_cooldown
                         && can_health(input.subscribers).is_some()
-                        && self.session.stock_ready(now)
-                        && self.session.stock_direction == Some(0)
+                        && stock_ok
                         && !(cs.get_left_blinker() || cs.get_right_blinker()));
                 if parked
                     && (setting <= 2 || self.hold_supported)
@@ -560,8 +566,11 @@ impl SpasSignals {
             && !self.driver_override
             && same_guard(self)
             && continuous
-            && self.session.stock_ready(now)
-            && self.session.stock_direction == Some(0);
+            && if [19, 20].contains(&self.test_setting) {
+                self.session.stock_absent(now)
+            } else {
+                self.session.stock_ready(now) && self.session.stock_direction == Some(0)
+            };
         if direct && !direct_active {
             // No resumption after guard loss.
             self.test_until = self.test_until.min(now);
