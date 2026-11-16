@@ -30,6 +30,7 @@ class KickOutput:
     self.request_side = 0
     self.accepted_id = None
     self.last_sent = -1.
+    self.first_sent = None
     self.request_started = self.tap_until = 0.
     self.tapping = False
     self.ready = False
@@ -127,6 +128,7 @@ class KickOutput:
       if healthy and self.request_id is None and fresh(candidate.get('time'), now, .4) and not (cs.leftBlinker or cs.rightBlinker):
         self.request_id, self.request_side = ident, side
         self.request_started, self.tap_until = now, now + 1.6
+        self.first_sent = None
         self.tapping = not isinstance(hold, dict)
     return self.request_side if healthy else 0
 
@@ -136,6 +138,8 @@ class KickOutput:
       address == 0x16A and len(data) == 32 and (data[16] >> 5) & 7 == self.request_side
       for address, data, _ in frames)
     if sent:
+      if self.first_sent is None:
+        self.first_sent = now
       if self.tapping and self.accepted_id != self.request_id:
         self.tap_until = now + 1.
       self.accepted_id = self.request_id
@@ -146,7 +150,8 @@ class KickOutput:
       driver = cs.blinkerLever or self.driver_direction not in (None, 0) or now - self.driver_pressed_at < .2
       state = 'driver_override' if driver else 'ready' if self.ready else 'waiting'
       self.worker.send({'stamp': now, 'state': state, 'available': self.ready,
-                        'accepted_id': self.accepted_id if self.ready else None})
+                        'accepted_id': self.accepted_id if self.ready else None,
+                        'first_sent': self.first_sent if self.ready and self.accepted_id else None})
       self.feedback_at = now + .05
 
   def isolate(self, frames, model, now):

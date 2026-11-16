@@ -55,6 +55,9 @@ def test_common_hold_acknowledgement_and_stop(source_output):
   assert feedback[-1]['accepted_id'] is None
   gate.feedback(cs, 10.1, submitted(3))
   assert feedback[-1]['accepted_id'] == 'hold-1'
+  assert feedback[-1]['first_sent'] == 10.1
+  gate.feedback(cs, 10.2, submitted(3))
+  assert feedback[-1]['first_sent'] == 10.1
   for now in (11., 25., 60.):
     hold_record(record, now, started=10.)
     assert gate.request(cs, now, True, True) == 3
@@ -135,6 +138,7 @@ def test_common_detector_settings_match_external_output(mode, selected, legacy_m
                 boundary_indicator_supported=True, indicator_journal_time=0.,
                 params=NS(get_bool=lambda key:bools.get(key, False), get_int=get_int, get_float=lambda key:0.))
     scope['_update_params_periodic'](helper)
+    assert helper.manual_indicator_minimum == (2. if native else 0.)
     for name in ('boundary_indicator_enabled', 'manual_turn_indicator_enabled', 'model_desire_indicator_enabled', 'model_path_indicator_enabled'):
       assert getattr(helper, name) == (selected and mode in (1, 2))
     assert 'CanfdBlinkerKickModelMode' not in reads

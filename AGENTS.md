@@ -1,5 +1,17 @@
 # Repository memory
 
+- 2026-11-16: Owner requests at least two visible flashes for manual CAN-FD
+  indication. Panda/SPAS manual lane/turn normal completion now has a two-second
+  minimum, bound to the first submitted SPAS frame and original model request.
+  Common observation keeps the request alive; transport never revives a cancelled
+  request. Before first submission, normal completion waits at most two seconds
+  from observation start. Driver input, CANCEL/busy, disabling, opposite lamps,
+  stale/invalid inputs, geometry/return/timeout still cancel immediately. USB/B1
+  use the existing zero-minimum path. No new setting or counted flashes. Local
+  1105pass/7platform skips, including delayed first submission and cancellation.
+  Actual physical flash count, ECU acceptance and road behavior unverified.
+  Native/full CI follows this commit. No live vehicle writes.
+
 - 2026-11-16: Owner requests common indicator decisions for USB2CAN/B1 and
   Panda/SPAS Kick, with settings grouped under Vehicle & Hardware / Indicator
   Control. Kick now consumes the existing blink_source policy through a local
