@@ -343,3 +343,31 @@ def test_extended_mappings_and_device_limit():
   devices['00:00:00:00:00:FF'] = devices['00:00:00:00:00:00']
   with pytest.raises(ValueError, match='16'):
     validate_config({'devices': devices})
+
+
+def blocked_feed(decoder, events, now):
+  """Like the daemon while hold_blocked (P, brake, a button): cancel_holds between every frame."""
+  out = []
+  for event in events:
+    out += decoder.feed(*event, now)
+    decoder.cancel_holds()
+  return out
+
+
+def test_short_swipe_still_fires_while_holds_are_cancelled():
+  # Tucson 11-16 (generic touch remote, P): the touch hold starts at touch-down, so cancelling holds every loop
+  # used to drop every swipe and tap before its direction was known
+  decoder = Decoder(mapping={'swipe:x+': 'blinkerLeft'}, gestures={'double': False, 'long': False})
+  assert blocked_feed(decoder, [(3, 0, 100), (3, 1, 500), (1, 330, 1), (0, 0, 0)], 1.0) == []
+  assert blocked_feed(decoder, [(3, 0, 400), (0, 0, 0)], 1.1) == ['swipe:x+']  # direction confirmed: fires at once
+  assert blocked_feed(decoder, [(1, 330, 0), (0, 0, 0)], 1.2) == []  # no second token on release
+
+
+def test_cancelled_holds_allow_short_presses_but_never_long():
+  decoder = Decoder(mapping={'key:115': 'laneLeft', 'key:115@long': 'accelCruise'})
+  blocked_feed(decoder, [(1, 115, 1), (0, 0, 0)], 1.0)
+  assert blocked_feed(decoder, [(1, 115, 0), (0, 0, 0)], 1.2) == ['key:115']  # short: still a press
+  blocked_feed(decoder, [(1, 115, 1), (0, 0, 0)], 2.0)
+  assert decoder.flush(3.0) == [] and not decoder.active_longs  # cancelled: no long while held
+  assert blocked_feed(decoder, [(1, 115, 0), (0, 0, 0)], 3.0) == []  # a long press released while blocked: nothing
+

@@ -149,22 +149,30 @@ class Decoder:
 
   @property
   def active_longs(self):
-    return {hold['token'] + '@long' for hold in self.holds.values() if hold['fired'] and not hold['expired']}
+    return {hold['token'] + '@long' for hold in self.holds.values()
+            if hold['fired'] and not hold['expired'] and not hold.get('cancelled')}
 
   def cancel_holds(self):
+    # Blocks the long gesture only (daemon: not in D, brake, button). Expiring the whole hold also dropped short
+    # touch swipes and taps, whose hold starts at touch-down before the direction is known: in P no swipe ever
+    # decoded (Tucson cb9c2a66 routes 0000040c/0000040d, 11-16: device open, 0 events in 3 minutes).
     for hold in self.holds.values():
-      hold['expired'] = True
+      hold['cancelled'] = True
 
   def hold(self, source, token, started):
     previous = self.holds.get(source)
     if previous and previous['token'] != token:
       if previous['fired'] or previous['expired'] or previous.get('short_fired'):
-        previous['expired'] = True  # Changing direction cannot resume a cancelled or already fired hold.
+        previous['expired'] = True  # Changing direction cannot resume an already fired or expired hold.
         return
       self.holds.pop(source, None)
-      previous = None
+      cancelled, previous = previous.get('cancelled', False), None
+    else:
+      cancelled = False
     if not previous and token:
-      self.holds[source] = {'token': token, 'started': started, 'last': None, 'fired': False, 'expired': False}
+      # a touch that turns from tap to swipe keeps its cancel: it may still fire short, never long
+      self.holds[source] = {'token': token, 'started': started, 'last': None, 'fired': False, 'expired': False,
+                            'cancelled': cancelled}
 
   def key_token(self, key):
     return '1' if self.profile == 'yiser-j6' and key == 115 else f'key:{key}'
@@ -203,7 +211,7 @@ class Decoder:
       if not 0 <= age <= MAX_HOLD_SECONDS:
         hold['expired'] = True
       token = hold['token']
-      if hold['expired'] or duration < LONG_SECONDS or not self.clicks.assigned(token, 'long'):
+      if hold['expired'] or hold.get('cancelled') or duration < LONG_SECONDS or not self.clicks.assigned(token, 'long'):
         continue
       long_token = token + '@long'
       repeat = self.clicks.mapping.get(long_token) in REPEAT_ACTIONS
@@ -250,7 +258,8 @@ class Decoder:
     releases, tokens = [], []
     for key, duration in self.pending_keys:
       hold = self.holds.pop(key, {})
-      if not hold.get('fired') and not hold.get('expired') and not hold.get('short_fired'):
+      if (not hold.get('fired') and not hold.get('expired') and not hold.get('short_fired') and
+          not (hold.get('cancelled') and duration >= LONG_SECONDS)):
         releases.append((self.key_token(key), duration))
     self.pending_keys.clear()
     for key, started in self.down.items():
@@ -277,7 +286,8 @@ class Decoder:
       hold = self.holds.pop('touch', {})
       self.start = self.last = None
       duration = now - self.started
-      if token and not hold.get('fired') and not hold.get('expired') and not hold.get('short_fired') and 0 <= duration <= MAX_HOLD_SECONDS:
+      if (token and not hold.get('fired') and not hold.get('expired') and not hold.get('short_fired') and
+          not (hold.get('cancelled') and duration >= LONG_SECONDS) and 0 <= duration <= MAX_HOLD_SECONDS):
         if duration <= 1.5 or self.clicks.assigned(token, 'long'):
           releases.append((token, duration))
     for token, duration in releases:
