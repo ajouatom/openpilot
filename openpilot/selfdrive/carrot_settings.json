@@ -438,6 +438,7 @@
           "zh": "CANFD·HDA",
           "params": [
             "CanfdHDA2",
+            "CcncLaneTypeDetection",
             "HyundaiCanfdClusterDirectTx",
             "CanfdDebug",
             "HDPuse"
@@ -3335,6 +3336,22 @@
       "cgroup": "启动设置",
       "ctitle": "CANFD HDA2 (0)",
       "cdescr": "0: HDA1, 1: HDA2",
+      "min": 0,
+      "max": 1,
+      "default": 0,
+      "unit": 1
+    },
+    {
+      "group": "시작",
+      "name": "CcncLaneTypeDetection",
+      "title": "HDA1 CCNC 차선 점선·노란선 표시",
+      "descr": "카메라가 차선 종류를 보내지 않는 HDA1 CCNC 차량(투싼·쏘나타 등)용입니다. comma 카메라 영상에서 실선·점선과 흰색·노란색을 인식해 계기판 차선을 흰 점선 8·초록 점선 10·주황 실선 4로 바꿉니다. 카메라 차선 정보가 있는 차(HDA2)는 카메라 값을 그대로 씁니다. 표시만 바뀌고 조향·차로변경 허용에는 영향이 없습니다. 켜면 별도 프로세스(경량 StripNet, 146 KB 모델, 프레임당 약 15 ms)가 시작됩니다. 출처: Qualified4 ccnc-hda1. 계기판이 8/10을 그리는지는 차종마다 다릅니다(쏘나타 확인, 투싼 미확인).",
+      "egroup": "START",
+      "etitle": "HDA1 CCNC dashed / yellow lane display",
+      "edescr": "For HDA1 CCNC cars whose camera sends no lane type (Tucson, Sonata, ...). Recognises solid/dashed and white/yellow lines in the comma road camera and draws the cluster lanes as white dashed 8, green dashed 10 or orange solid 4. Cars with camera lane info (HDA2) keep the camera value. Display only; steering and lane-change permission are unchanged. On starts a separate process (light StripNet, 146 KB model, about 15 ms per frame). From Qualified4 ccnc-hda1. Whether the cluster draws 8/10 depends on the car (Sonata seen, Tucson unknown).",
+      "cgroup": "启动设置",
+      "ctitle": "HDA1 CCNC 虚线·黄线显示",
+      "cdescr": "用于摄像头不发送车道类型的 HDA1 CCNC 车辆(途胜、索纳塔等)。从 comma 摄像头画面识别实线/虚线和白色/黄色，仪表车道显示为白虚线8、绿虚线10或橙实线4。有摄像头车道信息的车(HDA2)沿用摄像头值。仅改变显示，不影响转向和变道许可。开启后启动独立进程(轻量 StripNet，146 KB 模型，每帧约15 ms)。来源: Qualified4 ccnc-hda1。",
       "min": 0,
       "max": 1,
       "default": 0,

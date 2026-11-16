@@ -94,6 +94,14 @@ def enable_xiaoge_data(started, params, CP: car.CarParams) -> bool:
   # Manager additionally waits for this onroad session's healthy startup.
   return started and params.get_bool("ShareData")
 
+def enable_ccnc_lane_type(started, params, CP: car.CarParams) -> bool:
+  # CcncLaneTypeDetection 1 (2 = Qualified4's former StripNet value, same): display-only lane type recogniser for CCNC
+  # cameras that send no lane type (HDA1: Tucson, Sonata). Off: the process is not started at all.
+  try:
+    return started and params.get_int("CcncLaneTypeDetection") in (1, 2)
+  except (TypeError, ValueError):
+    return False
+
 def cluster_hud_active(params: Params) -> bool:
   try:
     return params.get_int("ClusterHud") == 1
@@ -194,6 +202,7 @@ procs = [
   # Starts after onroad readiness, when manager already has live IPC mappings.
   # Launch a fresh interpreter instead of forking that running manager state.
   PythonProcess("xiaoge_data", "openpilot.selfdrive.carrot.xiaoge_data", enable_xiaoge_data, spawn=True),
+  PythonProcess("ccnc_lane_type", "openpilot.selfdrive.carrot.lane_type.marking_daemon", enable_ccnc_lane_type, spawn=True),
 
   # C3x lite has no speaker; mirror alerts to the GPIO buzzer instead.
   PythonProcess("beep", "openpilot.selfdrive.controls.beep", c3x_lite, enabled=TICI),
