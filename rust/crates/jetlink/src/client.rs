@@ -908,7 +908,10 @@ impl<T: Transport> Client<T> {
         payload.extend(frame.to_le_bytes());
         let want_state = self.app.is_some() && crate::now_ns() >= self.telemetry_at;
         if want_state {
-            self.telemetry_at = crate::now_ns().saturating_add(1_000_000_000);
+            // Trial (2026-11-16): carrot asks every 1 s; the owner's drive shows
+            // a slow round trip about once a second. 5 s tests whether the
+            // per-second state reply is that cost.
+            self.telemetry_at = crate::now_ns().saturating_add(5_000_000_000);
         }
         let map = if self.session_contract().spec.navigation() {
             if reset {
