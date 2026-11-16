@@ -97,12 +97,20 @@ pub fn latest_gps(sample: &Sample) -> Option<&GpsFix> {
 
 /// `navigation_position`: carrot's phone/navigation fusion bounded by the
 /// original fix's freshness, else the freshest GPS.
+///
+/// Deviation (trial): carrot-nav drops a carrot position without a heading.
+/// The stock-navigation (vehicle CAN) position has none while the car stands
+/// still, so after a cold start in a car park neither navd nor mapsd had a
+/// position until the car moved or the comma's GPS got a fix. A heading-less
+/// position is now taken while fresh carState says the car stands still; its
+/// bearing is NaN, so navd asks Mapbox without a start bearing.
 pub fn navigation_position(sample: &Sample) -> Option<NavigationPosition> {
     let now = sample.now;
     if let Some(carrot) = &sample.carrot {
+        let headed = carrot.position_source_empty || carrot.heading_valid;
         if carrot.valid
             && fresh(now, carrot.received, 0.5)
-            && (carrot.position_source_empty || carrot.heading_valid)
+            && (headed || standing_still(sample))
             && carrot.fix_mono_ns > 0
             && fresh(now, carrot.fix_mono_ns as f64 / 1e9, 2.)
             && fresh(now, carrot.position_mono_ns as f64 / 1e9, 0.5)
@@ -119,7 +127,7 @@ pub fn navigation_position(sample: &Sample) -> Option<NavigationPosition> {
             return Some(NavigationPosition {
                 latitude: carrot.latitude,
                 longitude: carrot.longitude,
-                bearing: carrot.angle,
+                bearing: if headed { carrot.angle } else { f64::NAN },
                 speed: (carrot.speed / 3.6).max(0.),
                 time: carrot.position_mono_ns as f64 / 1e9,
                 fix_time: carrot.fix_mono_ns as f64 / 1e9,
@@ -134,6 +142,18 @@ pub fn navigation_position(sample: &Sample) -> Option<NavigationPosition> {
         speed: gps.speed.max(0.),
         time: gps.received,
         fix_time: gps.received,
+    })
+}
+
+/// Fresh, valid carState with the car standing still.
+fn standing_still(sample: &Sample) -> bool {
+    sample.car.as_ref().is_some_and(|car| {
+        car.valid
+            && car.alive
+            && fresh(sample.now, car.received, 0.5)
+            && car.standstill
+            && car.v_ego.is_finite()
+            && car.v_ego.abs() < 0.1
     })
 }
 
@@ -271,6 +291,41 @@ mod tests {
             37.,
             "falls back to GPS"
         );
+    }
+
+    #[test]
+    fn headingless_carrot_position_is_taken_only_while_standing_still() {
+        let carrot = CarrotFix {
+            valid: true,
+            received: 9.9,
+            position_source_empty: false,
+            heading_valid: false,
+            fix_mono_ns: 9_000_000_000,
+            position_mono_ns: 9_800_000_000,
+            latitude: 35.,
+            longitude: 128.,
+            angle: 270.,
+            speed: 0.,
+        };
+        // Cold start in a car park: no GPS fix, the vehicle position has no heading.
+        let mut sample = Sample {
+            now: 10.,
+            carrot: Some(carrot),
+            car: Some(parked(10.)),
+            ..Sample::default()
+        };
+        let position = navigation_position(&sample).unwrap();
+        assert_eq!(position.latitude, 35.);
+        assert!(position.bearing.is_nan(), "no stale start bearing");
+        // Moving (or no fresh carState): the original rule, no position.
+        sample.car = Some(CarPark {
+            standstill: false,
+            v_ego: 3.,
+            ..parked(10.)
+        });
+        assert!(navigation_position(&sample).is_none());
+        sample.car = Some(parked(9.));
+        assert!(navigation_position(&sample).is_none());
     }
 
     #[test]
