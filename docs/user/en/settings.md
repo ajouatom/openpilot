@@ -238,7 +238,6 @@ While external navigation is connected, deceleration, countdowns, and navigation
 | [Driving mode](cruise-gap.md#driving-mode) | `MyDrivingMode`, `MyDrivingModeAuto` | Eco, safe, normal, high-speed modes and automatic selection |
 | [Speed-based acceleration](cruise-gap.md#acceleration-table) | `CruiseMaxVals0` through `CruiseMaxVals6` | Maximum acceleration tendency by speed band |
 | [Stopping and restarting](cruise-gap.md#stop-resume) | `StopDistanceCarrot`, `StoppingAccel`, `VEgoStopping`, `AChangeCostStarting` | Stop position, stop entry, and restart behavior |
-| [Stop & go assist](#stop-go-assist) | `StopGoLongAssist` | Low-speed stop & go corrections behind a lead (default off) |
 | [Longitudinal tuning](cruise-gap.md#longitudinal-tuning) | `LongTuningKpV`, `LongTuningKiV`, `LongTuningKf`, `LongActuatorDelay` | Ray EV Comma Pedal applies saved gains; other Hyundai/Kia/Genesis fix/hide `100/0/100`; Toyota/Lexus fix/hide `0/0/100`; VW MEB, including ID.4, applies saved gains |
 | [Following gap](cruise-gap.md#following-gap) | `TFollowGap1` through `TFollowGap4`, `DynamicTFollowLC`, `SpeedTFFactor`, `TFollowDecelBoost` | Gap times, lane-change relief using selected leads, and deceleration margin (default 0%) |
 | [Following responsiveness](cruise-gap.md#lead-response) | `LeadAccelResponse`, `LeadAccelResponseTF1`–`LeadAccelResponseTF4` | Lead-start, acceleration and approach response at every following-distance level |
@@ -266,23 +265,6 @@ Deceleration preview operates independently of the response level. During active
 `VEgoStopping` has a range of `10–100` and a default of `50`; `10` means `0.10 m/s`. Previously stored values below `10` are automatically raised to `10`, and control enforces the same minimum during driving.
 
 For Hyundai/Kia CANFD openpilot longitudinal control, aReqRaw and aReqValue become zero in the first StopReq frame, so this setting does not change transmitted acceleration while StopReq remains active. Automatic release/retry is removed.
-
-<a id="stop-go-assist"></a>
-`StopGoLongAssist` defaults to `0` (off, previous behavior). It corrects low-speed stop & go behind a lead. The slowing, stop, departure and soft stop corrections work only in the MPC `acc` mode (not blended); the roll brake and the CAN-FD departure jerk apply in either mode:
-
-- `1` adds three corrections.
-  - Earlier braking: inside the follow distance, closing on the lead by over 0.3 m/s, with the lead accelerating at no more than 0.3 m/s². It adds up to +0.3 s of gap and up to 4× the distance-keeping weight. It is full up to 45 km/h and fades to none at 65 km/h. A radar lead under a 0.9 s time gap, closing by over 1 m/s, gets it in full at any speed. A lead braking harder than −0.5 m/s² also gets a faster response, with the same fade. No extra gap is added during a lane change.
-  - Stop guard: at 0.1–3 m/s, while the plan already brakes behind a stopped lead (under 0.3 m/s). It brakes at least as hard as a constant-deceleration stop at the stop distance, at most −1.5 m/s².
-  - Roll brake (Hyundai/Kia CAN-FD openpilot longitudinal): the car moves after a stop the SCC never confirmed as held. StopReq stays on and aReq goes to −0.5 m/s² until the SCC reports the hold. This is the only exception to the zero aReq during StopReq described above ([CANFD stopping control](cruise-gap.md#canfd-stopping)).
-- `2` adds a departure. Within 3 s of standstill below 3 m/s, a stable radar lead must be over 0.3 m/s faster, accelerating over 0.1 m/s² and farther than 2.5 m. The car then starts at once, even inside the stop distance, with at least 1.2 m/s² (within the acceleration limit). It does not start during a signal stop (`e2eStop`/`e2eStopped`), on red, or with a Carrot target speed of 0. On Hyundai/Kia CAN-FD openpilot longitudinal control, acceleration within 3 s of standstill below 3 m/s also gets a jerk upper limit of at least 3.0.
-- `3` adds a soft stop. At 0.1–2 m/s behind a stopped lead, the deceleration limit goes linearly from −1.5 m/s² at 2 m/s to −0.5 m/s² at 0.5 m/s. It never eases below what still stops 2.5 m from the lead, so the car may stop closer than the stop distance.
-
-The stop guard, departure and soft stop pause while the gas or brake is pressed, during soft hold and during a lane change.
-
-On supported Tesla vehicles, [automatic cruise set-speed adjustment](tesla.md#automatic-cruise-speed) requires the additional vehicle bus, **alpha longitudinal** (`AlphaLongitudinalEnabled`) and Carrot Web's `TeslaAutoSpeedLimit`. The new switch defaults to OFF and requires a full restart after changes. Navigation/Carrot speed control still takes precedence and pauses DAS-based adjustment until it ends and the limit is stable again; any manual pause remains in effect. Turning the right speed wheel pauses it; an opposite-direction wheel gesture within one second or disengaging and re-engaging resumes it. OFF stops automatic wheel output without disabling manual scrolling.
-
-<a id="vehicle-hardware"></a>
-Departure boost and soft stopping apply when the first lead constrains the MPC and no second lead is present. Forced deceleration retains existing braking. Departure boost respects the current target speed and acceleration limit.
 
 ## Vehicle and hardware
 

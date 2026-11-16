@@ -242,7 +242,6 @@ VW MEB(ID.4 포함)에도 수동 조향비와 학습 비율이 적용됩니다. 
 | [가속 성향·드라이브 모드](cruise-gap.md#driving-mode) | `MyDrivingMode`, `MyDrivingModeAuto` | 연비, 안전, 일반, 고속 모드와 자동 전환 |
 | [가속 성향·속도별 가속값](cruise-gap.md#acceleration-table) | `CruiseMaxVals0`, `CruiseMaxVals1`, `CruiseMaxVals2`, `CruiseMaxVals3`, `CruiseMaxVals4`, `CruiseMaxVals5`, `CruiseMaxVals6` | 속도 구간별 최대 가속 성향 |
 | [정차·재출발](cruise-gap.md#stop-resume) | `StopDistanceCarrot`, `StoppingAccel`, `VEgoStopping`, `AChangeCostStarting` | 정지 위치, 정지 진입과 재출발 특성 |
-| [정차·출발 롱컨 보정](#stop-go-assist) | `StopGoLongAssist` | 앞차 뒤 저속 정차·출발 보정(기본 꺼짐) |
 | [가감속 튜닝](cruise-gap.md#longitudinal-tuning) | `LongTuningKpV`, `LongTuningKiV`, `LongTuningKf`, `LongActuatorDelay` | 레이 EV 콤마페달은 저장 게인 적용; 그 외 현기차 `100/0/100`, 토요타·렉서스 `0/0/100` 고정·숨김; VW MEB(ID.4 포함)는 저장 게인 적용 |
 | [차간거리](cruise-gap.md#following-gap) | `TFollowGap1`, `TFollowGap2`, `TFollowGap3`, `TFollowGap4`, `DynamicTFollowLC`, `SpeedTFFactor`, `TFollowDecelBoost` | 차간 단계별 시간, 정상 선택 앞차 기준 차로 변경 완화와 감속 여유(기본 0%) |
 | [추종응답성](cruise-gap.md#lead-response) | `LeadAccelResponse`, `LeadAccelResponseTF1`–`LeadAccelResponseTF4` | 모든 차간 단계의 앞차 출발·가속 추종과 접근 반응 |
@@ -271,25 +270,6 @@ VW MEB(ID.4 포함)에도 수동 조향비와 학습 비율이 적용됩니다. 
 
 현대·기아 CANFD 오픈파일럿 종방향 제어에서는 StopReq를 켜는 첫 프레임부터 aReqRaw·aReqValue를 0으로 보내므로, 이 설정은 StopReq 유지 중 송신 가속도를 바꾸지 않습니다. 자동 해제·재시도는 제거되었습니다.
 
-<a id="stop-go-assist"></a>
-`StopGoLongAssist`는 기본 `0`(꺼짐, 기존 동작)입니다. 앞차 뒤 저속 정차·출발을 보정합니다.
-
-정지·출발·부드러운 정지 보정은 MPC `acc` 모드에서만 동작하고(blended 미동작), 굴림 제동과 CAN-FD 출발 jerk는 모드와 무관하게 동작합니다.
-
-- `1`은 보정 세 가지를 켭니다.
-  - 감속 보정: 목표 차간보다 가깝고, 앞차보다 0.3m/s 넘게 빠르게 다가가며, 앞차 가속이 0.3m/s² 이하일 때입니다. 차간을 최대 +0.3초 늘리고 거리 유지 비중을 최대 4배로 올립니다. 45km/h 이하는 전부, 65km/h까지 선형 감소, 그 위는 미동작입니다. 레이더 앞차와 시간 차간 0.9초 미만에서 1m/s 넘게 다가가면 속도와 무관하게 전부 적용합니다. 앞차가 −0.5m/s²보다 세게 감속하면 반응도 빠르게 합니다(같은 감소). 차로변경 중에는 차간을 늘리지 않습니다.
-  - 정지 보정: 0.1~3m/s에서 이미 감속 계획 중이고 앞차가 서 있을 때(0.3m/s 미만)입니다. 정지거리에 서는 등감속 이상으로 제동합니다(최대 −1.5m/s²).
-  - 굴림 제동(현대·기아 CAN-FD 오픈파일럿 롱컨): 정지 후 SCC가 hold를 한 번도 확인하지 않은 채 차가 움직일 때입니다. StopReq를 유지한 채 SCC가 hold를 확인할 때까지 aReq −0.5m/s²로 제동합니다. 위 StopReq 중 aReq 0 송신의 유일한 예외입니다([CANFD 정지 제어](cruise-gap.md#canfd-stopping)).
-- `2`는 출발 보정을 더합니다. 정지 후 3초 안, 3m/s 미만에서 안정된 레이더 앞차가 0.3m/s 넘게 빠르고, 0.1m/s² 넘게 가속 중이며, 2.5m보다 멀어야 합니다. 그러면 정지거리보다 가까워도 바로 출발하고 가속을 최소 1.2m/s²(가속 상한 이내)로 올립니다. 신호 정지(`e2eStop`·`e2eStopped`)·적색 신호 중이거나 Carrot 목표 속도가 0이면 하지 않습니다. 현대·기아 CAN-FD 오픈파일럿 롱컨은 정지 후 3초 안, 3m/s 미만에서 가속할 때 jerk 상한을 최소 3.0으로 올립니다.
-- `3`은 부드러운 정지를 더합니다. 0.1~2m/s에서 앞차가 서 있으면 감속 한도를 2m/s의 −1.5m/s²에서 0.5m/s의 −0.5m/s²까지 선형으로 줄입니다. 앞차와 2.5m 안쪽으로 들어가지 않는 만큼만 줄이므로 정지거리보다 가까이 설 수 있습니다.
-
-출발 가속과 부드러운 정지는 MPC가 첫 번째 앞차를 기준으로 제한하고 두 번째 앞차가 없을 때 적용됩니다. 강제 감속 중에는 기존 제동을 유지하며, 출발 가속은 현재 목표 속도와 가속 상한을 따릅니다.
-
-정지·출발·부드러운 정지 보정은 가속·브레이크 페달, 소프트 홀드, 차로변경 중에는 쉽니다.
-
-지원되는 Tesla 차량에서 추가 차량 버스와 **alpha longitudinal**(`AlphaLongitudinalEnabled`)뿐 아니라 Carrot Web의 `TeslaAutoSpeedLimit`도 켜야 [크루즈 설정속도 자동 조절](tesla.md#automatic-cruise-speed)이 활성화됩니다. 기본 꺼짐이며 변경 후 전체 재시작이 필요합니다. 내비게이션·Carrot 속도 제어가 활성 상태이면 DAS 기반 조절을 중지하고, 해당 제어가 끝난 뒤 제한속도가 다시 안정되면 재개합니다. 수동 조작에 따른 중지는 그대로 유지됩니다. 오른쪽 속도 휠을 직접 돌리면 일시 중지하며, 1초 안에 반대 방향으로 돌리거나 제어를 해제했다가 다시 켜면 재개합니다. 끄면 자동 휠 송신만 중지하며 수동 휠은 유지됩니다.
-
-<a id="vehicle-hardware"></a>
 ## 차량·하드웨어
 
 차량·하드웨어에는 일반 메뉴 23개와 검색 전용 운전자 감시 예외 설정 1개가 있습니다. 차종, 하네스와 기기 하드웨어 구성을 결정하므로 화면 표시 설정처럼 시험 삼아 켜면 안 됩니다.

@@ -370,8 +370,7 @@
                 "StopDistanceCarrot",
                 "StoppingAccel",
                 "VEgoStopping",
-                "AChangeCostStarting",
-                "StopGoLongAssist"
+                "AChangeCostStarting"
               ]
             },
             {
@@ -1350,22 +1349,6 @@
       "max": 200,
       "default": 10,
       "unit": 10
-    },
-    {
-      "group": "주행튜닝",
-      "name": "StopGoLongAssist",
-      "title": "정차·출발 롱컨 보정",
-      "descr": "0:끔(기존 동작), 1:감속+정지 보정+굴림 제동, 2:1+출발 보정, 3:2+부드러운 정지\n감속·정지·출발·부드러운 정지 보정은 MPC acc 모드에서만 동작합니다(blended 미동작). 굴림 제동과 CAN-FD 출발 jerk는 모드와 무관하게 동작합니다.\n감속 보정(1 이상): 목표 차간보다 가깝고 앞차보다 0.3m/s 넘게 빠르게 다가가며 앞차 가속이 0.3m/s² 이하이면, 차간을 최대 +0.3초 늘리고 거리 유지 비중을 최대 4배로 올려 일찍 감속합니다. 45km/h 이하 전부, 65km/h까지 선형 감소, 그 위 미동작입니다. 단, 레이더 앞차와 시간 차간 0.9초 미만에서 1m/s 넘게 다가가면 속도와 무관하게 전부 적용합니다. 앞차가 -0.5m/s²보다 세게 감속하면 반응도 빠르게 합니다(같은 45~65km/h 감소). 차로변경 중에는 늘리지 않습니다.\n정지 보정(1 이상): 0.1~3m/s에서 이미 감속 계획 중이고 앞차가 서 있으면(0.3m/s 미만), 정지거리에 서는 등감속 이상으로 제동합니다(최대 -1.5).\n굴림 제동(1 이상, 현대·기아 CAN-FD 롱컨): 정지 후 SCC가 hold를 한 번도 확인하지 않은 채 차가 움직이면, StopReq를 유지한 채 hold 확인 때까지 -0.5로 제동합니다.\n출발 보정(2 이상): 정지 후 3초 안, 3m/s 미만에서 안정된 레이더 앞차가 0.3m/s 넘게 빠르고 0.1m/s² 넘게 가속 중이며 2.5m보다 멀면, 정지거리보다 가까워도 바로 출발하고 가속을 최소 1.2(가속 상한 이내)로 올립니다. 신호 정지(e2eStop·e2eStopped)·적색 신호 중이거나 Carrot 목표 속도가 0이면 하지 않습니다. 현대·기아 CAN-FD 롱컨은 정지 후 3초 안, 3m/s 미만에서 가속할 때 jerk 상한을 최소 3.0으로 올립니다.\n부드러운 정지(3): 0.1~2m/s에서 앞차가 서 있으면 감속 한도를 2m/s의 -1.5에서 0.5m/s의 -0.5까지 선형으로 줄입니다. 정지거리보다 가까이 설 수 있지만 앞차와 2.5m 안쪽으로 들어가지 않는 만큼만 줄입니다.\n정지·출발·부드러운 정지 보정은 가속·브레이크 페달, 소프트 홀드, 차로변경 중에는 쉽니다.\n출발 가속과 부드러운 정지는 MPC가 첫 번째 앞차를 기준으로 제한하고 두 번째 앞차가 없을 때 적용됩니다. 강제 감속 중에는 기존 제동을 유지하며, 출발 가속은 현재 목표 속도와 가속 상한을 따릅니다.",
-      "egroup": "LONG",
-      "etitle": "Stop & go longitudinal assist",
-      "edescr": "0:Off (previous behaviour), 1:Slowing+Stop+Roll brake, 2:1+Departure, 3:2+Soft stop\nThe slowing, stop, departure and soft stop corrections work only in the MPC acc mode (not blended); the roll brake and the CAN-FD departure jerk apply in either mode.\nSlowing (1 and up): inside the follow distance, closing on the lead by over 0.3 m/s and the lead accelerating at no more than 0.3 m/s², adds up to +0.3 s of gap and up to 4x the distance-keeping weight so braking starts earlier. Full up to 45 km/h, fading to none at 65 km/h; with a radar lead under a 0.9 s time gap and closing by over 1 m/s it applies in full at any speed. A lead braking harder than -0.5 m/s² also gets a faster response (same 45-65 km/h fade). No extra gap during a lane change.\nStop (1 and up): at 0.1-3 m/s while the plan already brakes behind a stopped lead (under 0.3 m/s), brakes at least as hard as a constant-decel stop at the stop distance (max -1.5).\nRoll brake (1 and up, Hyundai/Kia CAN-FD openpilot long): if the car moves after a stop the SCC never confirmed as held, keeps StopReq and brakes at -0.5 until the SCC reports the hold.\nDeparture (2 and up): within 3 s of standstill below 3 m/s, a stable radar lead over 0.3 m/s faster, accelerating over 0.1 m/s² and farther than 2.5 m starts the car at once even inside the stop distance, with accel raised to at least 1.2 (within the accel limit). Not during a signal stop (e2eStop/e2eStopped), on red, or with a Carrot target speed of 0. On Hyundai/Kia CAN-FD openpilot long, accelerating within 3 s of standstill below 3 m/s raises the jerk upper limit to at least 3.0.\nSoft stop (3): at 0.1-2 m/s behind a stopped lead, eases the decel limit linearly from -1.5 at 2 m/s to -0.5 at 0.5 m/s. It may stop closer than the stop distance, but eases only as far as it still stops 2.5 m from the lead.\nStop, departure and soft stop pause while the gas or brake is pressed, during soft hold and during a lane change.\nDeparture boost and soft stopping apply when the first lead constrains the MPC and no second lead is present. Forced deceleration retains existing braking. Departure boost respects the current target speed and acceleration limit.",
-      "cgroup": "纵向控制",
-      "ctitle": "停车·起步纵向辅助",
-      "cdescr": "0:关闭(原有行为), 1:减速+停车+溜车制动, 2:1+起步, 3:2+平顺停车\n减速、停车、起步、平顺停车修正仅在 MPC acc 模式下工作(blended 不工作); 溜车制动和 CAN-FD 起步 jerk 与模式无关。\n减速(1 及以上): 比目标车距更近、以超过0.3m/s接近前车且前车加速不超过0.3m/s²时, 车距最多增加0.3秒、保持距离权重最多提高到4倍以提前减速。45km/h以下全额, 到65km/h线性减弱, 以上不工作; 但雷达前车时距不足0.9秒且以超过1m/s接近时, 与车速无关全额生效。前车减速强于-0.5m/s²时也加快反应(同样45~65km/h减弱)。变道中不增加车距。\n停车(1 及以上): 0.1~3m/s、已在减速且前车停止(低于0.3m/s)时, 至少按在停车距离处匀减速停下的力度制动(最大-1.5)。\n溜车制动(1 及以上, 现代·起亚 CAN-FD 纵向控制): 停车后 SCC 从未确认保持(hold)而车辆移动时, 保持 StopReq 并以 -0.5 制动, 直到 SCC 确认保持。\n起步(2 及以上): 停车后3秒内且低于3m/s, 稳定的雷达前车快超过0.3m/s、加速超过0.1m/s²且距离超过2.5m时, 即使比停车距离近也立即起步, 加速提高到至少1.2(不超过加速上限)。信号停车(e2eStop·e2eStopped)、红灯期间或 Carrot 目标速度为0时不执行。现代·起亚 CAN-FD 纵向控制在停车后3秒内、低于3m/s加速时, 把 jerk 上限提高到至少3.0。\n平顺停车(3): 0.1~2m/s且前车停止时, 把减速上限从2m/s时的-1.5线性减小到0.5m/s时的-0.5。可能比停车距离停得更近, 但只减到仍能停在距前车2.5m处为止。\n踩油门或刹车、软保持(soft hold)及变道期间, 停车·起步·平顺停车修正暂停。\n起步加速和柔和停车仅在MPC受第一前车约束且没有第二前车时应用。强制减速时保持原制动, 起步加速遵守当前目标速度和加速度上限。",
-      "min": 0,
-      "max": 3,
-      "default": 0,
-      "unit": 1
     },
     {
       "group": "주행튜닝",

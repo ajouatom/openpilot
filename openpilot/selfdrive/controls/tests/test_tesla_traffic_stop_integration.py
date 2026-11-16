@@ -19,7 +19,7 @@ def carrot_for(mode="acc", stop_distance=6.):
   return NS(mode=mode, comfort_brake=2.5, stop_distance=stop_distance, v_cruise=20., stop_dist=1000.,
             trafficStopDistanceAdjust=100., trafficStopModelLeadOffset=2.,
             get_T_FOLLOW=lambda *args: 1.45, jerk_factor=1., leadAccelResponse=0,
-            autoNaviSpeedDecelRate=1., lane_change_active=False, myDrivingMode=3, stopGoAssist=0)
+            autoNaviSpeedDecelRate=1., lane_change_active=False, myDrivingMode=3)
 
 
 def solve(native, *, mode="acc", distance=None, stop_distance=6., lead=False, reset=False):
@@ -127,32 +127,44 @@ def planner_factory(native, monkeypatch):
   return create
 
 
-@pytest.mark.parametrize('blocked', [None, 'force_decel', 'second_lead'])
-def test_complete_planner_stop_go_preserves_other_obstacles(planner_factory, blocked):
+@pytest.mark.parametrize('retired_level', [1, 2, 3])
+@pytest.mark.parametrize('scenario', ['departure', 'stopping', 'following', 'force_decel', 'second_lead'])
+def test_retired_stop_go_levels_preserve_the_original_complete_plan(planner_factory, retired_level, scenario):
   cases = []
-  for mode in (1, 2):
-    planner, sm, carrot, update = planner_factory('hyundai', False, speed=.5)
+  speed = {'departure': 0., 'stopping': 1., 'following': 10.}.get(scenario, .5)
+  for mode in (0, retired_level):
+    planner, sm, carrot, update = planner_factory('hyundai', False, speed=speed)
+    # Old saved values or callers carrying the retired field have no effect.
     carrot.stopGoAssist = mode
     carrot.xState, carrot.trafficState = NS(name='lead'), NS(name='off')
-    planner.since_standstill = 0.
+    sm['carState'].standstill = speed == 0.
     radar = log.RadarState.new_message()
-    radar.leadOne = {'status':True, 'radar':True, 'radarTrackId':1, 'dRel':3.3,
-                     'vLead':1., 'vLeadK':1., 'aLeadK':.4, 'aLeadTau':1.5}
-    if blocked == 'second_lead':
+    lead_speed = {'stopping': 0., 'following': 8.}.get(scenario, 1.)
+    radar.leadOne = {'status':True, 'radar':True, 'radarTrackId':1,
+                     'dRel':10. if scenario == 'following' else 3.3,
+                     'vLead':lead_speed, 'vLeadK':lead_speed,
+                     'aLeadK':.4 if scenario == 'departure' else 0., 'aLeadTau':1.5}
+    if scenario == 'second_lead':
       radar.leadTwo = {'status':True, 'radar':True, 'radarTrackId':2, 'dRel':2.8,
                        'vLead':0., 'vLeadK':0., 'aLeadTau':1.5}
     sm['radarState'] = radar.as_reader()
-    sm['controlsState'].forceDecel = blocked == 'force_decel'
+    sm['controlsState'].forceDecel = scenario == 'force_decel'
     outputs = []
-    for i in range(8):
+    for i in range(20):
       update(i * .05)
       assert planner.mpc.solution_status == 0
-      outputs.append((planner.output_a_target, planner.output_should_stop))
+      outputs.append({
+        'targets': (planner.output_a_target, planner.output_v_target_now,
+                    planner.output_j_target_now, planner.output_should_stop),
+        'trajectory': np.column_stack((planner.v_desired_trajectory, planner.a_desired_trajectory,
+                                       planner.j_desired_trajectory)),
+        'constraints': planner.mpc.params.copy(),
+        'following': (planner.mpc.t_follow, planner.mpc.a_change_cost),
+      })
     cases.append(outputs)
-  if blocked:
-    np.testing.assert_allclose(cases[0], cases[1], atol=1e-6)
-  else:
-    assert any(accel == pytest.approx(1.2) and not stop for accel, stop in cases[1])
+  for original, retired in zip(*cases, strict=True):
+    for field in original:
+      np.testing.assert_array_equal(retired[field], original[field])
 
 
 @pytest.mark.parametrize("brand", ["hyundai", "toyota", "volkswagen", "tesla"])

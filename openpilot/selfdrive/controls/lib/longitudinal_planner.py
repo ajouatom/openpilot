@@ -18,13 +18,11 @@ from openpilot.selfdrive.controls.lib.cutin_predecel import (
   get_cutin_predecel_accel_limit,
 )
 from openpilot.selfdrive.controls.lib.longitudinal_preview import (
-  LEAD_ACCEL_MIN_TRACK_FRAMES,
   apply_preview_target,
   clip_preview_offset,
   get_lead_preview_request,
   rate_limit_preview,
 )
-from openpilot.selfdrive.controls.lib.stop_go_assist import DEPART_ACCEL, departure_go, soft_stop, stop_guard
 from openpilot.selfdrive.controls.lib.turn_accel import get_future_curvature, limit_accel_in_turns
 from openpilot.selfdrive.car.cruise import V_CRUISE_MAX, V_CRUISE_UNSET
 from openpilot.common.swaglog import cloudlog
@@ -79,7 +77,6 @@ class LongitudinalPlanner:
     self.lead_preview_accel = 0.0
     self.lead_track_ids = [-1, -1]
     self.lead_track_frames = [0, 0]
-    self.since_standstill = 1e3
 
     self.v_desired_trajectory = np.zeros(CONTROL_N)
     self.a_desired_trajectory = np.zeros(CONTROL_N)
@@ -421,46 +418,10 @@ class LongitudinalPlanner:
 
     self.update_coasting(sm, carrot, v_cruise_kph, v_cruise, reset_state,
                          force_slow_decel, coasting_turn_blocked, cutin_predecel_limit)
-    self.apply_stop_go_assist(sm, carrot, reset_state, accel_limits_turns[1], lead_track_frames, v_cruise, force_slow_decel)
     self.apply_signal_stop_prepare(sm, carrot, reset_state)
     self.apply_signal_start_guard(carrot, v_ego)
     if getattr(self, 'tesla_traffic_decision', None) is not None:
       self.apply_tesla_traffic_stop()
-
-  def apply_stop_go_assist(self, sm, carrot, reset_state, accel_max, lead_track_frames, v_cruise, force_slow_decel=False):
-    cs = sm['carState']
-    self.since_standstill = 0.0 if cs.standstill else self.since_standstill + self.dt
-    mode = carrot.stopGoAssist
-    if (mode <= 0 or reset_state or self.mpc.mode != 'acc' or cs.gasPressed or cs.brakePressed
-        or carrot.soft_hold_active or carrot.lane_change_active):
-      return
-    lead = sm['radarState'].leadOne
-    # Relax only a plan constrained by this lead. Other obstacles and forced
-    # deceleration must retain their braking and stopping decisions.
-    allow_relax = not force_slow_decel and self.mpc.source == 'lead0' and not sm['radarState'].leadTwo.status
-    a_target = self.output_a_target
-    if mode >= 1:
-      a_target = stop_guard(a_target, cs.vEgo, lead, carrot.stop_distance)
-    if mode >= 3 and allow_relax:
-      a_target = soft_stop(a_target, cs.vEgo, lead)
-    # No go toward a red light / signal stop. A lead pulling away overrides the MPC's own shouldStop (it holds us while
-    # the gap is under the stop distance, 10-28 drive). Only together with the stop guard: replays with the lead braking
-    # hard after a boosted start stay at the baseline minimum gap only when the guard is on.
-    if (mode >= 2 and allow_relax and v_cruise > cs.vEgo and accel_max > 0
-        and carrot.xState.name not in ('e2eStop', 'e2eStopped') and carrot.trafficState.name != 'red'
-        and departure_go(cs.vEgo, lead, self.since_standstill, lead_track_frames[0] >= LEAD_ACCEL_MIN_TRACK_FRAMES)):
-      self.output_should_stop = False
-      a_target = max(a_target, min(DEPART_ACCEL, accel_max, (v_cruise - cs.vEgo) / self.dt))
-    if a_target != self.output_a_target:
-      # Keep the PID speed term and the next MPC start from undoing the correction (as in signal stop prepare).
-      v_next = max(0., cs.vEgo + a_target * self.dt)
-      if a_target < self.output_a_target:
-        self.output_v_target_now = min(self.output_v_target_now, v_next)
-        self.a_desired = min(self.a_desired, a_target)
-      else:
-        self.output_v_target_now = max(self.output_v_target_now, v_next)
-        self.a_desired = max(self.a_desired, a_target)
-      self.output_a_target = a_target
 
   def apply_signal_stop_prepare(self, sm, carrot, reset_state, now=None):
     from openpilot.selfdrive.carrot.signal_stop_prepare import prepare_lead_blocked

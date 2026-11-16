@@ -1,8 +1,5 @@
 """Hyundai CAN FD: zero aReq with StopReq, without automatic release/retry.
 
-Exception (unheld_brake, StopGoLongAssist >= 1): motion after a stop the SCC never confirmed as held brakes at
-APPROACH_ACCEL until it does.
-
 Thresholds below are experimental, not OEM acceptance conditions. This controller
 cannot guarantee stopping; ECU response must be measured on the vehicle.
 """
@@ -40,9 +37,6 @@ class CanfdStopping:
     # including approach and interlock overrides.
     self.last_scc_stop_req = 0
     self.last_scc_jerk_upper = 1.0
-    # StopGoLongAssist >= 1 (carcontroller sets it from the setting): brake motion after a stop the SCC never confirmed as
-    # held. Off = the carrot-wip stop sequence unchanged (zero aReq once StopReq is set).
-    self.unheld_brake = False
     self.reset()
 
   def limit_scc_jerk_upper(self, stop_req: int, jerk_upper: float) -> float:
@@ -58,8 +52,6 @@ class CanfdStopping:
     self.phase = StopPhase.idle
     self.reason = "inactive"
     self.stopped_time = 0.0
-    self.unheld_motion = False
-    self.scc_held_seen = False
 
   def enter(self, phase: StopPhase, reason: str):
     self.phase = phase
@@ -79,9 +71,6 @@ class CanfdStopping:
 
     self.stopped_time = self.stopped_time + DT if speed <= STOP_SPEED else 0.0
     stopped = (held and speed <= MOVING_SPEED) or self.stopped_time >= STOP_CONFIRM_TIME
-    if held:
-      self.unheld_motion = False
-      self.scc_held_seen = True
     if stopped:
       if self.phase != StopPhase.held:
         self.enter(StopPhase.held, "stop_observed")
@@ -89,14 +78,7 @@ class CanfdStopping:
       # Motion changes diagnostics only. Never release StopReq to retry, even
       # when speed rises above the initial entry threshold after a request.
       self.enter(StopPhase.request, "motion_after_hold")
-      # The SCC never confirmed a hold in this stop, so zero aReq lets the car roll (Ioniq 5 PE route 0000007c:
-      # 1.55 m back on a red). With unheld_brake, brake at APPROACH_ACCEL until the SCC reports the hold; StopReq
-      # stays set. After a confirmed hold, motion stays diagnostic only (unchanged).
-      self.unheld_motion = self.unheld_motion or not self.scc_held_seen
 
-    if self.unheld_brake and self.phase in (StopPhase.request, StopPhase.held) and self.unheld_motion:
-      value = min(0.0, max(previous_value - jerk_l * DT, APPROACH_ACCEL))
-      return StopCommand(1, APPROACH_ACCEL, value, STOP_LOWER_BAND)
     if self.phase in (StopPhase.request, StopPhase.held):
       # Match the observed Ioniq stock entry: both aReq fields become zero in
       # the FIRST StopReq frame, bypassing the ordinary aReqValue jerk ramp.
