@@ -461,7 +461,10 @@ class Car:
         kick_valid = (CS.canValid and not impact_reboot and model_v2 is not None and
                       all(self.sm.valid[k] and self.sm.alive[k] and 0 <= time.monotonic()-self.sm.recv_time[k] < .2
                           for k in ('carControl', 'modelV2')))
-        self.CI.CC.kick_output_ready = self.kick_output.update(kick_valid, time.monotonic())
+        kick_now = time.monotonic()
+        self.CI.CC.kick_output_ready = self.kick_output.update(kick_valid, kick_now)
+        self.CI.CC.kick_direction = self.kick_output.request(
+          CS, kick_now, self.initialized_prev, self.CI.CC.kick_output_ready)
       self.last_actuators_output, can_sends = self.CI.apply(CC, now_nanos, model_v2, radar_state)
       can_sends = self.kick_output.isolate(can_sends, model_v2, time.monotonic())
       if self.tesla_signals.configured:
@@ -481,6 +484,8 @@ class Car:
       apply_done_ns = time.monotonic_ns()
       self.pm.send('sendcan', can_list_to_can_capnp(can_sends, msgtype='sendcan', valid=CS.canValid))
       sendcan_done_ns = time.monotonic_ns()
+      if self.kick_output.configured:
+        self.kick_output.feedback(CS, sendcan_done_ns * 1e-9, can_sends)
       if self.native_voice_indicator is not None:
         self.native_voice_indicator.update(sendcan_done_ns * 1e-9, CC, CS, self.CI.CS, can_sends)
 

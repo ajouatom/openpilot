@@ -75,13 +75,13 @@ class Events:
     return result[-4:]
 
 
-def main(fd, spas=False, ble=False):
-  if spas:
+def main(fd, spas=False, ble=False, kick=False):
+  if spas or kick:
     import os
     try:
       os.sched_setaffinity(0, {0, 1, 2, 3})
       os.nice(10)
-    except OSError:
+    except (AttributeError, OSError):
       pass
   from openpilot.cereal import messaging
   from openpilot.selfdrive.carrot.bluetooth.model import RUNTIME, config, read_json, atomic_json
@@ -93,11 +93,16 @@ def main(fd, spas=False, ble=False):
     front_radar_available = not getattr(cp, 'radarUnavailable', True)
     if ble and getattr(cp, 'passive', False):
       return
+    if kick:
+      from opendbc.car.hyundai.values import HyundaiSafetyFlags
+      if (cp.brand != 'hyundai' or cp.passive or not any(
+          cfg.safetyParam & HyundaiSafetyFlags.CANFD_BLINKER_KICK for cfg in cp.safetyConfigs)):
+        return
     if spas:
       from opendbc.car.hyundai.values import HyundaiFlags
       if cp.brand != 'hyundai' or not cp.flags & HyundaiFlags.CANFD_SPAS_BLINKERS or cp.passive:
         return
-  if not spas and not ble and json.loads(PACKAGE_CONFIG.read_text()).get('fingerprint') != fingerprint:
+  if not spas and not ble and not kick and json.loads(PACKAGE_CONFIG.read_text()).get('fingerprint') != fingerprint:
     return
   sock = socket.socket(fileno=fd)
   sock.setblocking(False)
@@ -141,7 +146,7 @@ def main(fd, spas=False, ble=False):
         feedback = {}
     sm.update(0)
     now = time.monotonic()  # SubMaster assigns receive timestamps during update.
-    ok = vehicle_ready(sm, now, fingerprint, spas or ble)
+    ok = vehicle_ready(sm, now, fingerprint, spas or ble or kick)
     status = read_json(RUNTIME/'status.json', {})
     settings, learning, cancelled = config(), read_json(RUNTIME/'learn.json', {}), read_json(RUNTIME/'cancelled.json', {})
     commands = events.read(read_json(RUNTIME/'blinker.json', {}), settings, status, learning, cancelled, now)
@@ -331,4 +336,4 @@ def main(fd, spas=False, ble=False):
 
 
 if __name__ == '__main__':
-  main(int(sys.argv[1]), 'spas' in sys.argv[2:], 'ble' in sys.argv[2:])
+  main(int(sys.argv[1]), 'spas' in sys.argv[2:], 'ble' in sys.argv[2:], 'kick' in sys.argv[2:])

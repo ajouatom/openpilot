@@ -217,11 +217,12 @@ def test_lamp_and_synthesized_stalk_feedback_cannot_request_steering(monkeypatch
   assert t.helper.lane_change_state == log.LaneChangeState.laneChangeStarting
 
 
+@pytest.mark.parametrize('transport', ['usb', 'ble', 'kick'])
 @pytest.mark.parametrize('atc,state,nav_fresh', [('none', 'off', True), ('atc left', 'preLaneChange', True),
                                                ('fork right', 'preLaneChange', True), ('turn left', 'off', False)])
 @pytest.mark.parametrize('lane_available', [True, False])
 @pytest.mark.parametrize('observed', [False, True])
-def test_actual_source_loop_journals_then_taps_legacy_or_holds_observation(monkeypatch, atc, state, nav_fresh, lane_available, observed):
+def test_actual_source_loop_journals_then_taps_legacy_or_holds_observation(monkeypatch, atc, state, nav_fresh, lane_available, observed, transport):
   import sys
   import json
   import types
@@ -276,7 +277,8 @@ def test_actual_source_loop_journals_then_taps_legacy_or_holds_observation(monke
   )
   fake_cereal = types.ModuleType('openpilot.cereal')
   fake_cereal.messaging = N(SubMaster=lambda _: sm)
-  fake_cereal.car = N(CarParams=N(from_bytes=lambda _: nullcontext(N(carFingerprint='HYUNDAI_IONIQ_5_PE'))))
+  fake_cereal.car = N(CarParams=N(from_bytes=lambda _: nullcontext(N(carFingerprint='HYUNDAI_IONIQ_5_PE', brand='hyundai', passive=False,
+      safetyConfigs=[N(safetyParam=32768)]))))
   monkeypatch.setitem(sys.modules, 'openpilot.common.params', fake_params)
   monkeypatch.setitem(sys.modules, 'openpilot.cereal', fake_cereal)
   fed = [-1]
@@ -301,7 +303,8 @@ def test_actual_source_loop_journals_then_taps_legacy_or_holds_observation(monke
   monkeypatch.setattr(model, 'read_json', lambda *a: {})
   monkeypatch.setattr(model, 'config', dict)
   monkeypatch.setattr(model, 'atomic_json', lambda path, value: saved.append((path, value)))
-  source.main(0)
+  source.main(0, ble=transport == 'ble', kick=transport == 'kick')
+  assert any(path.name == 'physical-hold.json' for path, _ in saved)
   events = [e for v in sent for e in v['events']]
   if observed:
     assert not events
