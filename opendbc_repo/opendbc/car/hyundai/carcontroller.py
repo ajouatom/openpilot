@@ -47,11 +47,6 @@ MID_SPEED_ANGLE_RATE_LIMIT_SPEED = 40.0 * CV.KPH_TO_MS
 LARGE_ANGLE_UNWIND_RATE = 1.5  # deg/tick: allow a quicker return from the EPS fault-angle region
 CANFD_JERK_UPPER_MIN = 1.0
 CANFD_JERK_LIMIT_MAX = 5.0
-# StopGoLongAssist >= 2: jerk upper limit for the first CANFD_DEPART_TIME after a standstill, below CANFD_DEPART_SPEED.
-# No-lead departures already send 2.8-3.3 in Ioniq 5 PE logs; this gives every departure at least that jerk.
-CANFD_DEPART_JERK_UPPER = 3.0
-CANFD_DEPART_TIME = 3.0
-CANFD_DEPART_SPEED = 3.0
 # CanfdBlinkerKick (KICK_CARS on the camera-SCC harness, CAN-FD): in D at any speed the parking ECU (APRK, 0x7B1) is
 # asked to go quiet around a kick and SPAS2 BLINKER_CONTROL is sent in its place; its default session is restored right
 # after the kick
@@ -242,7 +237,6 @@ class CarController(CarControllerBase):
     self.blinking_signal = False # 1Hz
     self.blinking_frame = int(1.0 / DT_CTRL)
     self.soft_hold_mode = 2
-    self.depart_jerk = False
     self.blinker_control = False
     self.kick_output_ready = False  # card owns the shared USB/BLE/native output lease
     self.blinker_kick_mode = 1  # CanfdBlinkerKickMode: 0 only after an ack; anything else (a stored 2/3 too) is 1, piggyback
@@ -253,7 +247,6 @@ class CarController(CarControllerBase):
     self.lane_change_prev, self.model_pulse = "off", False  # last modelV2 laneChangeState; pulse from the model trigger
     self.blinker_pulse_start, self.model_hold = 0, {}  # pulse start frame; _blink_hold_change state
     self.yellow_until = [0, 0]  # left, right
-    self.standstill_frame = -1e6
 
     self.activateCruise = 0
     self.button_wait = 12
@@ -456,9 +449,6 @@ class CarController(CarControllerBase):
         self.steerDeltaDownLC = self.steerDeltaDown
 
       self.soft_hold_mode = 1 if params.get_int("AutoCruiseControl") > 1 else 2
-      self.depart_jerk = params.get_int("StopGoLongAssist") >= 2
-      if self.canfd_stopping is not None:
-        self.canfd_stopping.unheld_brake = params.get_int("StopGoLongAssist") >= 1  # stop guard level (stopping.py)
       # CANFD_BLINKER_KICK: set at fingerprint time only for KICK_CARS on the camera-SCC harness, and panda admits the Kick
       # ids only with it. The setting can still switch the Kick off mid-drive; switching it on waits for the next start.
       self.blinker_control = (any(cfg.safetyParam & HyundaiSafetyFlags.CANFD_BLINKER_KICK for cfg in self.CP.safetyConfigs)
@@ -762,11 +752,6 @@ class CarController(CarControllerBase):
       if self.CP.openpilotLongitudinalControl:
         hud_lateral = self.display_lead_lateral.update(getattr(CS, "radarState", None), getattr(CS, "modelV2", None))
         self.hyundai_jerk.make_jerk(self.CP, CS, accel, actuators, hud_control)
-        if CS.out.standstill:
-          self.standstill_frame = self.frame
-        if (self.depart_jerk and accel > 0.0 and CS.out.vEgo < CANFD_DEPART_SPEED
-            and (self.frame - self.standstill_frame) * DT_CTRL < CANFD_DEPART_TIME):
-          self.hyundai_jerk.jerk_u = max(self.hyundai_jerk.jerk_u, CANFD_DEPART_JERK_UPPER)
         self.hyundai_jerk.check_carrot_cruise(CC, CS, hud_control, stopping, accel, actuators.aTarget)
 
         if True: #not camera_scc:
