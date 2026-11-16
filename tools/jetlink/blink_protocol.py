@@ -259,6 +259,9 @@ class Sender:
       self.clock_received = now
     available = (state.get('token') == self.token and state.get('available') is True and
                  now-self.clock_received < .5)
+    if self.params is not None:  # comma side: the HUD shows a small yellow CAN badge while this stays True
+      from openpilot.common.can_link import publish
+      publish(now, available)
     if self.params is not None:
       available = available and external_output_allowed(self.params)
     generation = state.get('generation')
