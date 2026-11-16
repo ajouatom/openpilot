@@ -756,6 +756,15 @@ def test_paddle_stop_hands_off_and_keeps_set_speed(v_ego, x_state, d_rel, v_rel,
   assert (helper._paddle_decel_active, helper._paddle_resume_kph) == (active, resume)
 
 
+def test_paddle_stop_hand_off_keeps_plain_python_types_for_carstate():
+  # IONIQ 9 11-16: a numpy set speed (np.clip) made paddleStopActive a numpy.bool and capnp killed card
+  import numpy as np
+  helper, CS, CC = make_paddle_stop_helper(8.0, x_state=3)
+  helper._update_cruise_state(CS, CC, np.float64(30.))
+  assert type(helper._paddle_resume_kph) is float and helper._paddle_resume_kph == 30.
+  car.CarState.new_message().paddleStopActive = bool(helper._paddle_decel_active or helper._paddle_resume_kph > 0)
+
+
 def test_paddle_stop_restores_set_speed_once_stopped():
   helper, CS, CC = make_paddle_stop_helper(0.0, x_state=5, resume=30)
   assert helper._update_cruise_state(CS, CC, 5) == 30

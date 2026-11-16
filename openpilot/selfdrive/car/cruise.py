@@ -1038,7 +1038,9 @@ class VCruiseCarrot:
           self._paddle_decel_active = False
           if CS.vEgo > 0.5:
             # Still rolling: hold the current speed into the stop; the set speed returns once stopped.
-            self._paddle_resume_kph = v_cruise_kph
+            # float: v_cruise_kph comes from np.clip, and a numpy scalar here made card's paddleStopActive a numpy.bool,
+            # which capnp rejects -> card died mid hand-over (IONIQ 9 000004c0 seg12, 11-16)
+            self._paddle_resume_kph = float(v_cruise_kph)
             self._paddle_resume_cnt = 0
             v_cruise_kph = self.v_ego_kph_set
       elif self._paddle_resume_kph > 0:
