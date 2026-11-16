@@ -245,7 +245,9 @@ def main(fd, spas=False, ble=False, kick=False):
     observation_feedback.prepare(now, hold, meta, cs)
     receiver_override = fresh(feedback.get('stamp'), now, .35) and feedback.get('state') == 'driver_override'
     native_hold = not ble or fingerprint == 'HYUNDAI_IONIQ_5_PE'
-    tbt_turn_hold = bool(not spas and native_hold and hold and hold['source'] == 'turn' and automatic.journey.active)
+    # Kick reports a verified physical lever override; external receiver echoes
+    # retain their existing confirmed-turn exception.
+    tbt_turn_hold = bool(not spas and not kick and native_hold and hold and hold['source'] == 'turn' and automatic.journey.active)
     # A confirmed TBT lamp is maintained by the comma-side lease. Receiver
     # one-touch ownership ending must not erase the ongoing turn. This cannot
     # activate a hold whose initial send and lamp were never acknowledged.
