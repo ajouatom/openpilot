@@ -98,6 +98,9 @@ class TestHyundaiSpasSolo(unittest.TestCase):
     self.tick(1000)
     self.assertEqual(self.spas(), [True, True])
     self.assertEqual(self.spas(extra={20: 1}), [False, False], "only the direction byte may be set")
+    self.setUp()
+    self.tick(1000)
+    self.assertEqual(self.spas(), [True, True])
     self.assertEqual(self.spas(step_ms=10)[1], False, "faster than 15 ms")
     self.setUp()
     self.tick(1000)
@@ -207,6 +210,27 @@ class TestHyundaiSpasSolo(unittest.TestCase):
       self.assertEqual(self.spas(), [True, True])
     self.assertEqual(self.spas()[1], False)
     self.assertEqual(self.spas(None), [True, True], "zero tail after the parked trial")
+
+
+  def test_a_lease_the_host_stops_sending_closes_and_rearms(self):
+    self.drive(1000)
+    for _ in range(50):  # a 1 s lane change
+      self.assertEqual(self.spas(), [True, True])
+    for _ in range(15):  # host tail
+      self.assertEqual(self.spas(None), [True, True])
+    self.drive(1500)  # host cooldown; Panda still in the lease until the next frame
+    self.assertEqual(self.spas(), [True, True], "the next lane change arms again")
+    for _ in range(20):
+      self.assertEqual(self.spas(), [True, True])
+
+  def test_a_refused_frame_does_not_desync_the_counter(self):
+    self.drive(1000)
+    self.assertEqual(self.spas(), [True, True])
+    self.assertEqual(self.spas(step_ms=10), [False, False], "closer than 15 ms")
+    for _ in range(20):  # the host's counter moved on anyway
+      self.assertEqual(self.spas(), [True, True])
+    self.tx_counter = [(c + 5) & 0xFF for c in self.tx_counter]
+    self.assertEqual(self.spas()[0], False, "a counter jump beyond 3 is still refused")
 
 
 class TestHyundaiCornerRadar4B9(unittest.TestCase):

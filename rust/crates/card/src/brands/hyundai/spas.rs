@@ -81,6 +81,9 @@ pub const SOLO_DRIVE_MAX: f64 = 29.5;
 const SOLO_TAIL: f64 = 0.3;
 /// Panda: a 0.5 s tail from its revocation, then 1 s before the next lease.
 const SOLO_COOLDOWN: f64 = 1.5;
+/// A lane change (or an input) may drop out this long without ending the
+/// lease; a driver's lever, a side change or the limit end it at once.
+const SOLO_GRACE: f64 = 0.3;
 
 /// Driving SPAS indicator for a car with no stock SPAS sender: the lamp
 /// follows an automatic lane change until it completes, then ends with
@@ -95,38 +98,61 @@ pub struct SoloDrive {
     counter: [u8; 2],
     /// A lease reached SOLO_DRIVE_MAX; wait for the lane change to end.
     expired: bool,
+    lost_since: Option<f64>,
     pub status: &'static str,
+    /// Why the last lease ended.
+    pub ended: &'static str,
 }
 
 impl SoloDrive {
     /// `want`: the lane change direction while one is under way. `allowed`:
-    /// fresh, healthy inputs and no driver indicator input. Returns the side
+    /// fresh, healthy inputs (`reason` says which failed). `driver`: the
+    /// driver's lever or hazard, which ends a lease at once. Returns the side
     /// of a newly started lease (to record lamp ownership) and the frames.
     pub fn update(
         &mut self,
         now: f64,
         want: Option<Direction>,
         allowed: bool,
+        driver: bool,
+        reason: &'static str,
         bus: u8,
     ) -> (Option<Direction>, Vec<Frame>) {
         if want.is_none() {
             self.expired = false;
         }
-        let go = allowed && want.is_some() && !self.expired;
+        let go = allowed && !driver && want.is_some() && !self.expired;
         let mut started = None;
         if let Some(side) = self.side {
             let timed_out = now - self.started >= SOLO_DRIVE_MAX;
-            if !go || want != Some(side) || timed_out {
-                self.expired |= go && timed_out;
-                self.side = None;
-                self.tail_until = now + SOLO_TAIL;
-                self.cooldown_until = self.tail_until + SOLO_COOLDOWN;
-                self.status = "tail";
+            let switched = want.is_some() && want != Some(side);
+            if go && want == Some(side) && !timed_out {
+                self.lost_since = None;
+            } else {
+                let since = *self.lost_since.get_or_insert(now);
+                if driver || timed_out || switched || now - since >= SOLO_GRACE {
+                    self.expired |= timed_out;
+                    self.ended = if driver {
+                        "driver"
+                    } else if timed_out {
+                        "limit"
+                    } else if switched {
+                        "side"
+                    } else {
+                        reason
+                    };
+                    self.side = None;
+                    self.lost_since = None;
+                    self.tail_until = now + SOLO_TAIL;
+                    self.cooldown_until = self.tail_until + SOLO_COOLDOWN;
+                    self.status = "tail";
+                }
             }
         } else if go && now >= self.cooldown_until {
             self.side = want;
             self.started = now;
             self.next = now;
+            self.lost_since = None;
             self.status = "active";
             started = want;
         }
@@ -139,13 +165,9 @@ impl SoloDrive {
         if now < self.next {
             return (started, Vec::new());
         }
-        // A 20 ms grid (a late call does not slow the rate), never closer
-        // than Panda's 15 ms.
-        self.next = if now - self.next > 0.02 {
-            now + 0.02
-        } else {
-            (self.next + 0.02).max(now + 0.015)
-        };
+        // At least 20 ms apart: Panda refuses frames closer than 15 ms, and
+        // USB batching can bring two closer together than they were sent.
+        self.next = now + 0.02;
         let frames = SPAS
             .iter()
             .enumerate()

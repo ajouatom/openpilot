@@ -364,10 +364,22 @@ fn solo_run(
     allowed: impl Fn(f64) -> bool,
     started: &mut Vec<(f64, Direction)>,
 ) -> Vec<(f64, u8)> {
+    solo_run_driver(solo, t0, t1, want, allowed, |_| false, started)
+}
+
+fn solo_run_driver(
+    solo: &mut SoloDrive,
+    t0: f64,
+    t1: f64,
+    want: impl Fn(f64) -> Option<Direction>,
+    allowed: impl Fn(f64) -> bool,
+    driver: impl Fn(f64) -> bool,
+    started: &mut Vec<(f64, Direction)>,
+) -> Vec<(f64, u8)> {
     let mut sent = Vec::new();
     let mut t = t0;
     while t < t1 {
-        let (start, frames) = solo.update(t, want(t), allowed(t), 0);
+        let (start, frames) = solo.update(t, want(t), allowed(t), driver(t), "test", 0);
         if let Some(side) = start {
             started.push((t, side));
         }
@@ -398,19 +410,18 @@ fn solo_drive_follows_the_lane_change_and_ends_with_a_zero_tail() {
     assert!((started[0].0 - 1.).abs() < 0.02);
     let lit: Vec<_> = sent.iter().filter(|(_, d)| *d == 0x60).collect();
     let zero: Vec<_> = sent.iter().filter(|(_, d)| *d == 0).collect();
+    // Lit through the lane change plus the 0.3 s grace, frames >= 20 ms apart.
     assert!(
-        (240..=252).contains(&lit.len()),
-        "50 Hz for 5 s: {}",
+        (170..=265).contains(&lit.len()),
+        "lit frames: {}",
         lit.len()
     );
-    assert!(lit.last().unwrap().0 < 6.0);
-    assert!(
-        (13..=17).contains(&zero.len()),
-        "0.3 s tail: {}",
-        zero.len()
-    );
-    assert!(zero.iter().all(|(t, _)| (6.0..6.35).contains(t)));
+    assert!(sent.windows(2).all(|w| w[1].0 - w[0].0 >= 0.0199));
+    assert!((6.25..6.35).contains(&lit.last().unwrap().0));
+    assert!((9..=16).contains(&zero.len()), "0.3 s tail: {}", zero.len());
+    assert!(zero.iter().all(|(t, _)| (6.29..6.65).contains(t)));
     assert!(!solo.busy());
+    assert_eq!(solo.ended, "test");
 }
 
 #[test]
@@ -441,17 +452,19 @@ fn solo_drive_waits_out_the_cooldown_and_changes_side_through_a_tail() {
 fn solo_drive_stops_on_driver_input_and_after_its_limit() {
     let mut solo = SoloDrive::default();
     let mut started = Vec::new();
-    // Driver uses the lever at 2 s: tail, and no new lease while not allowed.
-    let sent = solo_run(
+    // Driver uses the lever at 2 s: ends at once, no new lease meanwhile.
+    let sent = solo_run_driver(
         &mut solo,
         0.,
         5.,
         |_| Some(Direction::Left),
-        |t| t < 2.,
+        |_| true,
+        |t| t >= 2.,
         &mut started,
     );
     assert_eq!(started.len(), 1);
     assert!(!sent.iter().any(|(t, d)| *t >= 2. && *d != 0));
+    assert_eq!(solo.ended, "driver");
     // A lane change that never completes ends at SOLO_DRIVE_MAX and does
     // not restart until it clears.
     let mut solo = SoloDrive::default();
@@ -478,4 +491,18 @@ fn solo_drive_stops_on_driver_input_and_after_its_limit() {
         &mut started,
     );
     assert_eq!(started.len(), 2, "a new lane change starts again");
+}
+
+#[test]
+fn solo_drive_rides_out_a_short_dropout() {
+    let mut solo = SoloDrive::default();
+    let mut started = Vec::new();
+    // The lane change reading drops out for 0.2 s mid-lease: one lease, lit throughout.
+    let want = |t: f64| (!(2.0..2.2).contains(&t) && t < 5.).then_some(Direction::Right);
+    let sent = solo_run(&mut solo, 0., 6., want, |_| true, &mut started);
+    assert_eq!(started.len(), 1);
+    assert!(sent
+        .iter()
+        .any(|(t, d)| (2.0..2.2).contains(t) && *d == 0x80));
+    assert!(!sent.iter().any(|(t, d)| *t < 5. && *d == 0));
 }

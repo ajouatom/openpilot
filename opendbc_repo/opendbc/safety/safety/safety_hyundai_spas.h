@@ -329,6 +329,15 @@ static bool hyundai_spas_tx(const CANPacket_t *pkt, uint32_t now) {
     }
   } else if (ok && ((addr == 0x165) || (addr == 0x16A))) {
     int idx = (addr == 0x165) ? 0 : 1;
+    // The host ended its driving lease (it stopped sending): close it here too,
+    // so the next lane change can arm again instead of failing the 200 ms rule.
+    if (((hyundai_spas_phase == 11U) || (hyundai_spas_phase == 12U)) && hyundai_spas_tx_seen[idx] &&
+        (get_ts_elapsed(now, hyundai_spas_tx_at[idx]) >= 200000U)) {
+      if (hyundai_spas_phase == 11U) {
+        hyundai_spas_drive_end = hyundai_spas_tx_at[idx];
+      }
+      hyundai_spas_phase = (hyundai_spas_phase == 12U) ? hyundai_spas_tail_next : 0U;
+    }
     bool cooldown = !hyundai_spas_trial_used || (get_ts_elapsed(now, hyundai_spas_trial_at) >= 30000000U);
     // Driving lease for a car with no stock SPAS sender, armed by an all-zero
     // SPAS1 while the lever is idle; one direction, 30 s at most, 1 s apart.
@@ -428,7 +437,10 @@ static bool hyundai_spas_tx(const CANPacket_t *pkt, uint32_t now) {
         // zero-direction frames command nothing.
         ok = ok && (get_ts_elapsed(now, hyundai_spas_tx_at[idx]) >= 15000U) &&
              (get_ts_elapsed(now, hyundai_spas_tx_at[idx]) < 200000U) &&
-             (tail || (GET_BYTE(pkt, 2) == ((hyundai_spas_tx_counter[idx] + 1U) & 0xFFU)));
+             (tail || (GET_BYTE(pkt, 2) == ((hyundai_spas_tx_counter[idx] + 1U) & 0xFFU)) ||
+              // No-stock leases: a frame Panda refused (e.g. two arriving
+              // closer than 15 ms) still used its counter on the host.
+              ((solo || drive) && ((((uint8_t)(GET_BYTE(pkt, 2) - hyundai_spas_tx_counter[idx] - 1U)) & 0xFFU) < 3U)));
       }
       if (tail && (idx == 1)) {
         ok = ok && (GET_BYTE(pkt, 16) == 0U);

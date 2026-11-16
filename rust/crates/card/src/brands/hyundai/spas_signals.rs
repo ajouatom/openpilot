@@ -483,9 +483,20 @@ impl SpasSignals {
             && self.session.stock_absent(now);
         if solo_ready || self.solo.busy() {
             let want = lane_change(input.subscribers, now);
-            let allowed =
-                solo_ready && healthy && continuous && !override_now && !self.driver_active;
-            let (started, frames) = self.solo.update(now, want, allowed, self.session.bus);
+            let allowed = solo_ready && healthy && continuous;
+            let driver = override_now || self.driver_active;
+            let reason = if !solo_ready {
+                "conditions"
+            } else if !healthy {
+                "inputs"
+            } else if !continuous {
+                "loop"
+            } else {
+                "lane_change_end"
+            };
+            let (started, frames) =
+                self.solo
+                    .update(now, want, allowed, driver, reason, self.session.bus);
             if let Some(side) = started {
                 // Our lamp must not come back as a driver lane change request.
                 let direction = if side == Direction::Left { 1 } else { 2 };
@@ -496,7 +507,11 @@ impl SpasSignals {
             }
             if self.solo.busy() || !frames.is_empty() {
                 self.hold_value = 1;
-                self.status = format!("solo_drive_{}", self.solo.status);
+                self.status = if self.solo.status == "tail" {
+                    format!("solo_drive_tail_{}", self.solo.ended)
+                } else {
+                    format!("solo_drive_{}", self.solo.status)
+                };
                 return Ok(frames);
             }
         }
