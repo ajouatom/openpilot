@@ -76,6 +76,94 @@ pub fn solo_direction(
 }
 const SOLO_ZERO: f64 = 0.2;
 
+/// Panda (phase 11) revokes a driving lease at 30 s.
+pub const SOLO_DRIVE_MAX: f64 = 29.5;
+const SOLO_TAIL: f64 = 0.3;
+/// Panda: a 0.5 s tail from its revocation, then 1 s before the next lease.
+const SOLO_COOLDOWN: f64 = 1.5;
+
+/// Driving SPAS indicator for a car with no stock SPAS sender: the lamp
+/// follows an automatic lane change until it completes, then ends with
+/// zero-direction frames (see `solo_direction`).
+#[derive(Default, Debug)]
+pub struct SoloDrive {
+    side: Option<Direction>,
+    started: f64,
+    tail_until: f64,
+    cooldown_until: f64,
+    next: f64,
+    counter: [u8; 2],
+    /// A lease reached SOLO_DRIVE_MAX; wait for the lane change to end.
+    expired: bool,
+    pub status: &'static str,
+}
+
+impl SoloDrive {
+    /// `want`: the lane change direction while one is under way. `allowed`:
+    /// fresh, healthy inputs and no driver indicator input. Returns the side
+    /// of a newly started lease (to record lamp ownership) and the frames.
+    pub fn update(
+        &mut self,
+        now: f64,
+        want: Option<Direction>,
+        allowed: bool,
+        bus: u8,
+    ) -> (Option<Direction>, Vec<Frame>) {
+        if want.is_none() {
+            self.expired = false;
+        }
+        let go = allowed && want.is_some() && !self.expired;
+        let mut started = None;
+        if let Some(side) = self.side {
+            let timed_out = now - self.started >= SOLO_DRIVE_MAX;
+            if !go || want != Some(side) || timed_out {
+                self.expired |= go && timed_out;
+                self.side = None;
+                self.tail_until = now + SOLO_TAIL;
+                self.cooldown_until = self.tail_until + SOLO_COOLDOWN;
+                self.status = "tail";
+            }
+        } else if go && now >= self.cooldown_until {
+            self.side = want;
+            self.started = now;
+            self.next = now;
+            self.status = "active";
+            started = want;
+        }
+        if self.side.is_none() && now >= self.tail_until {
+            if self.status == "tail" {
+                self.status = "idle";
+            }
+            return (started, Vec::new());
+        }
+        if now < self.next {
+            return (started, Vec::new());
+        }
+        // A 20 ms grid (a late call does not slow the rate), never closer
+        // than Panda's 15 ms.
+        self.next = if now - self.next > 0.02 {
+            now + 0.02
+        } else {
+            (self.next + 0.02).max(now + 0.015)
+        };
+        let frames = SPAS
+            .iter()
+            .enumerate()
+            .map(|(i, (address, _))| {
+                let counter = self.counter[i];
+                self.counter[i] = counter.wrapping_add(1);
+                frame(*address, counter, self.side, bus)
+            })
+            .collect();
+        (started, frames)
+    }
+
+    /// Sending: a lease or its tail.
+    pub fn busy(&self) -> bool {
+        self.side.is_some() || self.status == "tail"
+    }
+}
+
 /// Both SPAS messages exist on `bus` with their exact lengths.
 pub fn compatible(fingerprint: &BTreeMap<u8, BTreeMap<u32, usize>>, bus: u8) -> bool {
     SPAS.iter().all(|(address, size)| {

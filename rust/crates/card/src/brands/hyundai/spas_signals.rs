@@ -115,9 +115,36 @@ pub struct SpasSignals {
     driver_count: u32,
     driver_active: bool,
     pub status: String,
+    /// Driving lane-change indicator on a car with no stock SPAS sender.
+    pub solo: spas::SoloDrive,
     worker: Option<crate::blink::source::SpasWorker>,
     feedback: crate::blink::source::Feedback,
     feedback_at: f64,
+}
+
+/// The lane change direction while one is under way (pre, starting or
+/// finishing), from a fresh modelV2.
+fn lane_change(subscribers: &Subscribers, now: f64) -> Option<Direction> {
+    use openpilot_cereal::log_capnp::{LaneChangeDirection, LaneChangeState};
+    if !fresh(subscribers, "modelV2", now, 0.35) {
+        return None;
+    }
+    let topic = subscribers.topic("modelV2").ok()?;
+    let event::Which::ModelV2(Ok(model)) = topic.event().ok()?.which().ok()? else {
+        return None;
+    };
+    let meta = model.get_meta().ok()?;
+    match meta.get_lane_change_state().ok()? {
+        LaneChangeState::PreLaneChange
+        | LaneChangeState::LaneChangeStarting
+        | LaneChangeState::LaneChangeFinishing => {}
+        _ => return None,
+    }
+    match meta.get_lane_change_direction().ok()? {
+        LaneChangeDirection::Left => Some(Direction::Left),
+        LaneChangeDirection::Right => Some(Direction::Right),
+        _ => None,
+    }
 }
 
 fn fresh(subscribers: &Subscribers, name: &str, now: f64, limit: f64) -> bool {
@@ -215,6 +242,7 @@ impl SpasSignals {
                 "disabled".into()
             },
             worker: None,
+            solo: spas::SoloDrive::default(),
             feedback: crate::blink::source::Feedback::default(),
             feedback_at: 0.,
         }
@@ -443,6 +471,33 @@ impl SpasSignals {
                     request = Some(event.id.clone());
                     direction = Some(to_direction(event.direction));
                 }
+            }
+        }
+        // A car with no stock SPAS sender lights automatic lane changes
+        // directly, until the lane change completes (owner's car only).
+        let solo_ready = self.hold_supported
+            && self.test_request.is_none()
+            && self.test_setting == 0
+            && now >= self.direct_cooldown
+            && self.session.state == spas::State::Idle
+            && self.session.stock_absent(now);
+        if solo_ready || self.solo.busy() {
+            let want = lane_change(input.subscribers, now);
+            let allowed =
+                solo_ready && healthy && continuous && !override_now && !self.driver_active;
+            let (started, frames) = self.solo.update(now, want, allowed, self.session.bus);
+            if let Some(side) = started {
+                // Our lamp must not come back as a driver lane change request.
+                let direction = if side == Direction::Left { 1 } else { 2 };
+                let _ = crate::blink::source::record_ownership(
+                    now,
+                    &serde_json::json!({"time": now, "direction": direction, "source": "spas_solo"}),
+                );
+            }
+            if self.solo.busy() || !frames.is_empty() {
+                self.hold_value = 1;
+                self.status = format!("solo_drive_{}", self.solo.status);
+                return Ok(frames);
             }
         }
         if self.test_request.is_some() {
