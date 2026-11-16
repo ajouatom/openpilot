@@ -294,6 +294,8 @@ VW MEB(ID.4 포함)에도 수동 조향비와 학습 비율이 적용됩니다. 
 - **계기판 CAN 직접 송신** (`HyundaiCanfdClusterDirectTx`): 현대·기아·제네시스 CAN-FD CameraSCC 차량에서 간헐적인 계기판 경고가 발생할 때 기존 직접 송신 방식과 비교하는 설정입니다. 모든 차량에서 기본 꺼짐이며 증상 차량에서 직접 켭니다. 변경 후 기기를 재부팅해야 적용됩니다. 이 설정을 지원하는 Panda 펌웨어가 필요하며, 경고 원인 해결이 검증된 것은 아닙니다.
 ### 깜박이 제어
 
+수동 차선변경 감지에서 순간적인 차로 폭 오류는 마지막 유효 관측부터 0.15초 이내에 정상 관측이 돌아올 때 기존 추적을 이어갑니다. 송신 단계는 감지 단계가 확정한 차선 판단을 사용합니다. [자세한 동작](lane-change.md)
+
 설정 > 차량·하드웨어 > 깜박이 제어에 자동 점등, 출력 장치, 레버 동작을 모았습니다. 자동 점등에는 `AutoBlinkerControl`, `ManualLaneChangeIndicator`, `ManualTurnIndicator`, `ModelDesireIndicator`, `ModelPathIndicator`가 있습니다. 출력 장치에는 `CanfdBlinkerKick`, `CanfdBlinkerKickMode`, `CanfdBlinkerControl`, `CanfdBlinkerTest`가 있으며 레버 동작에는 `BlinkerLatchedTurn`, `LaneChangeLeverWait`가 있습니다.
 
 **Panda/SPAS 깜박이 출력** (`CanfdBlinkerKick`)은 공통 판단이 만든 깜박이 요청을 Panda로 송신합니다. 아이오닉5 PE·아이오닉9·그랜저 GN7의 카메라 SCC CAN-FD 구성에서 지원합니다. 수동 차로변경·수동 회전·모델 관찰·내비 회전·음성 차로변경의 시작과 유지, 종료는 기존 공통 설정을 따릅니다. 실제 레버 조작과 오래된 입력은 출력을 중단하며, 종료된 요청은 새 요청 없이 재개하지 않습니다.

@@ -10,10 +10,11 @@ from tools.jetlink.blink_protocol import Process, fresh  # noqa: TID251 -- commo
 
 
 class KickOutput:
-  def __init__(self, cp, params):
+  def __init__(self, cp, params, *, event=None):
     self.configured = (cp.brand == 'hyundai' and not cp.passive and
                        any(cfg.safetyParam & HyundaiSafetyFlags.CANFD_BLINKER_KICK for cfg in cp.safetyConfigs))
     self.params = params
+    self.event = event
     self.owner = Owner('CANFD Kick')
     self.bus = CanBus(cp).ECAN if self.configured else None
     self.next_update = self.last_journal = 0.
@@ -85,7 +86,7 @@ class KickOutput:
     driver_active = self.driver_direction not in (None, 0) or 0 <= now - self.driver_pressed_at < .2
     return enabled and self.owner.held and not driver_active
 
-  def request(self, cs, now, initialized, ready):
+  def request(self, cs, now, initialized, ready, *, clock=None):
     """Translate the existing source's fresh hold/tap into a leased SPAS direction."""
     enabled = self.configured and self.params.get_bool('IsOnroad') and self.params.get_bool('CanfdBlinkerKick')
     if self.worker is not None and (not enabled or self.worker.process.poll() is not None):
@@ -99,6 +100,10 @@ class KickOutput:
       except OSError:
         self.worker_retry = now + 5.
     record = self.worker.latest() if self.worker is not None else None
+    # The producer may publish while latest() drains the socket. Judge its
+    # timestamp after the read, using the caller's live or replay clock.
+    if clock is not None:
+      now = clock()
     if isinstance(record, dict):
       self.record = record
     record = self.record
@@ -121,6 +126,12 @@ class KickOutput:
                     not self.tapping and valid_request and ident == self.request_id and side == self.request_side)
       opposite = cs.rightBlinker if self.request_side == 3 else cs.leftBlinker
       if not healthy or not continuing or opposite or now - self.request_started >= 300.:
+        if self.event is not None:
+          self.event('canfdIndicatorRequestEnd', request=self.request_id, side=self.request_side,
+                     now=now, started=self.request_started, first_sent=self.first_sent,
+                     healthy=healthy, continuing=bool(continuing), opposite=bool(opposite), ready=self.ready,
+                     source_stamp=record.get('stamp'), source_ok=record.get('ok'),
+                     source_origin=record.get('indicator_origin'))
         self.request_id, self.request_side, self.accepted_id = None, 0, None
     if valid_request and ident not in self.seen:
       # Consume rejected/expired requests too. Recovery requires a new policy edge.
