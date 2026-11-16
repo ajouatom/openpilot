@@ -341,6 +341,7 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"HyundaiCameraSCC", {PERSISTENT, INT, "0"}},
     {"HyundaiCanfdClusterDirectTx", {PERSISTENT, BOOL, "0"}},
     {"CanfdBlinkerKick", {PERSISTENT, BOOL, "0"}},
+    {"RemoteHazard", {PERSISTENT, BOOL, "0"}},
     {"CanfdBlinkerKickMode", {PERSISTENT, INT, "1"}},
     {"CanfdBlinkerKickModelMode", {PERSISTENT, INT, "0"}},
     {"RoundaboutLaneChangeHold", {PERSISTENT, BOOL, "1"}},

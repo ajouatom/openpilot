@@ -533,7 +533,8 @@
           "params": [
             "CanfdBlinkerKick",
             "CanfdBlinkerKickMode",
-            "CanfdBlinkerKickModelMode"
+            "CanfdBlinkerKickModelMode",
+            "RemoteHazard"
           ]
         },
         {
@@ -2336,6 +2337,7 @@
     {
       "group": "Joongyu Lab",
       "name": "Ioniq9ClusterTest",
+      "visible_cars": ["HYUNDAI_IONIQ_9"],
       "title": "[아이오닉9 전용 시험] HDP·점선",
       "descr": "테스트용, 아이오닉9에서만 동작합니다(다른 차는 무시). 아이오닉9 계기판이 그리는지 아직 확인 안 된 값을 보내 봅니다.\n0: 끔(기본).\n1: HDP 아이콘(0x162 bit 188)을 인게이지(크루즈 또는 조향) 중에 켭니다.\n2: 카메라가 점선으로 본 차선을 점선 코드(흰 8, 초록 10)로 보냅니다. 10-28~30 차주 보고로는 이 코드에서 선이 안 보였습니다.\n3: 1+2.\n재부팅하면 0으로 돌아갑니다.",
       "egroup": "Joongyu Lab",
@@ -2348,6 +2350,24 @@
       "max": 3,
       "default": 0,
       "unit": 1
+    },
+    {
+      "group": "Joongyu Lab",
+      "name": "RemoteHazard",
+      "title": "리모컨 비상등 (주의)",
+      "descr": "주의: 시험 기능입니다. 기본 꺼짐.\n1: 블루투스 리모컨의 깜빡이 버튼 왼쪽·오른쪽을 0.5초 안에 같이 누르면 「비상등 CAN 테스트」(CanfdHazardTest)를 켜고, 한 번 더 같이 누르면 끕니다.\n- 켜 두면 깜빡이 버튼 하나만 누를 때 0.5초 늦게 깜빡입니다(같이 누르는지 기다림).\n- 비상등은 「비상등 CAN 테스트」와 같은 조건에서만 켜집니다(아이오닉5 PE). 재부팅하면 꺼집니다.",
+      "egroup": "Joongyu Lab",
+      "etitle": "Remote hazard lights (caution)",
+      "edescr": "Caution: test feature. Default off.\n1: pressing the Bluetooth remote's left and right blinker buttons within 0.5 s turns Hazard Lights CAN Test (CanfdHazardTest) on; pressing both again turns it off.\n- While on, a single blinker button blinks 0.5 s later (it waits for the other one).\n- The hazard lights come on only where Hazard Lights CAN Test works (Ioniq 5 PE). A reboot turns them off.",
+      "cgroup": "Joongyu Lab",
+      "ctitle": "遥控危险警示灯（注意）",
+      "cdescr": "注意: 测试功能。默认关闭。\n1: 在 0.5 秒内同时按下蓝牙遥控器的左、右转向灯按钮打开「危险警示灯 CAN 测试」(CanfdHazardTest), 再同时按一次关闭。\n- 开启后单独按一个转向灯按钮会延迟 0.5 秒闪烁(等待另一侧)。\n- 危险警示灯仅在「危险警示灯 CAN 测试」有效的条件下点亮(Ioniq 5 PE)。重启后熄灭。",
+      "min": 0,
+      "max": 1,
+      "default": 0,
+      "unit": 1,
+      "control": "toggle",
+      "risk": "high"
     },
     {
       "group": "Joongyu Lab",

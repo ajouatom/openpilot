@@ -220,7 +220,7 @@ def test_fixed_tuning_catalog_hides_longitudinal_pid_settings(settings, brand):
   hidden = {"LongTuningKpV", "LongTuningKiV", "LongTuningKf"}
 
   filtered_groups, filtered_groups_list, filtered_categories, hidden_names = filter_settings_catalog_for_brand(
-    groups, groups_list, categories, brand,
+    groups, groups_list, categories, brand, car_fingerprint="HYUNDAI_IONIQ_9",  # car tests visible: brand rule only
   )
   visible_names = {item["name"] for items in filtered_groups.values() for item in items}
   menu_names = {
@@ -245,7 +245,7 @@ def test_other_brands_keep_longitudinal_pid_settings(settings):
   groups, by_name, groups_list = group_index(settings)
   categories = build_menu_categories(settings, by_name)
   filtered_groups, _filtered_groups_list, _filtered_categories, hidden_names = filter_settings_catalog_for_brand(
-    groups, groups_list, categories, "gm",
+    groups, groups_list, categories, "gm", car_fingerprint="HYUNDAI_IONIQ_9",
   )
   visible_names = {item["name"] for items in filtered_groups.values() for item in items}
 
@@ -295,7 +295,7 @@ def test_ray_pedal_catalog_uses_identified_capability(settings, fingerprint, ped
   groups, by_name, groups_list = group_index(settings)
   categories = build_menu_categories(settings, by_name)
   filtered, counts, menu, hidden = filter_settings_catalog_for_brand(
-    groups, groups_list, categories, brand, ray_pedal_control=active_pedal)
+    groups, groups_list, categories, brand, ray_pedal_control=active_pedal, car_fingerprint="HYUNDAI_IONIQ_9")
   tuning = {"LongTuningKpV", "LongTuningKiV", "LongTuningKf"}
   visible = {item["name"] for items in filtered.values() for item in items}
   menu_names = {name for category in menu for group in category["groups"]
@@ -754,3 +754,20 @@ def test_declared_nonzero_min_and_zero_labels_are_well_formed(params):
       assert item['min'] == item['default'] == 0
       assert 0 < item['nonzero_min'] <= item['max']
       assert set(item['zero_label']) == {'ko', 'en', 'zh'}
+
+
+@pytest.mark.parametrize("fingerprint, shown", [("HYUNDAI_IONIQ_9", True), ("hyundai_ioniq_9", True),
+                                                ("HYUNDAI_IONIQ_5_PE", False), ("", False)])
+def test_visible_cars_shows_a_car_test_only_on_that_car(settings, fingerprint, shown):
+  # Ioniq9ClusterTest carries visible_cars: listed only for that fingerprint, and hidden while the car is unknown
+  groups, by_name, groups_list = group_index(settings)
+  categories = build_menu_categories(settings, by_name)
+  filtered_groups, _groups_list, filtered_categories, hidden_names = filter_settings_catalog_for_brand(
+    groups, groups_list, categories, "hyundai", car_fingerprint=fingerprint,
+  )
+  visible = {item["name"] for items in filtered_groups.values() for item in items}
+  menu = {name for category in filtered_categories for group in category["groups"] for section in group["sections"]
+          for name in section["items"]}
+  assert ("Ioniq9ClusterTest" in visible) == shown and ("Ioniq9ClusterTest" in menu) == shown
+  assert ("Ioniq9ClusterTest" in hidden_names) != shown
+

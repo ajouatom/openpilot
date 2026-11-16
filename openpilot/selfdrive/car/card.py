@@ -83,6 +83,9 @@ def can_comm_callbacks(logcan: messaging.SubSocket, sendcan: messaging.PubSocket
   return can_recv, can_send
 
 
+REMOTE_HAZARD_WINDOW = 0.5  # s: left and right remote blinker presses this close toggle the hazard lights
+
+
 class Car:
   CI: CarInterfaceBase
   CP: car.CarParams
@@ -157,6 +160,7 @@ class Car:
     # Bluetooth remote blinkerLeft/Right: Hyundai blinks it natively (carcontroller Kick path, any gear). The Jetson
     # USB2CAN path (tools/jetlink/blink_source.py) reads the same journal on its own; readers do not consume events.
     self.remote_blinker = CommandReader('blinker') if hasattr(self.CI.CC, 'remote_blinker') else None
+    self.remote_blink_pending = None  # (side, time): RemoteHazard holds a single press to see if the other side follows
     self.spas_signal_status = None
     self.spas_signal_log_at = 0.
     self.aprk_diag = AprkDiag(self.CP, self.params, HARDWARE.get_device_type(), cloudlog.event)
@@ -234,6 +238,26 @@ class Car:
                    stalk_counts=(CS.leftBlinkerStalkCount, CS.rightBlinkerStalkCount))
     self.tesla_signal_status = self.tesla_signals.status
     self.tesla_signal_log_ns = now
+
+  def remote_blinker_update(self, now):
+    """Bluetooth remote blinker buttons -> Hyundai carcontroller (remote_blinker 3 left / 4 right).
+    RemoteHazard on: left and right within REMOTE_HAZARD_WINDOW toggle CanfdHazardTest (Joongyu Lab hazard lights CAN
+    test, 0x1ea bit 104), so a single press waits that long before it blinks. RemoteHazard off: every press blinks."""
+    side = {'blinkerLeft': 3, 'blinkerRight': 4}.get(self.remote_blinker.read())
+    pending, CC = self.remote_blink_pending, self.CI.CC
+    if side is None:
+      if pending and now - pending[1] > REMOTE_HAZARD_WINDOW:
+        CC.remote_blinker, self.remote_blink_pending = pending[0], None
+      return
+    if pending and pending[0] != side and now - pending[1] <= REMOTE_HAZARD_WINDOW:
+      self.params.put_int_nonblocking("CanfdHazardTest", 0 if self.params.get_int("CanfdHazardTest") == 1 else 1)
+      self.remote_blink_pending = None
+    elif self.params.get_bool("RemoteHazard"):
+      if pending:
+        CC.remote_blinker = pending[0]  # an earlier press the other side did not follow
+      self.remote_blink_pending = (side, now)
+    else:
+      CC.remote_blinker, self.remote_blink_pending = side, None
 
   def state_update(self) -> car.CarState:
     """carState update loop, driven by can"""
@@ -472,8 +496,8 @@ class Car:
                       all(self.sm.valid[k] and self.sm.alive[k] and 0 <= time.monotonic()-self.sm.recv_time[k] < .2
                           for k in ('carControl', 'modelV2')))
         self.CI.CC.kick_output_ready = self.kick_output.update(kick_valid, time.monotonic())
-      if self.remote_blinker is not None and (action := self.remote_blinker.read()) in ('blinkerLeft', 'blinkerRight'):
-        self.CI.CC.remote_blinker = 3 if action == 'blinkerLeft' else 4
+      if self.remote_blinker is not None:
+        self.remote_blinker_update(time.monotonic())
       self.last_actuators_output, can_sends = self.CI.apply(CC, now_nanos, model_v2, radar_state)
       if self.aprk_diag.busy:
         can_sends = [m for m in can_sends if m[0] not in APRK_DIAG_RESERVED]
