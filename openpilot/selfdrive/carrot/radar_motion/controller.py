@@ -524,17 +524,23 @@ class RadarLeadDynamics:
 # joongyu01 11-17 (RadarCutInLoadShed): what radard leaves out of the cut-in work while it is falling behind.
 # IONIQ 9 7465eee5 route 4cd seg26-27 (rain, 8 km/h jam): below ~18 km/h guardrail/rain reflections pass the
 # |v_rel| <= 5 m/s motion filter, so ~27 points per frame went through TrajectoryCutInDetector (2-8 in every other log)
-# and radard dropped to 16-17 Hz -> commIssue. Replay over the local logs: dropping ground-stationary points and points
-# beyond CUTIN_MAX_DREL_M cuts radard ~34 % on that segment (02_logs/measurements.md s65). The primary lead is always kept.
+# and radard dropped to 16-17 Hz -> commIssue. Replay over 41 local segments with shedding forced on every frame:
+# dropping ground-stationary points and points beyond CUTIN_MAX_DREL_M cuts radard 32-34 % on that segment, but the
+# 45 m rule cut the history of the one real cut-in in the logs (99 km/h, first seen at 42 m) and lost it; with the
+# 45 m rule only below 50 km/h no candidate, risk, confirmed cut-in or radarState lead changed anywhere and the saving
+# stays (the overload was at 5-20 km/h). Stationary points are already outside the motion filter above ~18 km/h.
+# The primary lead is always kept (02_logs/measurements.md s65).
 SHED_STATIONARY_V_LEAD = 1.0  # m/s over ground
 SHED_MAX_DREL_M = 45.0  # = trajectory_cutin.CUTIN_MAX_DREL_M
+SHED_FAR_MAX_V_EGO = 50.0 / 3.6  # the 45 m rule only below 50 km/h
 
 
-def shed_cutin_points(points: Any, lead_one: Any) -> tuple:
+def shed_cutin_points(points: Any, lead_one: Any, v_ego: float) -> tuple:
   primary = int(lead_one.get("radarTrackId", -1)) if lead_one else -1
+  max_d_rel = SHED_MAX_DREL_M if v_ego < SHED_FAR_MAX_V_EGO else float("inf")
   return tuple(
     point for point in points
-    if point.track_id == primary or (abs(point.v_lead) >= SHED_STATIONARY_V_LEAD and point.d_rel <= SHED_MAX_DREL_M)
+    if point.track_id == primary or (abs(point.v_lead) >= SHED_STATIONARY_V_LEAD and point.d_rel <= max_d_rel)
   )
 
 
@@ -1255,7 +1261,7 @@ class DPathRadarController:
     estimates = self.trajectory_cutin.update(
       time_s,
       v_ego,
-      shed_cutin_points(motion_points, lead_one) if self.cutin_load_shed else motion_points,
+      shed_cutin_points(motion_points, lead_one, v_ego) if self.cutin_load_shed else motion_points,
       path,
       model,
       yaw_rate_rad_s=yaw_rate_rad_s,

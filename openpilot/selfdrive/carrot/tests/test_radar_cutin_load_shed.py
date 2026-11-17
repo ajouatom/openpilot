@@ -42,6 +42,13 @@ def point(track_id, d_rel, v_lead):
 
 def test_shed_keeps_moving_near_points_and_the_primary_lead():
   pts = (point(1, 20., 0.2), point(2, 30., 3.0), point(3, 60., 3.0), point(4, 10., -0.5), point(5, 70., 0.0))
-  kept = shed_cutin_points(pts, {"radarTrackId": 5})
+  kept = shed_cutin_points(pts, {"radarTrackId": 5}, 30 / 3.6)
   assert [p.track_id for p in kept] == [2, 5]  # stationary 1/4 and far 3 out; lead 5 kept although far and still
-  assert [p.track_id for p in shed_cutin_points(pts, None)] == [2]
+  assert [p.track_id for p in shed_cutin_points(pts, None, 30 / 3.6)] == [2]
+
+
+def test_far_points_stay_at_50_kph_and_above():
+  # replay: the 45 m rule lost the only real cut-in in the logs (99 km/h, first seen at 42 m)
+  pts = (point(1, 20., 0.2), point(3, 60., 25.0))
+  assert [p.track_id for p in shed_cutin_points(pts, None, 50 / 3.6)] == [3]
+  assert [p.track_id for p in shed_cutin_points(pts, None, 49 / 3.6)] == []
