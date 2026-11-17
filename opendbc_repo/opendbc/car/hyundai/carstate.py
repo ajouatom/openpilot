@@ -47,7 +47,9 @@ SPEEDCAM_SKIP_MIN_SPEED = 5.0  # m/s; below this + keeps its resume/set-speed ro
 SPEEDCAM_GAS_TOK_FRAMES = 40   # matches cruise.py _gas_tok_timer (0.4 s at 100 Hz)
 VEHICLE_NAVI_ROUTE_TIMEOUT_NS = 2_000_000_000
 CANFD_HDA_INFO_MSG = "CANFD_HDA_INFO_364"
+CANFD_NAVI_POSITION_MSG = "CANFD_NAVI_POSITION_092"
 CANFD_NAVI_PROFILE_MSG = "CANFD_NAVI_PROFILE_093"
+CANFD_NAVI_SEGMENT_MSG = "CANFD_NAVI_SEGMENT_099"
 CANFD_NAVI_STATUS_MSG = "CANFD_NAVI_STATUS_380"
 CANFD_NAVI_CAMERA_ACTIVE_BIT = 0x40
 CANFD_NAVI_STATUS_TIMEOUT_NS = 1_000_000_000
@@ -206,7 +208,11 @@ class CarState(CarStateBase):
     self.adrv_0x160 = None
     self.ccnc_0x162 = None
     self.canfd_wrapped_navi = CP.carFingerprint == CAR.KIA_PV5
-    self.navi_profile_msg = CANFD_NAVI_PROFILE_MSG if self.canfd_wrapped_navi else "NEW_MSG_4BE"
+    self.canfd_wrapped_navi_full = CP.carFingerprint == CAR.KIA_EV4
+    self.hda_info_msg = CANFD_HDA_INFO_MSG if (self.canfd_wrapped_navi or self.canfd_wrapped_navi_full) else "HDA_INFO_4A3"
+    self.navi_position_msg = CANFD_NAVI_POSITION_MSG if self.canfd_wrapped_navi_full else "NEW_MSG_4B4"
+    self.navi_segment_msg = CANFD_NAVI_SEGMENT_MSG if self.canfd_wrapped_navi_full else "NEW_MSG_4B9"
+    self.navi_profile_msg = CANFD_NAVI_PROFILE_MSG if (self.canfd_wrapped_navi or self.canfd_wrapped_navi_full) else "NEW_MSG_4BE"
     self.vehicleNaviZoneControlSupported = not self.canfd_wrapped_navi  # Legacy kind-7 profile zones only
     self.hda_info_4a3 = None
     self.navi_position_4b4 = None
@@ -526,10 +532,10 @@ class CarState(CarStateBase):
             if self.cp_alt is not None:
               add_and_cache(self.cp_alt, CANFD_NAVI_STATUS_MSG, "navi_status_380")
           else:
-            add_and_cache(self.cp, "HDA_INFO_4A3", "hda_info_4a3")
-            add_and_cache(self.cp, "NEW_MSG_4B4", "navi_position_4b4")
-            add_and_cache(self.cp, "NEW_MSG_4B9", "navi_segment_4b9")
-            add_and_cache(self.cp, "NEW_MSG_4BE", "navi_profile_4be")
+            add_and_cache(self.cp, self.hda_info_msg, "hda_info_4a3")
+            add_and_cache(self.cp, self.navi_position_msg, "navi_position_4b4")
+            add_and_cache(self.cp, self.navi_segment_msg, "navi_segment_4b9")
+            add_and_cache(self.cp, self.navi_profile_msg, "navi_profile_4be")
           add_and_cache(self.cp, "STEER_TOUCH_2AF", "steer_touch_2af")
         elif self.controls_ready_count == 124:
           add_and_cache(self.cp, self.cruise_btns_msg_canfd, "cruise_buttons_msg")
@@ -1182,7 +1188,8 @@ class CarState(CarStateBase):
     if self.canfd_wrapped_navi:
       self._update_pv5_navi_section(cp, cp_alt)
     profile_timestamp = self._vehicle_navi_message_timestamp(cp, self.navi_profile_msg)
-    self.vehicleNaviAvailable = self.vehicleNaviAvailable or profile_timestamp > 0 or self.vehicleNaviSpeedZoneActive
+    hda_timestamp = self._vehicle_navi_message_timestamp(cp, self.hda_info_msg) if (self.canfd_wrapped_navi or self.canfd_wrapped_navi_full) else 0
+    self.vehicleNaviAvailable = self.vehicleNaviAvailable or profile_timestamp > 0 or hda_timestamp > 0 or self.vehicleNaviSpeedZoneActive
     ret.vehicleNaviAvailable = self.vehicleNaviAvailable
     self.vehicleNaviCameraTarget = None
 
@@ -1198,7 +1205,7 @@ class CarState(CarStateBase):
     # average speed is zero outside a section-camera zone and valid inside it.
     # It is therefore authoritative for the *current* section state; 0x4BE is
     # sparse future spot data and must not be used alone to hold this state.
-    position_timestamp = self._vehicle_navi_message_timestamp(cp, "NEW_MSG_4B4")
+    position_timestamp = self._vehicle_navi_message_timestamp(cp, self.navi_position_msg)
     position_seen = position_timestamp > 0
     position_age = getattr(cp, "_last_update_nanos", position_timestamp) - position_timestamp
     position_recent = position_seen and 0 <= position_age <= VEHICLE_NAVI_POSITION_TIMEOUT_NS
@@ -1207,8 +1214,8 @@ class CarState(CarStateBase):
     range_section_active = 0 < range_avg_speed < 511
 
     if self.navi_segment_4b9 is not None:
-      timestamp = self._vehicle_navi_message_timestamp(cp, "NEW_MSG_4B9")
-      if timestamp > self.vehicleNaviSegmentTimestamp:
+      timestamp = self._vehicle_navi_message_timestamp(cp, self.navi_segment_msg)
+      if timestamp > self.vehicleNaviSegmentTimestamp and not all(int(self.navi_segment_4b9.get(f"BYTE_{i + 1}", 0)) == 0xff for i in range(8)):
         self.vehicleNaviSegmentTimestamp = timestamp
         segment = self._decode_vehicle_navi_segment(self.navi_segment_4b9)
         previous_route_state = self.vehicleNaviRouteState
@@ -1740,9 +1747,17 @@ class CarState(CarStateBase):
     # Register stock-navigation position/route/profile messages as optional
     # from startup so dynamic fingerprint timing cannot miss sparse profiles.
     wrapped_navi = CP.carFingerprint == CAR.KIA_PV5
-    msgs = ([(CANFD_HDA_INFO_MSG, math.nan), (CANFD_NAVI_PROFILE_MSG, math.nan)] if wrapped_navi else
-            [("NEW_MSG_4B4", math.nan), ("NEW_MSG_4B9", math.nan), ("NEW_MSG_4BE", math.nan)])
-    alt_msgs = [(CANFD_NAVI_STATUS_MSG, math.nan)] if wrapped_navi else []
+    wrapped_navi_full = CP.carFingerprint == CAR.KIA_EV4
+    if wrapped_navi:
+      msgs = [(CANFD_HDA_INFO_MSG, math.nan), (CANFD_NAVI_PROFILE_MSG, math.nan)]
+      alt_msgs = [(CANFD_NAVI_STATUS_MSG, math.nan)]
+    elif wrapped_navi_full:
+      msgs = [(CANFD_HDA_INFO_MSG, math.nan), (CANFD_NAVI_POSITION_MSG, math.nan),
+              (CANFD_NAVI_SEGMENT_MSG, math.nan), (CANFD_NAVI_PROFILE_MSG, math.nan)]
+      alt_msgs = []
+    else:
+      msgs = [("NEW_MSG_4B4", math.nan), ("NEW_MSG_4B9", math.nan), ("NEW_MSG_4BE", math.nan)]
+      alt_msgs = []
     if not (CP.flags & HyundaiFlags.CANFD_ALT_BUTTONS):
       # TODO: this can be removed once we add dynamic support to vl_all
       msgs += [
