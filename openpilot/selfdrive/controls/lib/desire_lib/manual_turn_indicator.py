@@ -1,5 +1,6 @@
 """Driver turn observations used exclusively by the physical-indicator path."""
 import math
+from collections import deque
 from openpilot.selfdrive.controls.lib.desire_lib.boundary_lane import MANUAL_INDICATOR_MIN_SPEED
 
 
@@ -46,6 +47,7 @@ class ManualTurnIndicator:
     self.confirmed_since = None
     self.candidate = None
     self.reason = 'idle'
+    self.recent_angles = deque()
 
   def reset(self, reason):
     self.previous = None
@@ -56,8 +58,9 @@ class ManualTurnIndicator:
     self.confirmed_since = None
     self.candidate = None
     self.reason = reason
+    self.recent_angles.clear()
 
-  def update(self, now, cs, frame, yaw_rate, *, allowed, following_curve=False):
+  def update(self, now, cs, frame, yaw_rate, *, allowed, following_curve=False, emit_allowed=True, require_growth=False):
     self.candidate = None
     if (not allowed or yaw_rate is None or not all(math.isfinite(v) for v in
         (now, yaw_rate, cs.vEgo, cs.steeringAngleDeg, cs.steeringTorque)) or not MANUAL_INDICATOR_MIN_SPEED <= cs.vEgo <= 60 / 3.6):
@@ -88,6 +91,14 @@ class ManualTurnIndicator:
       self.reset('driver')
       return None
     sign = 1 if self.intent == 1 else -1
+    self.recent_angles.append((now, cs.steeringAngleDeg))
+    while self.recent_angles and now-self.recent_angles[0][0] > .25:
+      self.recent_angles.popleft()
+    if not emit_allowed:
+      # Bridge only the last quarter-second of the rearm boundary. Reusing a
+      # whole completed steering sweep can indicate a later alignment motion.
+      self.initial_angle = sign * max(self.initial_angle * sign,
+                                     min(angle * sign for _, angle in self.recent_angles))
     # A driver may relax the wheel, then resume the same turn after takeover.
     # Measure renewed growth from that admitted motion within this intent.
     if direction == self.intent and cs.steeringAngleDeg * sign < self.initial_angle * sign:
@@ -103,9 +114,10 @@ class ManualTurnIndicator:
     self.reason = 'confirming'
     turn = (self.intent_confirmed and cs.steeringAngleDeg * sign >= 42 and
             (cs.steeringAngleDeg - self.initial_angle) * sign >= 22 and
-            signed_yaw >= math.radians(3) and self.rotation >= math.radians(1.5))
+            signed_yaw >= math.radians(3) and self.rotation >= math.radians(1.5) and
+            (not require_growth or direction == self.intent and (cs.steeringAngleDeg-previous[2])*sign > 0))
     self.confirmed_since = (now if self.confirmed_since is None else self.confirmed_since) if turn else None
-    if self.confirmed_since is not None and now - self.confirmed_since >= .10:
+    if emit_allowed and self.confirmed_since is not None and now - self.confirmed_since >= .10:
       movement = ManualTurnMovement(now, self.intent)
       self.reset('manual_turn')
       return movement
