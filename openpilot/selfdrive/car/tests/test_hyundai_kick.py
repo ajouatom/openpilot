@@ -415,6 +415,10 @@ def test_native_waits_for_external_release_and_receiver_expiry(output, tmp_path,
   clock[0] += .1
   assert not gate.update(True, clock[0])
   clock[0] += GRACE
+  assert not gate.update(True, clock[0])  # Ownership alone cannot admit CAN output.
+  assert gate.owner.held
+  clock[0] += .18
+  prime_contract(gate, clock[0])
   assert gate.update(True, clock[0])
   assert not external.acquire(True)
   values['CanfdBlinkerKick'] = False
