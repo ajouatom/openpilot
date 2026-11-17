@@ -51,6 +51,141 @@ pub fn compatible_with(size: impl Fn(u32) -> Option<usize>) -> bool {
         .all(|(address, expected)| size(*address) == Some(*expected))
 }
 
+/// Neither SPAS message exists: a car without APRK (HDA1). Only the parked
+/// no-stock trial (CanfdBlinkerTest 19/20) can run on it; the acknowledged
+/// session needs stock frames and never starts.
+pub fn absent_with(size: impl Fn(u32) -> Option<usize>) -> bool {
+    SPAS.iter().all(|(address, _)| size(*address).is_none())
+}
+
+/// SPAS2 direction during a no-stock trial of `length` seconds. With no
+/// stock APRK nothing returns BLINKER_CONTROL to 0, and the body controller
+/// flashes the previously seen direction once on the next start (owner's
+/// IONIQ 5 PE, 2026-11-16: right-then-left, left-then-right). Lead and end
+/// with 0.2 s of zero frames, as a stock APRK would send.
+pub fn solo_direction(
+    elapsed: f64,
+    length: f64,
+    direction: Option<Direction>,
+) -> Option<Direction> {
+    if (SOLO_ZERO..length - SOLO_ZERO).contains(&elapsed) {
+        direction
+    } else {
+        None
+    }
+}
+const SOLO_ZERO: f64 = 0.2;
+
+/// Panda (phase 11) revokes a driving lease at 30 s.
+pub const SOLO_DRIVE_MAX: f64 = 29.5;
+const SOLO_TAIL: f64 = 0.3;
+/// Panda: a 0.5 s tail from its revocation, then 1 s before the next lease.
+const SOLO_COOLDOWN: f64 = 1.5;
+/// A lane change (or an input) may drop out this long without ending the
+/// lease; a driver's lever, a side change or the limit end it at once.
+const SOLO_GRACE: f64 = 0.3;
+
+/// Driving SPAS indicator for a car with no stock SPAS sender: the lamp
+/// follows an automatic lane change until it completes, then ends with
+/// zero-direction frames (see `solo_direction`).
+#[derive(Default, Debug)]
+pub struct SoloDrive {
+    side: Option<Direction>,
+    started: f64,
+    tail_until: f64,
+    cooldown_until: f64,
+    next: f64,
+    counter: [u8; 2],
+    /// A lease reached SOLO_DRIVE_MAX; wait for the lane change to end.
+    expired: bool,
+    lost_since: Option<f64>,
+    pub status: &'static str,
+    /// Why the last lease ended.
+    pub ended: &'static str,
+}
+
+impl SoloDrive {
+    /// `want`: the lane change direction while one is under way. `allowed`:
+    /// fresh, healthy inputs (`reason` says which failed). `driver`: the
+    /// driver's lever or hazard, which ends a lease at once. Returns the side
+    /// of a newly started lease (to record lamp ownership) and the frames.
+    pub fn update(
+        &mut self,
+        now: f64,
+        want: Option<Direction>,
+        allowed: bool,
+        driver: bool,
+        reason: &'static str,
+        bus: u8,
+    ) -> (Option<Direction>, Vec<Frame>) {
+        if want.is_none() {
+            self.expired = false;
+        }
+        let go = allowed && !driver && want.is_some() && !self.expired;
+        let mut started = None;
+        if let Some(side) = self.side {
+            let timed_out = now - self.started >= SOLO_DRIVE_MAX;
+            let switched = want.is_some() && want != Some(side);
+            if go && want == Some(side) && !timed_out {
+                self.lost_since = None;
+            } else {
+                let since = *self.lost_since.get_or_insert(now);
+                if driver || timed_out || switched || now - since >= SOLO_GRACE {
+                    self.expired |= timed_out;
+                    self.ended = if driver {
+                        "driver"
+                    } else if timed_out {
+                        "limit"
+                    } else if switched {
+                        "side"
+                    } else {
+                        reason
+                    };
+                    self.side = None;
+                    self.lost_since = None;
+                    self.tail_until = now + SOLO_TAIL;
+                    self.cooldown_until = self.tail_until + SOLO_COOLDOWN;
+                    self.status = "tail";
+                }
+            }
+        } else if go && now >= self.cooldown_until {
+            self.side = want;
+            self.started = now;
+            self.next = now;
+            self.lost_since = None;
+            self.status = "active";
+            started = want;
+        }
+        if self.side.is_none() && now >= self.tail_until {
+            if self.status == "tail" {
+                self.status = "idle";
+            }
+            return (started, Vec::new());
+        }
+        if now < self.next {
+            return (started, Vec::new());
+        }
+        // At least 20 ms apart: Panda refuses frames closer than 15 ms, and
+        // USB batching can bring two closer together than they were sent.
+        self.next = now + 0.02;
+        let frames = SPAS
+            .iter()
+            .enumerate()
+            .map(|(i, (address, _))| {
+                let counter = self.counter[i];
+                self.counter[i] = counter.wrapping_add(1);
+                frame(*address, counter, self.side, bus)
+            })
+            .collect();
+        (started, frames)
+    }
+
+    /// Sending: a lease or its tail.
+    pub fn busy(&self) -> bool {
+        self.side.is_some() || self.status == "tail"
+    }
+}
+
 /// Both SPAS messages exist on `bus` with their exact lengths.
 pub fn compatible(fingerprint: &BTreeMap<u8, BTreeMap<u32, usize>>, bus: u8) -> bool {
     SPAS.iter().all(|(address, size)| {
@@ -236,6 +371,14 @@ impl Session {
                 self.reply = Some((now, data[1..1 + n].to_vec()));
             }
         }
+    }
+
+    /// No stock SPAS sender: neither message valid for 1 s (HDA1 cars
+    /// without APRK). Panda's `hyundai_spas_stock_absent` uses the same bound.
+    pub fn stock_absent(&self, now: f64) -> bool {
+        self.stock
+            .iter()
+            .all(|s| !(0. ..1.).contains(&(now - s.stamp)))
     }
 
     pub fn stock_ready(&self, now: f64) -> bool {

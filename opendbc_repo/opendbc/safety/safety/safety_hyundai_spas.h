@@ -17,6 +17,11 @@ static bool hyundai_spas_park_value[3], hyundai_spas_trial_used, hyundai_spas_st
 static bool hyundai_spas_patch_candidate, hyundai_spas_patch_present;
 static uint8_t hyundai_stalk_latest[8], hyundai_stalk_original[8];
 static uint32_t hyundai_stalk_tx_at;
+// No stock SPAS sender (HDA1, no APRK): a driving lease (phase 11) and the
+// zero-direction tail that ends every no-stock lease (phase 12).
+static uint32_t hyundai_spas_drive_at, hyundai_spas_drive_end, hyundai_spas_tail_at;
+static uint8_t hyundai_spas_tail_next;
+static bool hyundai_spas_drive_used;
 
 static void hyundai_spas_init(bool enabled, int bus) {
   hyundai_spas_enabled = enabled;
@@ -27,6 +32,9 @@ static void hyundai_spas_init(bool enabled, int bus) {
   hyundai_spas_trial_used = hyundai_spas_stock_idle = false;
   hyundai_spas_trial_direction = 0U;
   hyundai_spas_patch_candidate = hyundai_spas_patch_present = false;
+  hyundai_spas_drive_at = hyundai_spas_drive_end = hyundai_spas_tail_at = 0U;
+  hyundai_spas_tail_next = 0U;
+  hyundai_spas_drive_used = false;
   for (int i = 0; i < 3; i++) {
     hyundai_spas_park_at[i] = hyundai_spas_park_count[i] = 0U;
     hyundai_spas_park_value[i] = false;
@@ -69,6 +77,39 @@ static bool hyundai_spas_park_guard(uint32_t now) {
     }
   }
   return ready;
+}
+
+// No stock SPAS sender (HDA1 cars without APRK): neither message for 1 s.
+static bool hyundai_spas_stock_absent(uint32_t now) {
+  bool absent = true;
+  for (int i = 0; i < 2; i++) {
+    absent = absent && ((hyundai_spas_rx_count[i] == 0U) || (get_ts_elapsed(now, hyundai_spas_rx_at[i]) >= 1000000U));
+  }
+  return absent;
+}
+
+static bool hyundai_spas_solo_ready(uint32_t now) {
+  return hyundai_spas_park_guard(now) && hyundai_spas_stock_absent(now);
+}
+
+// Fresh, CRC-checked 0x3C1 lever frames with no indicator input.
+static bool hyundai_spas_stalk_idle(uint32_t now) {
+  return hyundai_spas_park_value[2] && (hyundai_spas_park_count[2] >= 3U) &&
+         (get_ts_elapsed(now, hyundai_spas_park_at[2]) < 500000U);
+}
+
+// Driving lease: no stock sender and the driver is not using the lever.
+static bool hyundai_spas_drive_ready(uint32_t now) {
+  return hyundai_spas_stalk_idle(now) && hyundai_spas_stock_absent(now) && !relay_malfunction;
+}
+
+// End a no-stock lease. With no stock sender returning BLINKER_CONTROL to 0,
+// the body controller keeps the last direction and replays it on the next
+// start, so for 0.5 s only zero-direction frames pass.
+static void hyundai_spas_tail(uint32_t now, uint8_t next) {
+  hyundai_spas_phase = 12U;
+  hyundai_spas_tail_at = now;
+  hyundai_spas_tail_next = next;
 }
 
 static bool hyundai_spas_park_ready(uint32_t now) {
@@ -163,6 +204,18 @@ static void hyundai_spas_rx(const CANPacket_t *pkt, uint32_t now) {
         hyundai_spas_phase = 7U;
       }
     }
+    if ((hyundai_spas_phase == 10U) && (!hyundai_spas_solo_ready(now) ||
+        (get_ts_elapsed(now, hyundai_spas_trial_at) >= 3000000U))) {
+      hyundai_spas_tail(now, 7U);  // a stock sender appeared, the car moved, or 3 s passed
+    }
+    if ((hyundai_spas_phase == 11U) && (!hyundai_spas_drive_ready(now) ||
+        (get_ts_elapsed(now, hyundai_spas_drive_at) >= 30000000U))) {
+      hyundai_spas_drive_end = now;
+      hyundai_spas_tail(now, 0U);  // lever input, a stock sender, or 30 s
+    }
+    if ((hyundai_spas_phase == 12U) && (get_ts_elapsed(now, hyundai_spas_tail_at) >= 500000U)) {
+      hyundai_spas_phase = hyundai_spas_tail_next;
+    }
     if ((hyundai_spas_phase == 7U) && (get_ts_elapsed(now, hyundai_spas_trial_at) >= 30000000U)) {
       hyundai_spas_phase = 0U;
     }
@@ -220,7 +273,8 @@ static bool hyundai_spas_tx(const CANPacket_t *pkt, uint32_t now) {
   if ((addr == 0x7B1) && ok) {
     ok = (GET_LEN(pkt) == 8) && (GET_BYTES(pkt, 4, 4) == 0U);
     uint32_t cmd = GET_BYTES(pkt, 0, 4);
-    if (((hyundai_spas_phase == 6U) || (hyundai_spas_phase == 7U)) && !(ok && (cmd == 0x00011002U))) {
+    if (((hyundai_spas_phase == 6U) || (hyundai_spas_phase == 7U) || (hyundai_spas_phase >= 10U)) &&
+        !(ok && (cmd == 0x00011002U))) {
       return false;
     }
     if (ok && ((cmd == 0x01002803U) || (cmd == 0x00011002U))) {
@@ -275,7 +329,49 @@ static bool hyundai_spas_tx(const CANPacket_t *pkt, uint32_t now) {
     }
   } else if (ok && ((addr == 0x165) || (addr == 0x16A))) {
     int idx = (addr == 0x165) ? 0 : 1;
+    // The host ended its driving lease (it stopped sending): close it here too,
+    // so the next lane change can arm again instead of failing the 200 ms rule.
+    if (((hyundai_spas_phase == 11U) || (hyundai_spas_phase == 12U)) && hyundai_spas_tx_seen[idx] &&
+        (get_ts_elapsed(now, hyundai_spas_tx_at[idx]) >= 200000U)) {
+      if (hyundai_spas_phase == 11U) {
+        hyundai_spas_drive_end = hyundai_spas_tx_at[idx];
+      }
+      hyundai_spas_phase = (hyundai_spas_phase == 12U) ? hyundai_spas_tail_next : 0U;
+    }
     bool cooldown = !hyundai_spas_trial_used || (get_ts_elapsed(now, hyundai_spas_trial_at) >= 30000000U);
+    // Driving lease for a car with no stock SPAS sender, armed by an all-zero
+    // SPAS1 while the lever is idle; one direction, 30 s at most, 1 s apart.
+    bool drive_cooldown = !hyundai_spas_drive_used || (get_ts_elapsed(now, hyundai_spas_drive_end) >= 1000000U);
+    if (((hyundai_spas_phase == 0U) || (hyundai_spas_phase == 7U)) && drive_cooldown && (idx == 0) &&
+        !hyundai_spas_park_guard(now) && hyundai_spas_drive_ready(now)) {
+      bool arm = (GET_LEN(pkt) == 24) && hyundai_spas_crc(pkt);
+      for (int i = 3; i < GET_LEN(pkt); i++) {
+        arm = arm && (GET_BYTE(pkt, i) == 0U);
+      }
+      if (arm) {
+        hyundai_spas_phase = 11U;
+        hyundai_spas_drive_at = now;
+        hyundai_spas_drive_used = true;
+        hyundai_spas_trial_direction = 0U;
+        hyundai_spas_tx_seen[0] = hyundai_spas_tx_seen[1] = false;
+      }
+    }
+    // Parked three-second trial for a car with no stock SPAS sender: nothing to
+    // collide with. Armed by an all-zero SPAS1, as the stock-backed trial.
+    if (((hyundai_spas_phase == 0U) || (hyundai_spas_phase == 7U)) && cooldown &&
+        (idx == 0) && hyundai_spas_solo_ready(now)) {
+      bool arm = (GET_LEN(pkt) == 24) && hyundai_spas_crc(pkt);
+      for (int i = 3; i < GET_LEN(pkt); i++) {
+        arm = arm && (GET_BYTE(pkt, i) == 0U);
+      }
+      if (arm) {
+        hyundai_spas_phase = 10U;
+        hyundai_spas_trial_at = now;
+        hyundai_spas_trial_used = true;
+        hyundai_spas_trial_direction = 0U;
+        hyundai_spas_tx_seen[0] = hyundai_spas_tx_seen[1] = false;
+      }
+    }
     if (((hyundai_spas_phase == 0U) || (hyundai_spas_phase == 7U)) && cooldown &&
         (idx == 0) && hyundai_spas_park_ready(now)) {
       // Do not let a malformed arm packet consume or start the trial.
@@ -293,10 +389,30 @@ static bool hyundai_spas_tx(const CANPacket_t *pkt, uint32_t now) {
       }
     }
     bool patch = hyundai_spas_phase == 8U;
-    bool trial = (hyundai_spas_phase == 6U) || patch;
-    bool park_ready = patch ? (hyundai_spas_park_guard(now) && (get_ts_elapsed(now, hyundai_spas_alive) < 1500000U)) : hyundai_spas_park_ready(now);
-    if (trial && (!park_ready || (get_ts_elapsed(now, hyundai_spas_trial_at) >= 10000000U))) {
-      hyundai_spas_phase = 7U;
+    bool solo = hyundai_spas_phase == 10U;
+    bool drive = hyundai_spas_phase == 11U;
+    bool tail = hyundai_spas_phase == 12U;
+    bool trial = (hyundai_spas_phase == 6U) || patch || solo || drive;
+    bool park_ready = drive ? hyundai_spas_drive_ready(now) : (solo ? hyundai_spas_solo_ready(now) :
+                      (patch ? (hyundai_spas_park_guard(now) && (get_ts_elapsed(now, hyundai_spas_alive) < 1500000U)) : hyundai_spas_park_ready(now)));
+    uint32_t started = drive ? hyundai_spas_drive_at : hyundai_spas_trial_at;
+    uint32_t limit = drive ? 30000000U : (solo ? 3000000U : 10000000U);
+    if (trial && (!park_ready || (get_ts_elapsed(now, started) >= limit))) {
+      if (solo || drive) {
+        // This packet is judged as the first tail frame.
+        if (drive) {
+          hyundai_spas_drive_end = now;
+        }
+        hyundai_spas_tail(now, drive ? 0U : 7U);
+        trial = false;
+        tail = true;
+      } else {
+        hyundai_spas_phase = 7U;
+        return false;
+      }
+    }
+    if (tail && (get_ts_elapsed(now, hyundai_spas_tail_at) >= 500000U)) {
+      hyundai_spas_phase = hyundai_spas_tail_next;
       return false;
     }
     bool quiet = (get_ts_elapsed(now, hyundai_spas_rx_at[0]) >= 100000U) &&
@@ -305,7 +421,7 @@ static bool hyundai_spas_tx(const CANPacket_t *pkt, uint32_t now) {
         (get_ts_elapsed(now, hyundai_spas_phase_at) < 500000U)) {
       hyundai_spas_phase = 5U;
     }
-    ok = (trial || ((hyundai_spas_phase == 5U) && quiet &&
+    ok = (trial || tail || ((hyundai_spas_phase == 5U) && quiet &&
          (get_ts_elapsed(now, hyundai_spas_started) < 300000000U) &&
          (get_ts_elapsed(now, hyundai_spas_alive) < 1500000U))) && (GET_LEN(pkt) == ((idx == 0) ? 24 : 32));
     if (ok) {
@@ -316,9 +432,18 @@ static bool hyundai_spas_tx(const CANPacket_t *pkt, uint32_t now) {
         ok = ok && ((b == 0U) || indicator);
       }
       if (hyundai_spas_tx_seen[idx]) {
+        // The tail does not need counter continuity: the host learns of a
+        // revocation only after a refused frame has consumed its counter, and
+        // zero-direction frames command nothing.
         ok = ok && (get_ts_elapsed(now, hyundai_spas_tx_at[idx]) >= 15000U) &&
              (get_ts_elapsed(now, hyundai_spas_tx_at[idx]) < 200000U) &&
-             (GET_BYTE(pkt, 2) == ((hyundai_spas_tx_counter[idx] + 1U) & 0xFFU));
+             (tail || (GET_BYTE(pkt, 2) == ((hyundai_spas_tx_counter[idx] + 1U) & 0xFFU)) ||
+              // No-stock leases: a frame Panda refused (e.g. two arriving
+              // closer than 15 ms) still used its counter on the host.
+              ((solo || drive) && ((((uint8_t)(GET_BYTE(pkt, 2) - hyundai_spas_tx_counter[idx] - 1U)) & 0xFFU) < 3U)));
+      }
+      if (tail && (idx == 1)) {
+        ok = ok && (GET_BYTE(pkt, 16) == 0U);
       }
       if (trial && (idx == 1)) {
         uint8_t direction = GET_BYTE(pkt, 16);

@@ -162,13 +162,31 @@ pub(crate) fn down(paths: &Paths, os: &impl Commands) -> Result<(), Error> {
         if fields.len() == 2 && valid_interface(fields[0]) {
             let index = paths.net.join(fields[0]).join("ifindex");
             if index.try_exists()? && text(&index)? == fields[1] {
-                let output = platform::checked(
+                // The cable can be pulled between the ifindex check and `ip`:
+                // the interface and its address are then already gone, which
+                // is the state this cleanup wants (route 0000027e: jetlinkd
+                // died on `Cannot find device "usb0"`).
+                let gone = || !index.exists();
+                match platform::checked(
                     os,
                     "ip",
                     &["-o", "-4", "address", "show", "dev", fields[0]],
-                )?;
-                if output.contains(" 192.168.60.1/24 ") {
-                    platform::checked(os, "ip", &["address", "del", ADDRESS, "dev", fields[0]])?;
+                ) {
+                    Ok(output) if output.contains(" 192.168.60.1/24 ") => {
+                        match platform::checked(
+                            os,
+                            "ip",
+                            &["address", "del", ADDRESS, "dev", fields[0]],
+                        ) {
+                            Err(_) if gone() => {}
+                            other => {
+                                other?;
+                            }
+                        }
+                    }
+                    Ok(_) => {}
+                    Err(_) if gone() => {}
+                    Err(error) => return Err(error),
                 }
             }
         }
@@ -319,6 +337,49 @@ mod tests {
             .borrow()
             .iter()
             .any(|v| v.windows(2).any(|v| v == ["address", "del"])));
+    }
+    struct Unplugged {
+        index: std::path::PathBuf,
+    }
+    impl Commands for Unplugged {
+        fn run(&self, _program: &str, _args: &[String]) -> Result<Output, Error> {
+            // The cable goes between the ifindex check and `ip`.
+            let _ = fs::remove_dir_all(self.index.parent().unwrap());
+            Ok(Output {
+                code: 1,
+                stdout: "Cannot find device \"usb0\"".into(),
+            })
+        }
+    }
+    #[test]
+    fn network_cleanup_of_an_interface_unplugged_meanwhile_succeeds() {
+        let (_dir, paths) = fixture();
+        fs::create_dir_all(paths.net.join("usb0")).unwrap();
+        fs::write(paths.net.join("usb0/ifindex"), "9").unwrap();
+        fs::write(paths.state.join("interface"), "usb0 9").unwrap();
+        let os = Unplugged {
+            index: paths.net.join("usb0/ifindex"),
+        };
+        down(&paths, &os).unwrap();
+        assert!(!paths.state.join("interface").exists());
+    }
+    #[test]
+    fn network_cleanup_error_on_a_present_interface_is_kept() {
+        let (_dir, paths) = fixture();
+        fs::create_dir_all(paths.net.join("usb0")).unwrap();
+        fs::write(paths.net.join("usb0/ifindex"), "9").unwrap();
+        fs::write(paths.state.join("interface"), "usb0 9").unwrap();
+        struct Fails;
+        impl Commands for Fails {
+            fn run(&self, _program: &str, _args: &[String]) -> Result<Output, Error> {
+                Ok(Output {
+                    code: 1,
+                    stdout: "busy".into(),
+                })
+            }
+        }
+        assert!(down(&paths, &Fails).is_err());
+        assert!(paths.state.join("interface").exists());
     }
     #[test]
     fn firewall_inspection_error_retains_owned_state_and_refuses_cleanup() {

@@ -112,6 +112,7 @@ const CanMsg HYUNDAI_CANFD_HDA1_TX_MSGS[] = {
   {373, 2, 24}, // TCS(0x175)
   {234, 2, 24}, // MDPS
   {687, 2, 8}, // STEER_TOUCH_2AF
+  {0x4B9, 2, 8}, // NEW_MSG_4B9 corner-radar enabler; exact card frames only (tx hook)
 
 };
 
@@ -668,6 +669,18 @@ static bool hyundai_canfd_tx_hook(const CANPacket_t *to_send_const) {
     }
   }
 #endif
+
+  // NEW_MSG_4B9 on HDA1 (EnableCornerRadar): only the two fixed frames the
+  // card sends every 5 s. HDA2 longitudinal keeps carrot's unrestricted entry.
+  if ((addr == 0x4B9) && !hyundai_canfd_hda2) {
+    uint32_t lo = GET_BYTES(to_send, 0, 4);
+    uint32_t hi = GET_BYTES(to_send, 4, 4);
+    bool enable = (lo == 0x8A800000U) && (hi == 0x00013032U);
+    bool reset = (lo == 0xFFFFFFFFU) && (hi == 0xFFFFFFFFU);
+    if ((GET_BUS(to_send) != 2U) || !(enable || reset)) {
+      tx = false;
+    }
+  }
 
   // UDS: only tester present ("\x02\x3E\x80\x00\x00\x00\x00\x00") allowed on diagnostics address
   if ((addr == 0x730) && hyundai_canfd_hda2) {

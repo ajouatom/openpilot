@@ -1,9 +1,14 @@
+/// An encoder stream counts toward a rotation while its packets keep coming.
+const STREAM_ALIVE_NS: u64 = 2_000_000_000;
+
 #[derive(Default)]
 pub struct Rotation {
     pub ready: usize,
     pub last_rotation_ns: u64,
     pub last_camera_ns: u64,
     pub test_mode: bool,
+    /// Last packet time of each encoder stream (road, wide, driver, qcamera).
+    pub stream_seen_ns: [u64; 4],
 }
 
 impl Rotation {
@@ -20,8 +25,20 @@ impl Rotation {
         None
     }
 
+    /// Rotates once every encoder that is sending packets is ready. A camera
+    /// that never comes up (a C3X Lite or a failed driver camera sensor) is
+    /// not waited for: with four required, every segment ran to the 72 s
+    /// timeout while encoderd moved on every 60 s, the encoders ran further
+    /// ahead each segment and from the fifth segment on no video was written
+    /// at all (KIA K5 route 0000027e: no EncodeIdx in any rlog).
     pub fn due(&self, now_ns: u64) -> bool {
-        self.ready == 4 || self.timeout_reason(now_ns).is_some()
+        let alive = self
+            .stream_seen_ns
+            .iter()
+            .filter(|&&seen| seen != 0 && now_ns.saturating_sub(seen) < STREAM_ALIVE_NS)
+            .count();
+        let expected = if alive == 0 { 4 } else { alive };
+        self.ready >= expected || self.timeout_reason(now_ns).is_some()
     }
 }
 
@@ -37,6 +54,25 @@ mod tests {
         };
         let due = state.due(0);
         assert!(due);
+    }
+
+    #[test]
+    fn a_camera_without_packets_is_not_waited_for() {
+        let now = 30_000_000_000;
+        let mut state = Rotation {
+            ready: 3,
+            stream_seen_ns: [now - 10_000_000, now - 20_000_000, 0, now - 30_000_000],
+            ..Rotation::default()
+        };
+        assert!(state.due(now));
+        // A driver camera that stopped long ago does not count either.
+        state.stream_seen_ns[2] = now - 5_000_000_000;
+        assert!(state.due(now));
+        // All four sending: the fourth is still waited for.
+        state.stream_seen_ns[2] = now - 10_000_000;
+        assert!(!state.due(now));
+        state.ready = 4;
+        assert!(state.due(now));
     }
 
     #[test]

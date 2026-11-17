@@ -2,6 +2,9 @@ use serde::{Deserialize, Serialize};
 
 pub const DT: f64 = 0.05;
 pub const MIN_SPEED: f64 = 30.0 / 3.6;
+/// A navigation lane change toward a turn may still start below `MIN_SPEED`,
+/// down to this speed, once the turn pocket's lane exists (see `helper.rs`).
+pub const POCKET_MIN_SPEED: f64 = 10.0 / 3.6;
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
 pub enum State {

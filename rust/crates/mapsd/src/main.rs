@@ -4,17 +4,23 @@
 //! and a fresh instruction exist; black otherwise. The image also goes to a
 //! small PNG preview with the reason for what it shows.
 use openpilot_cereal::{car_capnp::car_state, custom_capnp::carrot_man, log_capnp::event};
+use openpilot_logging::{
+    log_site,
+    producer::{Factory, Logger},
+    record::Record,
+    Fields, Value,
+};
 use openpilot_mapsd::{
     output::{self, Map, DEMAND_PATH, MAP_BYTES},
     preview,
     remote::{Archive, Mapbox},
     renderer::{MapRenderer, Position},
-    route::RouteTracker,
+    route::{RouteSelection, RouteTracker},
     tiles::{HybridTiles, Remote},
     Error,
 };
-use openpilot_navd::position::{CarPark, CarrotFix, GpsFix, ParkedPosition, Sample};
 use openpilot_messaging::{runtime::SubMaster, state::Options};
+use openpilot_navd::position::{CarPark, CarrotFix, GpsFix, ParkedPosition, Sample};
 use std::{
     path::{Path, PathBuf},
     sync::{
@@ -48,15 +54,75 @@ impl Remote for Source {
     }
 }
 
+/// Why the route map was or was not drawn, summarised every 30 s while
+/// something wants the map: a `mapsdStatus` event in the rlog and a line on
+/// the console. Without it a drive cannot tell a black map from a real one.
+#[derive(Default)]
+struct Status {
+    since: f64,
+    counts: Vec<(&'static str, i128)>,
+}
+
+impl Status {
+    const INTERVAL: f64 = 30.;
+
+    fn count(&mut self, reason: &'static str, tiles: &str, now: f64, logger: Option<&mut Logger>) {
+        if self.counts.is_empty() {
+            self.since = now;
+        }
+        match self.counts.iter_mut().find(|(name, _)| *name == reason) {
+            Some((_, n)) => *n += 1,
+            None => self.counts.push((reason, 1)),
+        }
+        if now - self.since < Self::INTERVAL {
+            return;
+        }
+        let summary: Vec<String> = self
+            .counts
+            .iter()
+            .map(|(name, n)| format!("{name}={n}"))
+            .collect();
+        eprintln!(
+            "mapsd: maps in the last {:.0} s (tiles from {tiles}): {}",
+            now - self.since,
+            summary.join(" ")
+        );
+        if let Some(logger) = logger {
+            let mut fields = Fields::default();
+            for (name, n) in &self.counts {
+                fields.insert((*name).to_owned(), Value::Integer(*n));
+            }
+            fields.insert("seconds".to_owned(), Value::Float(now - self.since));
+            fields.insert("tiles".to_owned(), Value::Text(tiles.to_owned()));
+            // Evidence only: a logging failure must not stop the map.
+            if let Ok(record) = Record::event("mapsdStatus", Vec::new(), fields) {
+                let _ = logger.emit(log_site!(), record);
+            }
+        }
+        self.counts.clear();
+    }
+}
+
 fn text(params: &openpilot_params::Params, key: &str) -> String {
-    params.get(key).ok().flatten().map(|v| String::from_utf8_lossy(&v).trim().to_owned()).unwrap_or_default()
+    params
+        .get(key)
+        .ok()
+        .flatten()
+        .map(|v| String::from_utf8_lossy(&v).trim().to_owned())
+        .unwrap_or_default()
 }
 
 /// As carrot: a Mapbox token wins; otherwise a configured PMTiles URL.
 fn remote(params: &openpilot_params::Params) -> (String, Option<Source>) {
-    let token = std::env::var("MAPBOX_TOKEN").ok().filter(|t| !t.is_empty()).unwrap_or_else(|| text(params, "MapboxPublicKey"));
+    let token = std::env::var("MAPBOX_TOKEN")
+        .ok()
+        .filter(|t| !t.is_empty())
+        .unwrap_or_else(|| text(params, "MapboxPublicKey"));
     if !token.is_empty() {
-        return (format!("mapbox:{}", token.len()), Some(Source::Mapbox(Mapbox::new(token))));
+        return (
+            format!("mapbox:{}", token.len()),
+            Some(Source::Mapbox(Mapbox::new(token))),
+        );
     }
     let url = text(params, "MapTilesUrl");
     if url.starts_with("https://") || url.starts_with("http://") {
@@ -83,7 +149,9 @@ fn sample(sub: &SubMaster, now: f64) -> Sample {
     };
     if let Ok(topic) = state.topic("carrotMan") {
         if topic.seen {
-            if let Some(event::Which::CarrotMan(Ok(c))) = topic.event().ok().and_then(|e| e.which().ok()) {
+            if let Some(event::Which::CarrotMan(Ok(c))) =
+                topic.event().ok().and_then(|e| e.which().ok())
+            {
                 let c: carrot_man::Reader = c;
                 sample.carrot = Some(CarrotFix {
                     valid: topic.valid,
@@ -106,13 +174,17 @@ fn sample(sub: &SubMaster, now: f64) -> Sample {
         }
     }
     for name in ["gpsLocation", "gpsLocationExternal"] {
-        let Ok(topic) = state.topic(name) else { continue };
+        let Ok(topic) = state.topic(name) else {
+            continue;
+        };
         if !topic.seen {
             continue;
         }
         let Ok(e) = topic.event() else { continue };
         let gps = match e.which() {
-            Ok(event::Which::GpsLocation(Ok(g))) | Ok(event::Which::GpsLocationExternal(Ok(g))) => g,
+            Ok(event::Which::GpsLocation(Ok(g))) | Ok(event::Which::GpsLocationExternal(Ok(g))) => {
+                g
+            }
             _ => continue,
         };
         sample.gps.push(GpsFix {
@@ -128,7 +200,9 @@ fn sample(sub: &SubMaster, now: f64) -> Sample {
     }
     if let Ok(topic) = state.topic("carState") {
         if topic.seen {
-            if let Some(event::Which::CarState(Ok(car))) = topic.event().ok().and_then(|e| e.which().ok()) {
+            if let Some(event::Which::CarState(Ok(car))) =
+                topic.event().ok().and_then(|e| e.which().ok())
+            {
                 sample.car = Some(CarPark {
                     valid: topic.valid,
                     alive: topic.alive,
@@ -178,7 +252,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     little_cores();
     let params = openpilot_params::Params::for_runtime()?;
     let mut sub = SubMaster::for_runtime(
-        &["carrotMan", "gpsLocation", "gpsLocationExternal", "navRoute", "navInstructionCarrot", "carState"],
+        &[
+            "carrotMan",
+            "gpsLocation",
+            "gpsLocationExternal",
+            "navRoute",
+            "navInstructionCarrot",
+            "carState",
+        ],
         Options::default(),
     )?;
     let mut renderer = MapRenderer::default();
@@ -187,13 +268,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut tiles = HybridTiles::new(&store_root(), source, clock)?;
     let mut route: Vec<[f64; 2]> = Vec::new();
     let mut route_id = 0u64;
+    let mut selection = RouteSelection::default();
+    let mut status = Status::default();
+    let mut logger = Factory::for_runtime().ok().map(|factory| factory.logger());
     let mut tracker: Option<RouteTracker> = None;
     let mut position = ParkedPosition::default();
     let (mut next_render, mut next_config, mut was_ready) = (0f64, 0f64, false);
-    let (mut demand_checked, mut wanted, mut retry_at, mut next_preview) = (0f64, false, 0f64, 0f64);
+    let (mut demand_checked, mut wanted, mut retry_at, mut next_preview) =
+        (0f64, false, 0f64, 0f64);
     let black = vec![0u8; MAP_BYTES];
     let out = Path::new(output::PATH);
-    let preview_dir = Path::new(preview::PREVIEW_PATH).parent().unwrap_or(Path::new("/dev/shm"));
+    let preview_dir = Path::new(preview::PREVIEW_PATH)
+        .parent()
+        .unwrap_or(Path::new("/dev/shm"));
     while !stop.load(Ordering::Relaxed) {
         sub.update(Duration::from_millis(100))?;
         let now = monotonic();
@@ -210,23 +297,39 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         if let Ok(topic) = sub.state.topic("navRoute") {
             if topic.updated {
-                if let Some(event::Which::NavRoute(Ok(r))) = topic.event().ok().and_then(|e| e.which().ok()) {
-                    let id = r.get_carrot_route_id();
-                    if id != route_id {
+                if let Some(event::Which::NavRoute(Ok(r))) =
+                    topic.event().ok().and_then(|e| e.which().ok())
+                {
+                    let coordinates: Vec<[f64; 2]> = if topic.valid {
+                        r.get_coordinates()
+                            .map(|c| {
+                                c.iter()
+                                    .map(|p| {
+                                        [f64::from(p.get_longitude()), f64::from(p.get_latitude())]
+                                    })
+                                    .collect()
+                            })
+                            .unwrap_or_default()
+                    } else {
+                        Vec::new()
+                    };
+                    if let Some((id, selected)) =
+                        selection.update(r.get_carrot_route_id(), &coordinates)
+                    {
                         route_id = id;
-                        route = if topic.valid {
-                            r.get_coordinates().map(|c| c.iter().map(|p| [f64::from(p.get_longitude()), f64::from(p.get_latitude())]).collect()).unwrap_or_default()
-                        } else {
-                            Vec::new()
-                        };
-                        tracker = if id != 0 { RouteTracker::new(route.clone()) } else { None };
+                        route = selected;
+                        tracker = RouteTracker::new(route.clone());
                         next_render = 0.;
                     }
                 }
             }
         }
         let fix = position.update(&sample(&sub, now), 0.5);
-        let instruction = sub.state.topic("navInstructionCarrot").ok().is_some_and(|t| t.seen && t.valid && (0. ..2.).contains(&(now - t.receive_time)));
+        let instruction = sub
+            .state
+            .topic("navInstructionCarrot")
+            .ok()
+            .is_some_and(|t| t.seen && t.valid && (0. ..2.).contains(&(now - t.receive_time)));
         if now >= demand_checked {
             wanted = demand(&params);
             demand_checked = now + 1.;
@@ -238,7 +341,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         was_ready = ready;
         let started = monotonic();
-        let mut map = Map { route_id, rendered_ns: (started * 1e9) as u64, valid: false, image: black.clone() };
+        let mut map = Map {
+            route_id,
+            rendered_ns: (started * 1e9) as u64,
+            valid: false,
+            image: black.clone(),
+        };
         let mut reason = if !wanted {
             "idle"
         } else if tracker.is_none() {
@@ -253,9 +361,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         if ready && now >= retry_at {
             let fix = fix.expect("ready");
             let advance = fix.speed * (now - fix.time).max(0.);
-            match tracker.as_mut().and_then(|t| t.update_pose(fix.longitude, fix.latitude, advance, 50.)) {
+            match tracker
+                .as_mut()
+                .and_then(|t| t.update_pose(fix.longitude, fix.latitude, advance, 50.))
+            {
                 Some((lon, lat, bearing)) => {
-                    match renderer.render(&mut tiles, Position { latitude: lat, longitude: lon, bearing }, Some(&route)) {
+                    match renderer.render(
+                        &mut tiles,
+                        Position {
+                            latitude: lat,
+                            longitude: lon,
+                            bearing,
+                        },
+                        Some(&route),
+                    ) {
                         Ok(result) if result.valid() => {
                             map.valid = true;
                             map.image = result.image;
@@ -280,7 +399,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         // At most 10 Hz, ~10% of one core (carrot render_interval).
         let interval = (elapsed * 10.).max(0.1);
-        next_render = finished + if map.valid { interval } else { interval.max(1.) };
+        next_render = finished
+            + if map.valid {
+                interval
+            } else {
+                interval.max(1.)
+            };
+        if wanted {
+            let tiles = if remote_key.starts_with("mapbox:") {
+                "mapbox"
+            } else if remote_key.is_empty() {
+                "none"
+            } else {
+                "url"
+            };
+            status.count(reason, tiles, finished, logger.as_mut());
+        }
         if wanted || ready {
             if let Err(error) = output::write(out, &map) {
                 eprintln!("mapsd: write map: {error}");

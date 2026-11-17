@@ -172,7 +172,7 @@ Carrot Web 설정 화면에서는 다음 기능을 사용할 수 있습니다.
 | 중앙 보정 | `PathOffset`, `CameraYawTrimDeg` | 레인모드 경로의 좌우 위치와 카메라 YAW 미세 보정 |
 | 조향감 | `SteerActuatorDelay`, `LatSmoothSec`, `LatSuspendAngleDeg`, `CustomSR`, `SteerRatioRate` | 조향 시점, 평활화, 일시중지 각도와 조향비 |
 | [차로 변경](lane-change.md)·자동 턴 | `LaneChangeNeedTorque`, `LaneChangeDelay`, `LaneChangeBsd`, `LaneLineCheck`, `BlinkerLatchedTurn`, `LaneChangeLeverWait`, `AutoTurnControl`, `AutoTurnControlRightLaneChange`, `ManualLaneChangeIndicator`, `ManualTurnIndicator`, `ModelDesireIndicator`, `ModelPathIndicator`, `AutoTurnControlSpeedTurn`, `AutoTurnControlTurnEnd`, `AutoTurnMapChange` | 차로 변경 진입 조건과 ATC 동작 |
-| 레인모드 | `LatMpcPathCost`, `LatMpcMotionCost`, `LatMpcAccelCost`, `LatMpcJerkCost`, `LatMpcSteeringRateCost`, `LatMpcInputOffset`, `UseLaneLineSpeed`, `UseLaneLineCurveSpeed`, `AdjustLaneOffset` | 레인모드 MPC 가중치와 차선 사용 조건 |
+| 레인모드 | `LatMpcPathCost`, `LatMpcMotionCost`, `LatMpcAccelCost`, `LatMpcJerkCost`, `LatMpcSteeringRateCost`, `LatMpcInputOffset`, `UseLaneLineSpeed`, `UseLaneLineCurveSpeed`, `AdjustLaneOffset`, `LanelessCentering` | 레인모드 MPC 가중치와 차선 사용 조건, 레인리스 차선중앙 보정 |
 | 고급 토크·토크 계수 | `LateralTorqueCustom`, `LateralTorqueAccelFactor`, `LateralTorqueFriction`, `LateralTorqueKpV`, `LateralTorqueKiV`, `LateralTorqueKf`, `LateralTorqueKd` | 커스텀 토크 제어 계수 |
 | 고급 토크·검색 전용 | `NNFF` | 토크 조향의 신경망 피드포워드 옵션 |
 | 고급 토크·조향 제한 | `CustomSteerMax`, `CustomSteerDeltaUp`, `CustomSteerDeltaDown`, `CustomSteerDeltaUpLC`, `CustomSteerDeltaDownLC` | 최대 조향 토크와 토크 변화율 제한 |
@@ -184,6 +184,8 @@ Carrot Web 설정 화면에서는 다음 기능을 사용할 수 있습니다.
 **Jetlink 태블릿:** `OnnxComputeMode` 3은 같은 차선·BSD ONNX 모델을 Jetlink USB 연결을 통해 Jetlink 앱 기기(예: 갤럭시 탭의 Adreno GPU)에서 실행합니다. 주행 모델은 계속 NPU를 씁니다. 입력 준비와 출력 해석은 콤마가 그대로 하므로 임계값과 결과는 바뀌지 않습니다. 보조 비전(`carrot_aux_v1`)을 지원하는 Jetlink 앱과 Jetlink 주행 세션이 필요하며, 처음 사용할 때 모델을 한 번 올립니다(약 1초). 앱이 없거나, 모델을 불러오는 중이거나, 태블릿이 뜨겁거나 바쁘거나, 시간 초과인 프레임은 모드 0처럼 콤마 CPU에서 실행합니다. 진단 화면에 태블릿 장치, 왕복 시간, CPU 대체 횟수가 표시됩니다.
 
 `UseLaneLineSpeed`로 레인모드를 사용하더라도 모델 속도 궤적의 시작값이 실제 차속의 70% 미만이거나 끝값이 시작값의 70% 미만이면 일시적으로 레인리스로 전환합니다. 속도 조건이 약 1초간 연속으로 정상이고 기존 차선·속도 조건도 충족해야 레인모드로 복귀합니다.
+
+`LanelessCentering`(레인리스: 차선중앙 보정)은 레인모드를 쓰지 않고, 레인리스 주행에서 모델이 한쪽으로 치우칠 때 차선 중앙으로 살짝 당기는 보정입니다. 기본값 `0`은 꺼짐이고, `100`은 최대 횡가속 0.15m/s², `200`은 0.30m/s²까지 씁니다. 모델 경로가 약 2초 앞에서 차선 중앙과 어긋난 만큼 바로 보정하고, 남은 차량 위치 오차는 몇 초에 걸쳐 천천히 줄입니다. 30km/h 이상, 양쪽 차선이 모두 보이고(폭 2.6~4.3m), 차로 변경·회전·ATC·핸들 조작이 없고, 반경 200m보다 완만한 길에서만 동작하며 켜질 때 1초, 꺼질 때 0.5초에 걸쳐 바뀝니다. 레인모드가 동작 중이면 쓰지 않습니다. 모델이 자기 위치로 얼마나 강하게 되돌아가는지에 따라 효과가 달라지므로 `100`부터 시작하고, 여전히 치우치면 `150~200`으로 올리세요.
 
 `SteerActuatorDelay`는 높을수록 더 일찍 조향하도록 보상하고, `LatSmoothSec`는 높을수록 부드러워지는 대신 반응이 늦어질 수 있습니다. 두 값을 동시에 바꾸면 원인을 구분하기 어렵습니다.
 

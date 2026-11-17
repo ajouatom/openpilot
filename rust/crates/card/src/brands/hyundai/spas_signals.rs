@@ -115,9 +115,36 @@ pub struct SpasSignals {
     driver_count: u32,
     driver_active: bool,
     pub status: String,
+    /// Driving lane-change indicator on a car with no stock SPAS sender.
+    pub solo: spas::SoloDrive,
     worker: Option<crate::blink::source::SpasWorker>,
     feedback: crate::blink::source::Feedback,
     feedback_at: f64,
+}
+
+/// The lane change direction while one is under way (pre, starting or
+/// finishing), from a fresh modelV2.
+fn lane_change(subscribers: &Subscribers, now: f64) -> Option<Direction> {
+    use openpilot_cereal::log_capnp::{LaneChangeDirection, LaneChangeState};
+    if !fresh(subscribers, "modelV2", now, 0.35) {
+        return None;
+    }
+    let topic = subscribers.topic("modelV2").ok()?;
+    let event::Which::ModelV2(Ok(model)) = topic.event().ok()?.which().ok()? else {
+        return None;
+    };
+    let meta = model.get_meta().ok()?;
+    match meta.get_lane_change_state().ok()? {
+        LaneChangeState::PreLaneChange
+        | LaneChangeState::LaneChangeStarting
+        | LaneChangeState::LaneChangeFinishing => {}
+        _ => return None,
+    }
+    match meta.get_lane_change_direction().ok()? {
+        LaneChangeDirection::Left => Some(Direction::Left),
+        LaneChangeDirection::Right => Some(Direction::Right),
+        _ => None,
+    }
 }
 
 fn fresh(subscribers: &Subscribers, name: &str, now: f64, limit: f64) -> bool {
@@ -215,6 +242,7 @@ impl SpasSignals {
                 "disabled".into()
             },
             worker: None,
+            solo: spas::SoloDrive::default(),
             feedback: crate::blink::source::Feedback::default(),
             feedback_at: 0.,
         }
@@ -341,15 +369,21 @@ impl SpasSignals {
         }
         if now >= self.settings_at {
             let setting = super::parameters::setting_int(input.settings, "CanfdBlinkerTest")?;
-            if setting != self.test_setting && (1..19).contains(&setting) {
+            if setting != self.test_setting && (1..21).contains(&setting) {
                 // Consume the edge even when the parked guard fails; never run later.
                 let parked = self.parked(healthy, &input)?;
                 let direct = setting >= 5;
+                // 19/20: a car with no stock SPAS sender (HDA1, no APRK).
+                let solo = [19, 20].contains(&setting);
+                let stock_ok = if solo {
+                    self.session.stock_absent(now)
+                } else {
+                    self.session.stock_ready(now) && self.session.stock_direction == Some(0)
+                };
                 let direct_ready = !direct
                     || (now >= self.direct_cooldown
                         && can_health(input.subscribers).is_some()
-                        && self.session.stock_ready(now)
-                        && self.session.stock_direction == Some(0)
+                        && stock_ok
                         && !(cs.get_left_blinker() || cs.get_right_blinker()));
                 if parked
                     && (setting <= 2 || self.hold_supported)
@@ -437,6 +471,48 @@ impl SpasSignals {
                     request = Some(event.id.clone());
                     direction = Some(to_direction(event.direction));
                 }
+            }
+        }
+        // A car with no stock SPAS sender lights automatic lane changes
+        // directly, until the lane change completes (owner's car only).
+        let solo_ready = self.hold_supported
+            && self.test_request.is_none()
+            && self.test_setting == 0
+            && now >= self.direct_cooldown
+            && self.session.state == spas::State::Idle
+            && self.session.stock_absent(now);
+        if solo_ready || self.solo.busy() {
+            let want = lane_change(input.subscribers, now);
+            let allowed = solo_ready && healthy && continuous;
+            let driver = override_now || self.driver_active;
+            let reason = if !solo_ready {
+                "conditions"
+            } else if !healthy {
+                "inputs"
+            } else if !continuous {
+                "loop"
+            } else {
+                "lane_change_end"
+            };
+            let (started, frames) =
+                self.solo
+                    .update(now, want, allowed, driver, reason, self.session.bus);
+            if let Some(side) = started {
+                // Our lamp must not come back as a driver lane change request.
+                let direction = if side == Direction::Left { 1 } else { 2 };
+                let _ = crate::blink::source::record_ownership(
+                    now,
+                    &serde_json::json!({"time": now, "direction": direction, "source": "spas_solo"}),
+                );
+            }
+            if self.solo.busy() || !frames.is_empty() {
+                self.hold_value = 1;
+                self.status = if self.solo.status == "tail" {
+                    format!("solo_drive_tail_{}", self.solo.ended)
+                } else {
+                    format!("solo_drive_{}", self.solo.status)
+                };
+                return Ok(frames);
             }
         }
         if self.test_request.is_some() {
@@ -560,8 +636,11 @@ impl SpasSignals {
             && !self.driver_override
             && same_guard(self)
             && continuous
-            && self.session.stock_ready(now)
-            && self.session.stock_direction == Some(0);
+            && if [19, 20].contains(&self.test_setting) {
+                self.session.stock_absent(now)
+            } else {
+                self.session.stock_ready(now) && self.session.stock_direction == Some(0)
+            };
         if direct && !direct_active {
             // No resumption after guard loss.
             self.test_until = self.test_until.min(now);
@@ -608,11 +687,20 @@ impl SpasSignals {
                     }
                 }
             } else {
+                let side = if [19, 20].contains(&self.test_setting) {
+                    spas::solo_direction(
+                        now - self.direct_started,
+                        self.test_until - self.direct_started,
+                        direction,
+                    )
+                } else {
+                    direction
+                };
                 for (i, (address, _)) in SPAS.iter().enumerate() {
                     sends.push(spas::frame(
                         *address,
                         self.direct_counter[i],
-                        direction,
+                        side,
                         self.session.bus,
                     ));
                     self.direct_counter[i] = self.direct_counter[i].wrapping_add(1);

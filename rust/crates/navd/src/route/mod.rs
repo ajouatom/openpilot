@@ -151,7 +151,8 @@ impl RouteEngine {
                 position.latitude,
                 position.longitude,
             ))?);
-            self.last_bearing = Some(position.bearing);
+            // NaN: a heading-less position (car standing still); no start bearing.
+            self.last_bearing = position.bearing.is_finite().then_some(position.bearing);
         }
         Ok(())
     }

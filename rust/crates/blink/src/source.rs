@@ -149,7 +149,9 @@ fn atomic_json(path: &Path, value: &Value) -> std::io::Result<()> {
 }
 
 /// `record_ownership`: keep a fresh earlier mask across rapid requests.
-fn record_ownership(now: f64, value: &Value) -> std::io::Result<()> {
+/// Marks a lamp the system lights so the desire helper does not take it as a
+/// driver request (`boundary-indicator.json`, read by drivingd).
+pub fn record_ownership(now: f64, value: &Value) -> std::io::Result<()> {
     let path = Path::new(RUNTIME).join("boundary-indicator.json");
     let previous = read_json(&path);
     let mut value = value.clone();

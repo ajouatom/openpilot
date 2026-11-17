@@ -78,7 +78,11 @@ fn sample(state: &State, now: f64) -> Result<(Sample, bool), Error> {
     if carrot.seen {
         if let event::CarrotMan(value) = carrot.event()?.which().map_err(capnp::Error::from)? {
             let value = value?;
-            external = carrot.valid && carrot.alive && value.get_active_carrot() > 0;
+            external = crate::external::external_navigation(
+                carrot.valid && carrot.alive,
+                value.get_active_carrot(),
+                !value.get_navi_owner()?.is_empty(),
+            );
             sample.carrot = Some(CarrotFix {
                 valid: carrot.valid,
                 received: carrot.receive_time,

@@ -1,3 +1,4 @@
+pub mod centering;
 pub mod config;
 pub mod controller;
 mod feedback;

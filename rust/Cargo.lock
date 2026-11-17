@@ -3182,6 +3182,7 @@ dependencies = [
  "capnp",
  "flate2",
  "openpilot-cereal",
+ "openpilot-logging",
  "openpilot-messaging",
  "openpilot-navd",
  "openpilot-params",

@@ -1,4 +1,5 @@
 use crate::{
+    centering::{Centering, Sample},
     config::Config,
     inputs::{Inputs, Pose},
     interface::ControlInterface,
@@ -46,6 +47,8 @@ pub struct Controls {
     pub lateral_startup: openpilot_control_policy::lateral_readiness::Gate,
     pub lateral_started: bool,
     pub lane_lines: bool,
+    /// LanelessCentering's state (see `centering.rs`).
+    pub centering: Centering,
     pub turn_speed: i32,
     pub calibration: [f64; 3],
     pub pose: Option<Pose>,
@@ -101,6 +104,7 @@ impl Controls {
             lateral_startup: Default::default(),
             lateral_started: false,
             lane_lines: false,
+            centering: Centering::default(),
             turn_speed,
             calibration: [0.; 3],
             pose: None,
@@ -212,8 +216,28 @@ impl Controls {
                 smooth(lag()?, self.desired, tau)
             }
         } else {
-            smooth(input.model.desired_curvature, self.desired, 0.1)
+            let model = &input.model;
+            let turn_or_lane = model.desire.iter().skip(1).take(4).sum::<f64>() >= 0.2;
+            let atc = input.carrot.turn_type.as_str();
+            let atc_idle = matches!(atc, "" | "none" | "straight") || atc.ends_with(" prepare");
+            let correction = self.centering.update(&Sample {
+                strength: f64::from(params.integer("LanelessCentering")?) * 0.01,
+                allowed: !model.lane_change && !turn_or_lane && atc_idle && !cs.steering_pressed,
+                speed: cs.speed,
+                model_curvature: model.desired_curvature,
+                lane_x: &model.lane_x,
+                left_y: &model.left_y,
+                right_y: &model.right_y,
+                left_prob: model.left_prob,
+                right_prob: model.right_prob,
+                path_x: &model.path_x,
+                path_y: &model.path_y,
+            });
+            smooth(model.desired_curvature + correction, self.desired, 0.1)
         };
+        if !lateral || self.lane_lines || self.config.meb() {
+            self.centering = Centering::default();
+        }
         let (desired, curvature_limited) =
             drive::clip_curvature(cs.speed, self.desired, new, live.roll)?;
         self.desired = desired;

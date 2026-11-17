@@ -183,7 +183,8 @@
                 "LatMpcInputOffset",
                 "UseLaneLineSpeed",
                 "UseLaneLineCurveSpeed",
-                "AdjustLaneOffset"
+                "AdjustLaneOffset",
+                "LanelessCentering"
               ]
             },
             {
@@ -2666,6 +2667,23 @@
       "default": 0,
       "unit": 10,
       "display_unit": "distanceCm"
+    },
+    {
+      "group": "레인모드",
+      "name": "LanelessCentering",
+      "title": "레인리스: 차선중앙 보정 (0)%",
+      "descr": "레인리스 주행에서 모델이 한쪽으로 치우칠 때 차선 중앙으로 살짝 당깁니다. 0: 사용안함, 100: 기본(최대 횡가속 0.15m/s²), 200: 최대(0.30m/s²). 30km/h 이상, 양쪽 차선이 보이고 차로변경·회전·ATC·핸들조작이 없을 때만 동작합니다.",
+      "egroup": "LANE",
+      "etitle": "Laneless: lane centring (0)%",
+      "edescr": "In laneless driving, gently pulls the car toward the lane centre when the model holds to one side. 0: off, 100: default (up to 0.15 m/s² lateral), 200: maximum (0.30 m/s²). Acts only above 30 km/h with both lane lines seen and no lane change, turn, ATC or driver steering.",
+      "cgroup": "转向",
+      "ctitle": "无车道线: 车道居中修正 (0)%",
+      "cdescr": "无车道线模式下模型偏向一侧时轻微拉回车道中央。0: 关闭, 100: 默认(最大横向0.15m/s²), 200: 最大(0.30m/s²)。仅在30km/h以上、两侧车道线可见且无变道/转弯/ATC/驾驶员转向时工作。",
+      "min": 0,
+      "max": 200,
+      "default": 0,
+      "unit": 10,
+      "display_unit": "percent"
     },
     {
       "group": "조향일반",

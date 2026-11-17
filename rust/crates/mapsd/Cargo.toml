@@ -8,7 +8,7 @@ license.workspace = true
 workspace = true
 
 [features]
-native = ["dep:ureq", "dep:openpilot-messaging", "dep:openpilot-cereal", "dep:openpilot-params", "dep:signal-hook", "dep:capnp", "dep:rustix"]
+native = ["dep:ureq", "dep:openpilot-messaging", "dep:openpilot-cereal", "dep:openpilot-params", "dep:signal-hook", "dep:capnp", "dep:rustix", "dep:openpilot-logging"]
 
 [dependencies]
 flate2 = "1"
@@ -23,8 +23,13 @@ signal-hook = { version = "0.3", optional = true }
 capnp = { version = "=0.27.2", optional = true }
 rustix = { version = "1", features = ["time", "process", "thread"], optional = true }
 openpilot-navd = { path = "../navd" }
+openpilot-logging = { path = "../logging", optional = true }
 
 [[bin]]
 name = "openpilot-mapsd"
 path = "src/main.rs"
+required-features = ["native"]
+
+[[example]]
+name = "replay_maps"
 required-features = ["native"]
