@@ -19,6 +19,7 @@ from openpilot.selfdrive.carrot.radar_motion.timing import front_radar_distance_
 from openpilot.selfdrive.carrot.radar_motion import (
   DPathRadarController,
 )
+from openpilot.selfdrive.carrot.radar_motion.controller import CutInLoadShed
 
 
 CORNER_RADAR_FLAGS = int(
@@ -120,6 +121,7 @@ class DPathRadarD:
     )
     self.radar_state = log.RadarState.new_message()
     self.radar_state_valid = False
+    self.load_shed = CutInLoadShed(params.get_int("RadarCutInLoadShed") > 0)
 
   def update(self, sm: messaging.SubMaster, rr: car.RadarData) -> None:
     self.radar_state_valid = sm.all_checks()
@@ -206,9 +208,13 @@ def main() -> None:
     sm.update()
     if sm.updated["modelV2"]:
       start, cpu_start = time.monotonic(), time.thread_time()
+      radar.controller.cutin_load_shed = radar.load_shed.active
       radar.update(sm, sm["liveTracks"])
       radar.publish(pm)
-      diagnostics.record(context={'motion_backend': MOTION_BACKEND}, work_ms=(time.monotonic() - start) * 1000,
+      shed = radar.load_shed.active
+      if radar.load_shed.update(time.monotonic()) != shed:
+        cloudlog.event("radard cut-in load shed", active=not shed, hz=round(radar.load_shed.hz, 1))
+      diagnostics.record(context={'motion_backend': MOTION_BACKEND, 'cutin_load_shed': shed}, work_ms=(time.monotonic() - start) * 1000,
                          thread_cpu_ms=(time.thread_time() - cpu_start) * 1000,
                          model_age_ms=(start - sm.logMonoTime['modelV2'] * 1e-9) * 1000,
                          tracks_age_ms=(start - sm.logMonoTime['liveTracks'] * 1e-9) * 1000)

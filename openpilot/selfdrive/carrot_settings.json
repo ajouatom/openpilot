@@ -567,7 +567,8 @@
           "en": "Device",
           "zh": "设备",
           "params": [
-            "ScreenOn"
+            "ScreenOn",
+            "RadarCutInLoadShed"
           ]
         }
       ]
@@ -4783,6 +4784,24 @@
       "default": 100,
       "unit": 5,
       "display_unit": "percent"
+    },
+    {
+      "group": "Joongyu Lab",
+      "name": "RadarCutInLoadShed",
+      "title": "[주의] 레이더 과부하 때 끼어들기 계산 줄이기",
+      "descr": "빗길·정체에서 「장치 프로세스 통신오류」(radarState)로 수동운전 알람이 뜨는 차만 켜세요. 그 외에는 켜지 마세요.\n원인: 저속(약 18 km/h 이하) 정체에서 비·가드레일 반사와 옆 차로 차가 많으면 레이더 끼어들기 계산이 평소의 3배가 되어 radard가 20 Hz를 못 지킵니다(IONIQ 9 빗길 정체 실측, 평소 로그는 최저 19 Hz).\n켜면: radarState가 1초 평균 18 Hz 아래로 떨어질 때만, 땅 기준 1 m/s 미만으로 멈춰 있는 점과 45 m 밖의 점을 끼어들기 계산에서 뺍니다. 앞차는 항상 계산합니다. 19.5 Hz 이상이 3초 이어지면 원래대로 돌아갑니다. 평소에는 아무것도 바꾸지 않습니다.\n주의: 줄이는 동안에는 멈춰 있다가 끼어드는 차, 45 m 밖에서 다가오는 차의 끼어들기 감지가 늦을 수 있습니다.",
+      "egroup": "Joongyu Lab",
+      "etitle": "[Caution] Shed radar cut-in work under overload",
+      "edescr": "Turn on only if you get the \"process communication error\" (radarState) take-over alarm in rain or traffic jams. Leave it off otherwise.\nCause: at low speed (below about 18 km/h) in a jam, rain/guardrail reflections plus many cars in the next lanes make radard's cut-in work about 3x normal, and radard cannot keep 20 Hz (measured on an IONIQ 9 in a rainy jam; normal logs never go below 19 Hz).\nWhen on: only while radarState's 1 s average is below 18 Hz, points standing still (under 1 m/s over ground) and points beyond 45 m are left out of the cut-in work. The lead car is always kept. Back to normal after 3 s at 19.5 Hz or more. Nothing changes otherwise.\nCaution: while it sheds, a car that cuts in from a standstill or from beyond 45 m may be detected later.",
+      "cgroup": "Joongyu Lab",
+      "ctitle": "[注意] 雷达过载时减少切入计算",
+      "cdescr": "仅在雨天或拥堵中出现「设备进程通信错误」(radarState) 接管警报的车辆开启。其他情况请勿开启。\n原因: 低速(约 18 km/h 以下)拥堵时, 雨水·护栏反射和相邻车道车辆较多, 雷达切入计算约为平时的 3 倍, radard 无法保持 20 Hz(IONIQ 9 雨天拥堵实测, 平时日志最低 19 Hz)。\n开启后: 仅当 radarState 1 秒平均低于 18 Hz 时, 将对地速度低于 1 m/s 的静止点和 45 m 以外的点排除在切入计算之外。前车始终计算。19.5 Hz 以上持续 3 秒后恢复。平时不做任何改变。\n注意: 减少期间, 从静止状态切入的车辆或 45 m 外接近的车辆的切入检测可能变慢。",
+      "min": 0,
+      "max": 1,
+      "default": 0,
+      "unit": 1,
+      "control": "toggle",
+      "risk": "high"
     },
     {
       "group": "Joongyu Lab",

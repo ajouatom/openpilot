@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import math
+from collections import deque
 from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any
@@ -520,6 +521,54 @@ class RadarLeadDynamics:
     return state.tau if state is not None else LEAD_ACCEL_TAU_S
 
 
+# joongyu01 11-17 (RadarCutInLoadShed): what radard leaves out of the cut-in work while it is falling behind.
+# IONIQ 9 7465eee5 route 4cd seg26-27 (rain, 8 km/h jam): below ~18 km/h guardrail/rain reflections pass the
+# |v_rel| <= 5 m/s motion filter, so ~27 points per frame went through TrajectoryCutInDetector (2-8 in every other log)
+# and radard dropped to 16-17 Hz -> commIssue. Replay over the local logs: dropping ground-stationary points and points
+# beyond CUTIN_MAX_DREL_M cuts radard ~34 % on that segment (02_logs/measurements.md s65). The primary lead is always kept.
+SHED_STATIONARY_V_LEAD = 1.0  # m/s over ground
+SHED_MAX_DREL_M = 45.0  # = trajectory_cutin.CUTIN_MAX_DREL_M
+
+
+def shed_cutin_points(points: Any, lead_one: Any) -> tuple:
+  primary = int(lead_one.get("radarTrackId", -1)) if lead_one else -1
+  return tuple(
+    point for point in points
+    if point.track_id == primary or (abs(point.v_lead) >= SHED_STATIONARY_V_LEAD and point.d_rel <= SHED_MAX_DREL_M)
+  )
+
+
+class CutInLoadShed:
+  """RadarCutInLoadShed (Joongyu Lab, default off): on while radard's own publish rate over the last second is below
+  ON_HZ, off after OFF_HOLD_S at OFF_HZ or more. selfdrived raises commIssueAvgFreq when both the 10 s and the 1 s
+  average of radarState fall below 16 Hz (20 x 0.8, cereal FrequencyTracker); normal logs never go below 19.0 Hz
+  (39 local segments, 7 cars), the IONIQ 9 rainy jam ran a 16.6 Hz median (02_logs/measurements.md s65)."""
+  ON_HZ, OFF_HZ, OFF_HOLD_S = 18.0, 19.5, 3.0
+
+  def __init__(self, enabled: bool) -> None:
+    self.enabled = enabled
+    self.active = False
+    self._times: deque[float] = deque(maxlen=21)
+    self._ok_since: float | None = None
+    self.hz = 0.
+
+  def update(self, now: float) -> bool:
+    self._times.append(now)
+    if not self.enabled or len(self._times) < self._times.maxlen or now <= self._times[0]:
+      return self.active
+    hz = self.hz = (len(self._times) - 1) / (now - self._times[0])
+    if not self.active:
+      if hz < self.ON_HZ:
+        self.active, self._ok_since = True, None
+    elif hz < self.OFF_HZ:
+      self._ok_since = None
+    elif self._ok_since is None:
+      self._ok_since = now
+    elif now - self._ok_since >= self.OFF_HOLD_S:
+      self.active = False
+    return self.active
+
+
 class DPathRadarController:
   """Calculate leadOne, then current-path and dPath CUT-IN leadTwo."""
 
@@ -546,6 +595,7 @@ class DPathRadarController:
     self.production_live_tracks = bool(production_live_tracks)
     self.motion_sensor = "corner" if prefer_corner_radar else "front"
     self.cut_in_sensitivity = max(0, min(5, int(cut_in_sensitivity)))
+    self.cutin_load_shed = False  # set by radard each frame (RadarCutInLoadShed, CutInLoadShed)
     self._reset_motion_pipeline()
     self.primary_cut_out_predictor = RadarMotionPredictor(cut_out_only=True)
     self.trajectory_cutout = TrajectoryCutOutTracker()
@@ -1205,7 +1255,7 @@ class DPathRadarController:
     estimates = self.trajectory_cutin.update(
       time_s,
       v_ego,
-      motion_points,
+      shed_cutin_points(motion_points, lead_one) if self.cutin_load_shed else motion_points,
       path,
       model,
       yaw_rate_rad_s=yaw_rate_rad_s,

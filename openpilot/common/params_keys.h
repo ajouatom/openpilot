@@ -330,6 +330,7 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"RadarTrackFlip", {PERSISTENT, BOOL, "0"}},
     {"RadarLatFactor", {PERSISTENT, INT, "0"}},
     {"EnableCornerRadar", {PERSISTENT, INT, "0"}},
+    {"RadarCutInLoadShed", {PERSISTENT, INT, "0"}},
 
     {"EnableRadarTracksResult", {PERSISTENT | CLEAR_ON_MANAGER_START, INT}},
     {"CanParserResult", {CLEAR_ON_MANAGER_START | CLEAR_ON_OFFROAD_TRANSITION, STRING}},
