@@ -11,7 +11,7 @@ use crate::{
     side::SideState,
     types::{
         maximum, minimum, Config, IndicatorConfig, Input, InvalidModel, Maneuver, Navigation,
-        State, DT, MIN_SPEED,
+        State, DT, MIN_SPEED, POCKET_MIN_SPEED,
     },
 };
 use serde::Serialize;
@@ -833,6 +833,20 @@ impl DesireHelper {
             && !driver_enabled
             && matches!(self.atc_type.as_str(), "fork left" | "atc left");
         let atc_only = atc_requested && !driver_enabled;
+        // Turn pocket: navigation asks for the lane toward a turn ("atc left/
+        // right", never a fork or a driver's lever). A pocket behind centre-line
+        // bollards only opens just before the junction, usually while the car
+        // slows for it; carrot cancelled the request below MIN_SPEED and the
+        // turn was missed (route 00000ccb, 단계사거리, cancelled at 29 km/h).
+        // Such a request now waits below MIN_SPEED and may start there once
+        // `pocket_start_allowed`; every other gate, including the left side's
+        // steering nudge (atc_manual), stays as it is.
+        let pocket = atc_only && matches!(self.atc_type.as_str(), "atc left" | "atc right");
+        let pocket_blindspot = match blinker {
+            1 => car.left_blindspot,
+            2 => car.right_blindspot,
+            _ => false,
+        };
         let retry_blocked =
             atc_only && side.is_some_and(|side| !matches!(side.lane_line_info_mod, 0 | 5));
         let mut auto_trigger = false;
@@ -936,7 +950,7 @@ impl DesireHelper {
                                 && (!self.prev_desire_enabled
                                     || (driver_enabled
                                         && (driver_changed || stalk_press == blinker)))
-                                && !below_speed
+                                && (!below_speed || pocket)
                         }) {
                             self.lane_change_state = State::PreLaneChange;
                             self.lane_change_ll_prob = 1.0;
@@ -967,7 +981,7 @@ impl DesireHelper {
                             if atc_only && last_lane(side) {
                                 self.auto_lane_change_enable = true;
                             }
-                            if !enabled || below_speed {
+                            if !enabled || (below_speed && !pocket) {
                                 self.lane_change_state = State::Off;
                                 self.lane_change_direction = 0;
                             } else {
@@ -1007,8 +1021,12 @@ impl DesireHelper {
                                     || (self.tesla.signal_request_id != 0
                                         && car.auto_turn_signal_ready_request_id
                                             == self.tesla.signal_request_id);
-                                let mut can_start =
-                                    gate && start && !lever_undecided && signal_ready;
+                                let mut can_start = gate
+                                    && start
+                                    && !lever_undecided
+                                    && signal_ready
+                                    && (!below_speed
+                                        || pocket_start_allowed(car.v_ego, side, pocket_blindspot));
                                 if can_start
                                     && assistant_direction.is_some()
                                     && !self.tesla.enabled
@@ -1181,6 +1199,18 @@ impl DesireHelper {
     }
 }
 
+/// Below `MIN_SPEED` a waiting turn-pocket request starts only at walking pace
+/// or faster, into a lane the model sees (`lane_change_available`), with the
+/// blind spot and side clear. The car's own blind-spot signal counts even when
+/// `LaneChangeBsd` tells the side state to ignore it.
+fn pocket_start_allowed(v_ego: f64, side: &SideState, blindspot: bool) -> bool {
+    v_ego >= POCKET_MIN_SPEED
+        && side.lane_change_available
+        && side.bsd_hold_counter == 0
+        && !side.side_object_detected
+        && !blindspot
+}
+
 fn last_lane(side: &SideState) -> bool {
     side.lane_exist_count.counter <= 0 && !side.lane_change_available_geom
 }
@@ -1260,5 +1290,112 @@ mod classify_tests {
         side.dist_to_edge_far = 5.;
         input.car.v_ego = 35. / 3.6;
         assert_eq!(classify(&input, &side, true, "", Maneuver::None), Maneuver::Turn);
+    }
+}
+
+#[cfg(test)]
+mod pocket_tests {
+    use super::DesireHelper;
+    use crate::types::{Config, Input, State};
+
+    const N: usize = 33;
+
+    /// Ego lane ±1.75 m. Before the pocket opens the left road edge (the
+    /// centre-line bollards) is right next to the left line and no outer line
+    /// is seen; once it opens a left lane 3.5 m wide appears.
+    fn input(kph: f64, atc: &str, pocket_open: bool) -> Input {
+        let mut input = Input {
+            lateral_active: true,
+            ..Input::default()
+        };
+        input.car.v_ego = kph / 3.6;
+        input.car.drive = true;
+        input.car.turn_signal_driver_valid = true;
+        input.navigation.atc_type = atc.into();
+        let line = |y: f64| vec![y; N];
+        input.model.lane_lines = [line(-5.25), line(-1.75), line(1.75), line(5.25)];
+        input.model.lane_line_probs = [if pocket_open { 0.9 } else { 0.0 }, 0.9, 0.9, 0.0];
+        input.model.road_edges = [line(if pocket_open { -5.6 } else { -2.0 }), line(5.6)];
+        input.model.orientation_rate_z = vec![0.; N];
+        input
+    }
+
+    fn step(helper: &mut DesireHelper, input: &Input) {
+        helper
+            .update(input, Config::default, |_| None)
+            .expect("valid model");
+    }
+
+    fn run(helper: &mut DesireHelper, input: &Input, frames: usize) {
+        for _ in 0..frames {
+            step(helper, input);
+        }
+    }
+
+    /// The approach to 단계사거리 on route 00000ccb, then the pocket opening.
+    fn waiting_below_lane_change_speed(atc: &str) -> DesireHelper {
+        let mut helper = DesireHelper::new(false, None);
+        run(&mut helper, &input(65., atc, false), 40);
+        assert_eq!(
+            helper.lane_change_state,
+            State::PreLaneChange,
+            "{atc} at 65 km/h"
+        );
+        run(&mut helper, &input(29., atc, false), 40);
+        helper
+    }
+
+    #[test]
+    fn a_turn_lane_request_keeps_waiting_below_lane_change_speed() {
+        let helper = waiting_below_lane_change_speed("atc left");
+        assert_eq!(helper.lane_change_state, State::PreLaneChange);
+        let mut helper = waiting_below_lane_change_speed("atc left");
+        run(&mut helper, &input(0., "atc left", false), 100);
+        assert_eq!(
+            helper.lane_change_state,
+            State::PreLaneChange,
+            "stopped at the light"
+        );
+    }
+
+    #[test]
+    fn the_left_pocket_starts_with_the_drivers_nudge_once_it_opens() {
+        let mut helper = waiting_below_lane_change_speed("atc left");
+        run(&mut helper, &input(20., "atc left", true), 20);
+        // atc_manual: the left side never starts by itself.
+        assert_eq!(helper.lane_change_state, State::PreLaneChange);
+        let mut nudge = input(20., "atc left", true);
+        nudge.car.steering_pressed = true;
+        nudge.car.steering_torque = 1.;
+        step(&mut helper, &nudge);
+        assert_eq!(helper.lane_change_state, State::Starting);
+        assert_eq!(helper.desire, 3, "laneChangeLeft");
+    }
+
+    #[test]
+    fn a_nudge_does_not_start_a_closed_pocket_too_slow_or_with_the_blind_spot_lit() {
+        for (kph, open, blindspot, why) in [
+            (20., false, false, "pocket not open"),
+            (8., true, false, "below walking pace"),
+            (20., true, true, "blind spot"),
+        ] {
+            let mut helper = waiting_below_lane_change_speed("atc left");
+            run(&mut helper, &input(kph, "atc left", open), 20);
+            let mut nudge = input(kph, "atc left", open);
+            nudge.car.left_blindspot = blindspot;
+            nudge.car.steering_pressed = true;
+            nudge.car.steering_torque = 1.;
+            run(&mut helper, &nudge, 5);
+            assert_ne!(helper.lane_change_state, State::Starting, "{why}");
+        }
+    }
+
+    #[test]
+    fn a_fork_lane_change_still_ends_below_lane_change_speed() {
+        let mut helper = DesireHelper::new(false, None);
+        run(&mut helper, &input(65., "fork left", false), 40);
+        assert_eq!(helper.lane_change_state, State::PreLaneChange);
+        run(&mut helper, &input(29., "fork left", false), 5);
+        assert_eq!(helper.lane_change_state, State::Off);
     }
 }
