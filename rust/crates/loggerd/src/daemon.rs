@@ -156,6 +156,7 @@ pub fn run(environment: Environment) -> Result<(), Error> {
                 match &mut state.encoder {
                     Some(encoder) => {
                         rotation.last_camera_ns = clock::now()?;
+                        rotation.stream_seen_ns[encoder.stream.index()] = rotation.last_camera_ns;
                         let outcome =
                             encoder.handle(&mut logger, std::mem::take(bytes), rotation.ready)?;
                         byte_count = byte_count.wrapping_add(u64::try_from(outcome.bytes)?);

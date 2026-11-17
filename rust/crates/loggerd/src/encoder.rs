@@ -26,6 +26,16 @@ impl Stream {
         }
     }
 
+    /// Position in `Rotation::stream_seen_ns`.
+    pub fn index(self) -> usize {
+        match self {
+            Self::Road => 0,
+            Self::Wide => 1,
+            Self::Driver => 2,
+            Self::Qroad => 3,
+        }
+    }
+
     pub fn from_service(name: &str) -> Option<Self> {
         match name {
             "roadEncodeData" => Some(Self::Road),
@@ -57,7 +67,7 @@ impl Stream {
 }
 
 pub struct Encoder {
-    stream: Stream,
+    pub stream: Stream,
     pub writer: Option<VideoWriter>,
     offset: Option<i64>,
     current_segment: i32,
