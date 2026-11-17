@@ -639,13 +639,15 @@ def create_spas_steer(packer, CAN, mode, angle):
   return [packer.make_can_msg("SPAS1", CAN.ECAN, {"BYTE3": 0x4b, "NEW_SIGNAL_2": mode, "NEW_SIGNAL_1": angle})]
 
 
-def create_spas_messages(packer, CAN, frame, left_blink, right_blink, spas2_template=None):
+def create_spas_messages(packer, CAN, frame, left_blink, right_blink, spas2_template=None, hazard=False):
   ret = []
 
   ret.append(packer.make_can_msg("SPAS1", CAN.ECAN, {}))
 
   blink = 0
-  if left_blink:
+  if hazard:
+    blink = 1  # DBC VAL_ 362 BLINKER_CONTROL 1 "hazards"
+  elif left_blink:
     blink = 3
   elif right_blink:
     blink = 4

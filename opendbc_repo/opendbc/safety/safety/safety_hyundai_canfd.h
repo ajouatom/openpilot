@@ -715,14 +715,15 @@ static bool hyundai_canfd_tx_hook(const CANPacket_t *to_send_const) {
     }
   }
 
-  // SPAS1/SPAS2: zero apart from checksum/counter and BLINKER_CONTROL (byte 16 bits 5..7: 0 off, 3 left, 4 right)
+  // SPAS1/SPAS2: zero apart from checksum/counter and BLINKER_CONTROL (byte 16 bits 5..7: 0 off, 1 hazards, 3 left, 4 right;
+  // 1 = the remote hazard on cars whose camera has no 0x1ea to carry it, Tucson HDA1 11-17)
   // Exception (GV80 echo): the car's own frame carries constant fields the BCM may validate, so those exact
   // values are allowed through. Nothing else may be non-zero.
   if ((addr == 0x165) || (addr == 0x16A)) {
     for (uint8_t i = 3U; i < GET_LEN(to_send); i++) {
       uint8_t b = GET_BYTE(to_send, i);
       uint8_t blink = b >> 5;
-      bool blinker = (addr == 0x16A) && (i == 16U) && ((b & 0x1FU) == 0U) && ((blink == 0U) || (blink == 3U) || (blink == 4U));
+      bool blinker = (addr == 0x16A) && (i == 16U) && ((b & 0x1FU) == 0U) && ((blink == 0U) || (blink == 1U) || (blink == 3U) || (blink == 4U));
       bool stock_field = false;
       if (addr == 0x16A) {
         if ((i == 3U) || (i == 4U)) {

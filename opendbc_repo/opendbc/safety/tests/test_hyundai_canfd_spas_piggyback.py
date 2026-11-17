@@ -2,7 +2,7 @@
 # while the stock stream is on bus 0, panda holds our frame and sends it right behind the next stock frame
 # (safety_rx_tx_hook) instead of queueing it at a random moment next to the stock one (same-id collision, bus-off).
 from opendbc.car.structs import CarParams
-from opendbc.car.hyundai.spas import SPAS, frame
+from opendbc.car.hyundai.spas import SPAS, checksum, frame
 from opendbc.safety.tests.libsafety import libsafety_py
 
 PARAM = 1 | 4 | 8 | 16  # EV gas, long, camera SCC, HDA2 (Ioniq 5 PE)
@@ -115,3 +115,16 @@ def test_spas2_continues_the_stock_counter():
       d.advance(13_000)
       nxt = (stock_counter + 1) % 256
       assert d.stock(SPAS2, nxt) == bytes(frame(SPAS2, (nxt + 1) % 256, "left", 0).dat)  # wraps 255 -> 0, CRC redone
+
+
+def test_hazards_is_a_blinker_command_other_values_stay_refused():
+  # BLINKER_CONTROL 1 ("hazards"): the remote hazard on cars without a camera 0x1ea (11-17); 2 (button backlight) is not ours
+  d = Device()
+  d.stock(SPAS2, 1)
+  assert d.tx(SPAS2, 10, "hazards") == (True, True)
+  assert d.stock(SPAS2, 2) == bytes(frame(SPAS2, 3, "hazards", 0).dat)
+  data = bytearray(frame(SPAS2, 11, None, 0).dat)
+  data[16] = 2 << 5
+  data[:2] = checksum(SPAS2, data).to_bytes(2, 'little')
+  assert not d.s.safety_tx_hook(libsafety_py.make_CANPacket(SPAS2, 0, bytes(data)))
+

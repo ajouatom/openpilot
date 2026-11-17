@@ -239,7 +239,7 @@ class Car:
 
   def remote_blinker_update(self, now):
     """Bluetooth remote -> Hyundai carcontroller. blinkerLeft/Right: remote_blinker 3 / 4 (one stock one-touch, any gear).
-    hazard: toggles CanfdHazardTest, the Joongyu Lab hazard lights CAN test (0x1ea bit 104 on cars whose camera sends 0x1ea)."""
+    hazard: toggles CanfdHazardTest, the Joongyu Lab hazard lights CAN test (0x1ea bit 104 where the camera sends 0x1ea, else SPAS2 BLINKER_CONTROL 1: carcontroller.aprk_blinkers)."""
     action = self.remote_blinker.read()
     if action in ('blinkerLeft', 'blinkerRight'):
       self.CI.CC.remote_blinker = 3 if action == 'blinkerLeft' else 4

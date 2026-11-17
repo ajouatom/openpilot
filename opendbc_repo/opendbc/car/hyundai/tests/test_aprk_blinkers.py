@@ -46,7 +46,7 @@ def make_cc(control=True, test=0, spas=0, ecu=None, mode=1, model=True):
   cc = SimpleNamespace(blinker_control=control, blinker_test=test, blinker_kick_mode=mode, aprk_state=0, aprk_frame=0, aprk_nanos=0, aprk_acked=False,
                          lane_crossing=Crossing(), blinker_side=0, blinker_pulse_end=0, frame=0, yellow_until=[0, 0],
                          blinker_kick_model=model, lane_change_prev="off", model_pulse=False, blinker_pulse_start=0, model_hold={}, model_flashes=0, cgw_kick=False, cgw_trial=0, cgw_last_tx=-carcontroller.CGW_REARM_FRAMES,
-                         remote_blinker=0, remote_pulse=False,
+                         remote_blinker=0, remote_pulse=False, hazard_test=False,
                          CAN=SimpleNamespace(ECAN=0, ACAN=1), packer=CANPacker('hyundai_canfd_generated'), params=SimpleNamespace(STEER_THRESHOLD=250),
                          spas_steer_test=spas, spas_angle=0., aprk_buses=(), ecu=ecu or Ecu())
   cc.kick_pulse = lambda CS: CarController.kick_pulse(cc, CS)
@@ -617,3 +617,24 @@ def test_crossing_kick_still_needs_drive_and_the_key():
   assert step(cc, 50, D, 60, cross=3) == []  # no remote press, Kick off: nothing
   cc = make_cc()
   assert step(cc, 50, P, 0, cross=3) == []  # Kick on but parked: a crossing never kicks
+
+
+def test_hazard_without_camera_0x1ea_uses_spas2_hazards():
+  # CanfdHazardTest on a car whose camera sends no 0x1ea (Tucson HDA1): SPAS2 BLINKER_CONTROL 1, any gear, until turned off
+  cc = make_cc(control=False, ecu=Ecu(answers=False))
+  cc.hazard_test = True
+  sent = step(cc, carcontroller.APRK_REPLY_FRAMES + 30, P, 0)
+  assert cc.aprk_state == carcontroller.APRK_ACTIVE and set(spas2(cc, sent)) == {1}
+  cc.hazard_test = False
+  assert uds(step(cc, 1, P, 0)) == [(DEFAULT, 0), (DEFAULT, 1)] and cc.aprk_state == carcontroller.APRK_IDLE
+
+
+def test_hazard_with_camera_0x1ea_leaves_spas2_alone():
+  # Ioniq 5 PE: bit 104 of the camera's 0x1ea carries it (hyundaicanfd), nothing on SPAS2
+  cc = make_cc(control=False, ecu=Ecu(answers=False))
+  cc.hazard_test = True
+  sent = run(cc, 50, lambda: SimpleNamespace(adrv_0x1ea={}, out=SimpleNamespace(
+    gearShifter=P, vEgo=0., leftBlinker=False, rightBlinker=False, steeringTorque=0, naviTunnel=False,
+    naviRoundabout=False, leftLaneLine=10, rightLaneLine=10)))
+  assert sent == [] and cc.aprk_state == carcontroller.APRK_IDLE
+

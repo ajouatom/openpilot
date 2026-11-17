@@ -4,7 +4,7 @@ const WORDS = {
   ko: {
     fwCurrent: "펌웨어 최신", fwUpdating: "펌웨어 업데이트 중", fwVerify: "업데이트 확인 대기",
     b1Register: "B1 자동 연결 등록", b1Forget: "B1 자동 연결 해제",
-    blinkerLeft: "왼쪽 방향지시등 켜기", blinkerRight: "오른쪽 방향지시등 켜기", hazard: "비상등 켜기/끄기 (CAN 시험, HDA2·0x1ea 차)",
+    blinkerLeft: "왼쪽 방향지시등 켜기", blinkerRight: "오른쪽 방향지시등 켜기", hazard: "비상등 켜기/끄기 (CAN 시험, 0x1ea·SPAS2)",
     blinkRequested: "방향지시등 요청 전달",
     doubleEnabled: "더블클릭 사용", longEnabled: "길게 누르기 사용",
     fastHelp: "두 옵션을 끄면 키 버튼은 누르는 즉시 한 번 실행합니다. 터치 방향은 판별되는 즉시 실행하며, 터치 탭은 뗄 때 실행합니다. 꺼둔 동작의 매핑은 보존됩니다.",
@@ -37,7 +37,7 @@ const WORDS = {
   en: {
     fwCurrent: "Firmware current", fwUpdating: "Updating firmware", fwVerify: "Awaiting firmware verification",
     b1Register: "Register B1 auto-connect", b1Forget: "Remove B1 auto-connect",
-    blinkerLeft: "Turn on left indicator", blinkerRight: "Turn on right indicator", hazard: "Hazard lights on/off (CAN test, HDA2 cars with 0x1ea)",
+    blinkerLeft: "Turn on left indicator", blinkerRight: "Turn on right indicator", hazard: "Hazard lights on/off (CAN test, 0x1ea or SPAS2)",
     blinkRequested: "Indicator request forwarded",
     doubleEnabled: "Enable double click", longEnabled: "Enable long press",
     fastHelp: "With both options off, keys fire once on press. Touch directions fire when identified; touch taps fire on release. Disabled gesture mappings are preserved.",

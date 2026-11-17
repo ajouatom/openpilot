@@ -34,7 +34,7 @@ def frame(address, counter, direction, bus):
   data = bytearray(SPAS[address])
   data[2] = counter
   if address == 0x16A:
-    data[16] = {None: 0, 'left': 0x60, 'right': 0x80}[direction]
+    data[16] = {None: 0, 'left': 0x60, 'right': 0x80, 'hazards': 0x20}[direction]  # BLINKER_CONTROL << 5
   data[:2] = checksum(address, data).to_bytes(2, 'little')
   return CanData(address, bytes(data), bus)
 
