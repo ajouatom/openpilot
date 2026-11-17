@@ -708,3 +708,74 @@ def test_gap_long_press_still_changes_driving_mode():
   helper.params = SimpleNamespace(get_int=values.__getitem__, put_int_nonblocking=values.__setitem__)
   helper._update_cruise_buttons(CS, CC, 80)
   assert values == {"MyDrivingMode": 1, "LongitudinalPersonality": 1}
+
+
+def make_paddle_stop_helper(v_ego, x_state=2, d_rel=0., v_rel=0., resume=0, paddle_mode=2):
+  helper, CS, CC = make_cruise_helper(30, 0, False, True)
+  helper._paddle_mode = paddle_mode
+  del helper._update_cruise_state  # the real one, not the button-test stub
+  helper._paddle_decel_active = resume == 0
+  helper._paddle_resume_kph, helper._paddle_resume_cnt = resume, 0
+  helper._brake_pressed_count = helper._gas_pressed_count = -2
+  helper._gas_tok, helper._gas_tok_timer, helper.disengage_on_accelerator = False, 100, False
+  helper.xState, helper.d_rel, helper.v_rel = x_state, d_rel, v_rel
+  helper.v_ego_kph_set = round(v_ego * 3.6)
+  helper._auto_speed_up = lambda v_cruise_kph: v_cruise_kph
+  CS.vEgo = v_ego
+  return helper, CS, CC
+
+
+@pytest.mark.parametrize("v_ego, x_state, d_rel, v_rel, active, speed, resume", [
+  (0.3, 5, 0., 0., False, 30, 0),       # stopped at the light: keep the set speed (11-02 19:22 went to 5 km/h)
+  (0.3, 2, 8., -0.3, False, 30, 0),     # stopped behind a stopped lead
+  (0.3, 2, 0., 0., True, 30, 0),        # nothing to hand off to: stay stopped by the paddle
+  (8.0, 3, 0., 0., False, 29, 30),      # slowing for the light: hold current speed, restore once stopped
+  (8.0, 2, 30., 0., True, 30, 0),       # a moving lead does not cancel the stop request
+])
+def test_paddle_stop_hands_off_and_keeps_set_speed(v_ego, x_state, d_rel, v_rel, active, speed, resume):
+  helper, CS, CC = make_paddle_stop_helper(v_ego, x_state, d_rel, v_rel)
+  assert helper._update_cruise_state(CS, CC, 30) == speed
+  assert (helper._paddle_decel_active, helper._paddle_resume_kph) == (active, resume)
+
+
+@pytest.mark.parametrize("x_state, d_rel, v_rel", [(3, 0., 0.), (2, 30., 0.)])
+def test_paddle_stop_hand_off_unchanged_outside_paddle_mode_2(x_state, d_rel, v_rel):
+  # A remote / SET- paddle stop with PaddleMode 0: carrot-wip hand-off (current speed, any lead cancels)
+  helper, CS, CC = make_paddle_stop_helper(8.0, x_state, d_rel, v_rel, paddle_mode=0)
+  assert helper._update_cruise_state(CS, CC, 30) == 29
+  assert (helper._paddle_decel_active, helper._paddle_resume_kph) == (False, 0)
+
+
+def test_paddle_stop_restores_set_speed_once_stopped():
+  helper, CS, CC = make_paddle_stop_helper(0.0, x_state=5, resume=30)
+  assert helper._update_cruise_state(CS, CC, 5) == 30
+  assert helper._paddle_resume_kph == 0
+
+
+def test_paddle_stop_restores_set_speed_when_the_light_turns_green_before_stopping():
+  helper, CS, CC = make_paddle_stop_helper(8.0, x_state=3, resume=60)
+  assert helper._update_cruise_state(CS, CC, 29) == 29  # still asked to stop: hold
+  helper.xState = 2
+  speeds = [helper._update_cruise_state(CS, CC, 29) for _ in range(101)]
+  assert speeds[:100] == [29] * 100 and speeds[100] == 60 and helper._paddle_resume_kph == 0
+
+
+@pytest.mark.parametrize("frame, cancel_latched, requested", [(50, False, True), (51, False, False), (50, True, False)])
+def test_stock_cruise_adopt_engages_at_the_stock_set_speed(frame, cancel_latched, requested):
+  helper, CS, CC = make_cruise_helper(70, 0, carrot_cruise_active=False, cruise_enabled=False)
+  helper.autoCruiseControl = 0  # restart hand-over does not depend on automatic engage settings
+  helper._cruise_cancel_state = cancel_latched  # a cancel given since the restart blocks the hand-over
+  helper.frame, helper.stock_adopt_kph = frame, 87.
+  assert helper._adopt_stock_cruise(CC, 70) == 87.
+  assert helper._activate_cruise == (1 if requested else 0)
+
+
+def test_stock_cruise_adopt_respects_interlocks_and_stops_once_engaged():
+  helper, CS, CC = make_cruise_helper(70, 0, carrot_cruise_active=False, cruise_enabled=False)
+  helper.frame, helper.stock_adopt_kph = 50, 87.
+  helper._steering_interlock_active = True
+  helper._adopt_stock_cruise(CC, 70)
+  assert helper._activate_cruise == 0
+  CC = car.CarControl(enabled=True)
+  helper._steering_interlock_active = False
+  assert helper._adopt_stock_cruise(CC, 70) == 70 and helper._activate_cruise == 0

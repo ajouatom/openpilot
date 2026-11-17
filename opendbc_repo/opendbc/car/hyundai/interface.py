@@ -1,6 +1,6 @@
 from opendbc.car import Bus, get_safety_config, structs
 from opendbc.car.hyundai.hyundaicanfd import CanBus
-from opendbc.car.hyundai.values import HyundaiFlags, CAR, DBC, CANFD_RADAR_SCC_CAR, \
+from opendbc.car.hyundai.values import HyundaiFlags, CAR, DBC, CANFD_RADAR_SCC_CAR, KICK_CARS, \
                                                    CANFD_UNSUPPORTED_LONGITUDINAL_CAR, \
                                                    UNSUPPORTED_LONGITUDINAL_CAR, HyundaiSafetyFlags, HyundaiExtFlags, \
                                                    CANFD_HYBRID_STATUS_ADDR, CANFD_HYBRID_STATUS_DLC, \
@@ -147,9 +147,18 @@ class CarInterface(CarInterfaceBase):
         cfgs.insert(0, get_safety_config(structs.CarParams.SafetyModel.noOutput))
       ret.safetyConfigs = cfgs
       from opendbc.car.hyundai.spas import compatible
+      # CanfdBlinkerKick (carcontroller.aprk_blinkers): KICK_CARS on the camera-SCC harness only, the one whose Kick buses
+      # are known. It and this path both pause APRK and send 0x16A; Kick wins and switches this one off at boot so the
+      # menu shows what is actually running
+      kick = candidate in KICK_CARS and bool(ret.flags & HyundaiFlags.CAMERA_SCC) and params.get_bool("CanfdBlinkerKick")
+      if not docs and kick and params.get_bool("CanfdBlinkerControl"):
+        params.put_bool("CanfdBlinkerControl", False)
       if params.get_bool("CanfdBlinkerControl") and compatible(fingerprint, CAN.ECAN) and not ret.flags & HyundaiFlags.ENABLE_BLINKERS:
         ret.flags |= HyundaiFlags.CANFD_SPAS_BLINKERS.value
         ret.safetyConfigs[-1].safetyParam |= HyundaiSafetyFlags.CANFD_SPAS_BLINKERS.value
+      if kick:
+        # panda admits the Kick ids only with this flag; read at fingerprint time, so it applies from the next onroad start
+        ret.safetyConfigs[-1].safetyParam |= HyundaiSafetyFlags.CANFD_BLINKER_KICK.value
 
 
       if ret.flags & HyundaiFlags.CANFD_HDA2:

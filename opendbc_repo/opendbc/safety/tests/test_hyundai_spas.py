@@ -1,7 +1,8 @@
 import pytest
 
 from opendbc.car.structs import CarParams
-from opendbc.car.hyundai.spas import SPAS, APRK, RESPONSE, EXTENDED, DISABLE, ENABLE, DEFAULT, PRESENT, frame, checksum
+from opendbc.car.hyundai.spas import SPAS, APRK, RESPONSE, EXTENDED, PATCH_DISABLE, DISABLE, ENABLE, DEFAULT, PRESENT, frame, checksum
+from opendbc.car.hyundai.values import HyundaiSafetyFlags
 from opendbc.safety.tests.libsafety import libsafety_py
 
 
@@ -362,3 +363,60 @@ def test_stalk_driver_change_latches_off_even_before_next_transmit():
   d.advance(30000)
   park_inputs(d, 31)
   assert not d.tx(0x3C1, packet)
+
+
+# CanfdBlinkerKick (CANFD_BLINKER_KICK): accepted only with the flag on the camera-SCC harness, where APRK takes the four
+# kick UDS requests on ECAN bus 0 and ACAN bus 1, SPAS1 is all zero and SPAS2 carries only BLINKER_CONTROL 0/3/4, on bus 0
+KICK = int(HyundaiSafetyFlags.CANFD_BLINKER_KICK)
+KICK_UDS = (EXTENDED, PATCH_DISABLE, DEFAULT, PRESENT)
+
+
+def kick_frames():
+  """every frame carcontroller.aprk_blinkers sends, with the buses panda admits it on under CANFD_BLINKER_KICK"""
+  yield from ((APRK, data, {0, 1}) for data in KICK_UDS)
+  yield 0x165, bytes(24), {0}
+  yield 0x165, frame(0x165, 7, None, 0).dat, {0}
+  for side in (None, "left", "right"):
+    yield 0x16A, frame(0x16A, 7, side, 0).dat, {0}
+
+
+# without the flag (carrot-wip), and with it but without camera SCC (other harnesses: the Kick buses are unknown there)
+@pytest.mark.parametrize("flags", [0, 4, 8, 8 | 4, 16, 16 | 4, 16 | 8, 16 | 8 | 4, 16 | 8 | 4 | 128, 16 | 8 | 4 | 32, 16 | 4 | 128,
+                                   16 | 8 | 4 | 2048, 1 | 16 | 8 | 4, KICK, KICK | 4, KICK | 16, KICK | 16 | 4, KICK | 16 | 4 | 128])
+def test_no_kick_frame_without_kick_flag_and_camera_scc(flags):
+  d = Device(flags, 0)
+  d.stock()
+  for addr, data, _ in kick_frames():
+    for bus in (0, 1, 2):
+      assert not d.tx(addr, data, bus), (hex(addr), data.hex(), bus)
+
+
+@pytest.mark.parametrize("flags", [8, 8 | 4, 16 | 8, 16 | 8 | 4, 16 | 8 | 4 | 128, 16 | 8 | 4 | 32, 16 | 8 | 4 | 2048, 1 | 16 | 8 | 4])
+def test_kick_flag_admits_only_kick_shapes(flags):
+  d = Device(flags | KICK, 0)
+  for addr, data, buses in kick_frames():
+    for bus in (0, 1, 2):
+      assert d.tx(addr, data, bus) == (bus in buses), (hex(addr), data.hex(), bus)
+  for byte, value in ((3, 0x4B), (11, 0x14), (23, 1)):
+    bad = bytearray(24)
+    bad[byte] = value
+    assert not d.tx(0x165, bytes(bad))
+  for byte, value in ((16, 0x20), (16, 0x61), (3, 0x01), (20, 0x10)):
+    bad = bytearray(frame(0x16A, 0, "left", 0).dat)
+    bad[byte] = value
+    assert not d.tx(0x16A, bytes(bad))
+  assert not d.tx(0x16A, bytes(24))  # SPAS2 must be 32 bytes
+  for data in (DISABLE, ENABLE, bytes.fromhex("023e000000000000"), PRESENT[:4] + bytes([1, 0, 0, 0])):
+    assert not d.tx(APRK, data, 0) and not d.tx(APRK, data, 1)
+
+
+def test_spas_lease_owns_the_ids_over_the_kick_flag():
+  # interface.py never sets both, and panda keeps the lease's behaviour if it gets both
+  def trace(flags, bus):
+    d = Device(flags, bus)
+    d.open()
+    out = [d.tx(addr, data, b) for addr, data, _ in kick_frames() for b in (0, 1, 2)]
+    d.advance(20000)
+    return out + [d.tx(0x16A, frame(0x16A, 11, "left", bus).dat), d.tx(APRK, DEFAULT, 1 - bus)]
+  for flags, bus in ((4096 | 16 | 8 | 4, 0), (4096 | 16 | 4, 1), (4096 | 8 | 4, 0)):
+    assert trace(flags | KICK, bus) == trace(flags, bus)

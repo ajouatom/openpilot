@@ -157,7 +157,7 @@ Range 0–200, step 10, catalog default 10. Zero permits the quickest accelerati
 ## 4. Longitudinal tuning
 
 > [!IMPORTANT]
-> Hyundai, Kia, and Genesis vehicles are fixed at `Kp=1.0`, `Ki=0`, and `Kf=1.0` to preserve safe acceleration and braking tracking. These three gain settings are hidden on those vehicles, and previously stored values are ignored by control. `LongActuatorDelay` remains visible and effective.
+> Hyundai, Kia, and Genesis vehicles other than identified Ray EV Comma Pedal configurations are fixed at `Kp=1.0`, `Ki=0`, and `Kf=1.0` to preserve safe acceleration and braking tracking. These three gain settings are hidden on those vehicles, and previously stored values are ignored by control. `LongActuatorDelay` remains visible and effective.
 
 | Setting | Default | Stored range (step) | Actual scale | Role |
 |---|---:|---:|---:|---|
@@ -167,9 +167,11 @@ Range 0–200, step 10, catalog default 10. Zero permits the quickest accelerati
 | `LongActuatorDelay` | 20 | 0–200 (5) | ×0.01 s | How far ahead in the plan to compensate for response delay |
 
 > [!IMPORTANT]
-> The displayed `LongTuningKiV` title says `×0.01`, but `longcontrol.py` currently applies **×0.001**. Stored `100` is Ki `0.100`, not `1.00`.
+> `LongTuningKiV` applies **stored value ×0.001**. Stored `50` gives Ki `0.050`, and stored `100` gives Ki `0.100`.
 
-Hyundai, Kia, and Genesis do not read the stored `LongTuningKpV`, `LongTuningKiV`, or `LongTuningKf` values. Toyota/Lexus also ignore and hide these three settings. Their dedicated vehicle controller corrects acceleration tracking, so the common controller passes the target through with `Kp=0`, `Ki=0`, and `Kf=1`. Stopping control and acceleration limits remain active. On other brands, the overrides apply only when the vehicle's base longitudinal tune has a single Kp point and a single Ki point. Multi-point vehicle tunes retain their defaults. These gains are also not the primary controller when stock SCC controls acceleration and braking.
+An identified Ray EV Comma Pedal configuration displays Long Kp, Ki and Kf and applies saved values to the existing speed PID using planner target speed minus measured speed. Values are read at controller initialization and approximately once per second afterward. Stored defaults are `100/0/100`. After newly enabling Comma Pedal, reinitialize vehicle control and reopen settings to check the identified configuration.
+
+Other Hyundai, Kia, and Genesis configurations do not read the stored `LongTuningKpV`, `LongTuningKiV`, or `LongTuningKf` values. Toyota/Lexus also ignore and hide these three settings. Their dedicated vehicle controller corrects acceleration tracking, so the common controller passes the target through with `Kp=0`, `Ki=0`, and `Kf=1`. Stopping control and acceleration limits remain active. On other brands, the overrides apply only when the vehicle's base longitudinal tune has a single Kp point and a single Ki point. Multi-point vehicle tunes retain their defaults. These gains are also not the primary controller when stock SCC controls acceleration and braking.
 
 Volkswagen MEB vehicles, including ID.4, use a single base Ki point of zero, so all three gain settings apply. Previously saved values also apply; the default stored values `100/0/100` produce `Kp=1`, `Ki=0`, and `Kf=1`. Updating does not reset saved gains.
 
@@ -178,7 +180,7 @@ Volkswagen MEB vehicles, including ID.4, use a single base Ki point of zero, so 
 - Raising Kf commands more for the same target acceleration in both acceleration and braking directions.
 - Raising delay uses a more future plan point and acts earlier; too much can lead the real car and surge.
 
-On other brands, tune delay first only if acceleration and braking are both consistently late, in 0.05-second steps. Then consider Kf, Kp, and finally Ki. Restore the saved profile immediately if oscillation appears.
+On vehicles with adjustable gains, tune delay first only if acceleration and braking are both consistently late, in 0.05-second steps. Then consider Kf, Kp, and finally Ki. Restore the saved profile immediately if oscillation appears.
 
 <a id="following-gap"></a>
 ## 5. Following gap

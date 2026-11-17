@@ -3758,6 +3758,27 @@ def test_distinct_stopped_body_cannot_replace_l1_without_clear_persistent_vision
   assert not any(ready)
 
 
+@pytest.mark.parametrize("side", [-1, 1])
+@pytest.mark.parametrize("interruption", ["none", "id", "gap", "vision", "parallel"])
+def test_close_offset_xyv_requires_continuous_overlap(side, interruption):
+  matcher = VisionRadarMatcher()
+  held, near = snapshot_radar_points((
+    Point(48, 14., 0.2 * side, trackState=2), Point(61, 4., 1.4 * side, trackState=2),
+  ), v_ego=2.)
+  stationary = VisionRadarMatch(held, 1., 0.01, 0.2 * side)
+  vision = vision_lead_from_model(model_with_lead(6., 0.65 * side, 2., probability=1.))
+  results = []
+  for i in range(8):
+    point = replace(near, track_id=62) if interruption == "id" and i >= 3 else near
+    offset = 2.4 if interruption == "parallel" else 1.4
+    moving = VisionRadarMatch(point, 1., 0.01, offset * side)
+    stamp = i * 0.05 + (0.2 if interruption == "gap" and i >= 3 else 0.)
+    observation = None if interruption == "vision" and i == 2 else vision
+    results.append(matcher._stationary_closer_handoff_ready(stationary, moving, observation, stamp))
+  first = next((i for i, ready in enumerate(results) if ready), None)
+  assert first == {"none": 4, "id": 7, "gap": 7, "vision": 7, "parallel": None}[interruption]
+
+
 def test_stationary_front_hands_off_to_offset_closer_vision_range() -> None:
   matcher = VisionRadarMatcher()
   match = None

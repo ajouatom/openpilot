@@ -74,6 +74,7 @@ uint32_t awaitSince;
 Op ownedDirection;
 uint8_t original[8];
 b1::TapFrame frames[7];
+b1::TapFeedback tapFeedback;
 int frameCount, nextFrame;
 int retriedFrame=-1;
 unsigned arbitrationRetries, frameRetries;
@@ -127,8 +128,8 @@ void finish(bool success, const char *reason="cancelled") {
   if (active) {
     active=inFlight=false;
     if (!mode(false)) { success=false; reason="listen_mode_failed"; }
-    traceReason=success ? "completed" : reason;
   }
+  traceReason=success ? "completed" : reason;
   if (success) ack=activeSeq;
   else { ack=0; owned=false; }
 }
@@ -164,6 +165,7 @@ void startTap(const Request &req) {
   if (prefs.putBytes("counter",&saved,sizeof(saved))!=sizeof(saved)) { traceReason="counter_store_failed"; errorAt=now; return; }
   haveSaved=true;
   active=true; owned=true; ownedAt=now; activeSeq=req.seq; ack=0;
+  tapFeedback={};
   ownedDirection=Op(req.op); sawLamp=false; darkAt=0;
   nextFrame=0; inFlight=false;
   if (!mode(true) || !guard(millis())) { finish(false,"mode_or_lease"); errorAt=now; return; }
@@ -182,13 +184,9 @@ void receiveCan() {
     if (owned && &s==&feedback && s.count) {
       uint8_t expected=ownedDirection==Left ? 1 : 2;
       uint8_t stalkReport=s.data[1]&5;
-      uint8_t expectedStalk=ownedDirection==Left ? 1 : 4;
-      // 0x413 reports the injected one-touch as well as real lever activity.
-      // Allow only a confirmed same-side lamp/stalk pair during this tap.
-      // The independent raw 0x3C1 override check below still runs on every frame.
-      bool tapFeedback=confirmedFrames && stalkReport==expectedStalk && lamps()==expected &&
-                       micros()-startUs <= frames[frameCount-1].offsetUs+50000;
-      if ((lamps() & ~expected) || (stalkReport && !tapFeedback)) {
+      if (!tapFeedback.accepts(stalkReport, lamps(),
+          ownedDirection==Left ? b1::Direction::Left : b1::Direction::Right,
+          confirmedFrames>0, micros()-startUs, frames[frameCount-1].offsetUs+50000)) {
         finish(false,"feedback_override"); overrideAt=now;
       }
       else if (lamps()==expected) { if (confirmedFrames) sawLamp=true; darkAt=0; }
@@ -219,7 +217,7 @@ class Writer : public BLECharacteristicCallbacks {
     if (!diff && r.session && r.session==session.load()) xQueueSend(inbox,&r,0);
   }
 };
-constexpr char RELEASE_TAG[]="carrot-b1-release=4";
+constexpr char RELEASE_TAG[]="carrot-b1-release=5";
 char buildId[65];
 
 void setup() {

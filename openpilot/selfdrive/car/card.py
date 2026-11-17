@@ -23,7 +23,7 @@ from opendbc.car.interfaces import CarInterfaceBase
 from opendbc.car.hyundai.values import HyundaiSafetyFlags
 from openpilot.selfdrive.pandad import can_capnp_to_list, can_list_to_can_capnp
 from openpilot.selfdrive.car.alternative_experience import get_alternative_experience
-from openpilot.selfdrive.car.card_diagnostics import should_log_card_diagnostics
+from openpilot.selfdrive.car.card_diagnostics import invalid_can_messages, should_log_card_diagnostics
 from openpilot.selfdrive.car.cruise import VCruiseCarrot
 from openpilot.selfdrive.car.car_specific import MockCarState
 from openpilot.selfdrive.car.openpilot_toggle import CruiseMainOpenpilotToggle
@@ -31,6 +31,7 @@ from openpilot.selfdrive.car.tesla_turn_signals import TeslaTurnSignals
 from openpilot.selfdrive.car.voice_indicator import NativeVoiceIndicator, native_indicator
 from openpilot.selfdrive.car.tesla_lane_signals import TeslaLaneSignals
 from openpilot.selfdrive.car.hyundai_spas import SpasSignals
+from openpilot.selfdrive.car.hyundai_kick import KickOutput
 from openpilot.selfdrive.controls.lib.lateral_readiness import LateralStartupGate
 from openpilot.selfdrive.controls.lib.desire_lib.tesla_turn import turn_signal_context
 from openpilot.selfdrive.carrot.xiaoge.xiaoge_vision import (
@@ -153,6 +154,7 @@ class Car:
     stock_signal = native_indicator(self.CP)
     self.native_voice_indicator = NativeVoiceIndicator(stock_signal) if stock_signal else None
     self.spas_signals = SpasSignals(self.CP, self.params)
+    self.kick_output = KickOutput(self.CP, self.params, event=cloudlog.event)
     self.spas_signal_status = None
     self.spas_signal_log_at = 0.
 
@@ -214,6 +216,7 @@ class Car:
     self.card_diag_slow_loop = 0
     self.card_diag_slow_process = 0
     self.card_diag_can_timeouts = 0
+    self.can_parser_result = ""
     self.xiaoge_vision_result: XiaogeVisionResult | None = None
     self.xiaoge_blindspot_sources = (False, False, False, False)
     self.xiaoge_blindspot_sources_published = None
@@ -224,7 +227,7 @@ class Car:
     self.card_diag_stage_current = dict.fromkeys(self.card_diag_stage_names, 0)
     self.card_diag_stage_sum_us = dict.fromkeys(self.card_diag_stage_names, 0)
     self.card_diag_stage_max_us = dict.fromkeys(self.card_diag_stage_names, 0)
-    self.runtime_diagnostics = RuntimeDiagnostics('card', cloudlog.event)
+    self.runtime_diagnostics = RuntimeDiagnostics('card', cloudlog.event, peak_metric='state_tail_ms')
 
   def _log_tesla_signals(self, CS, now: int) -> None:
     changed = self.tesla_signals.status != self.tesla_signal_status
@@ -256,10 +259,16 @@ class Car:
     self.CI.CS.speedcam_engaged = self.sm['carControl'].enabled
     self.CI.CS.speedcam_v_cruise = self.v_cruise_helper.v_cruise_kph
     CS = self.CI.update(can_list)
+    self.kick_output.observe_driver(can_list, CS, time.monotonic())
     self.spas_signals.observe(can_list, time.monotonic())
     if self.CP.brand == 'mock':
       CS = self.mock_carstate.update(CS)
     ci_done_ns = time.monotonic_ns()
+    # canError alert text2 (events.car_parser_result) names the timed-out messages
+    can_result = "" if CS.canValid else invalid_can_messages(self.CI.can_parsers.values())
+    if can_result != self.can_parser_result:
+      self.can_parser_result = can_result
+      self.params.put_nonblocking("CanParserResult", can_result)
 
     self.sm.update(0)
     sm_done_ns = time.monotonic_ns()
@@ -315,6 +324,9 @@ class Car:
     #self.v_cruise_helper.update_v_cruise(CS, self.sm['carControl'].enabled, self.is_metric)
     # A gas tap spent on a camera skip must not also raise the set speed by +10.
     self.v_cruise_helper.speedcam_gas_tok_consumed = getattr(self.CI.CS, "speedcam_gas_tok_consumed", False)
+    # Restart hand-over: Hyundai CAN-FD camera-SCC carstate reports the stock SCC set speed while it waits to take a
+    # cruising stock SCC over after a device restart (0 = nothing to adopt, and always 0 for other cars).
+    self.v_cruise_helper.stock_adopt_kph = getattr(self.CI.CS, "stock_adopt_kph", 0.)
     self.v_cruise_helper.update_v_cruise(CS, self.sm, self.is_metric)
     #self.t3 = time.monotonic()
     if self.sm['carControl'].enabled and not self.CC_prev.enabled:
@@ -456,7 +468,17 @@ class Car:
         CC.leftBlinker = CC.rightBlinker = False
         CC.assistantLaneSignalId = ''
         CC = CC.as_reader()
+      if self.kick_output.configured:
+        kick_valid = (CS.canValid and not impact_reboot and model_v2 is not None and
+                      all(self.sm.valid[k] and self.sm.alive[k] and 0 <= time.monotonic()-self.sm.recv_time[k] < .2
+                          for k in ('carControl', 'modelV2')))
+        kick_now = time.monotonic()
+        self.CI.CC.kick_output_ready = self.kick_output.update(kick_valid, kick_now)
+        self.CI.CC.kick_direction = self.kick_output.request(
+          CS, kick_now, self.initialized_prev, self.CI.CC.kick_output_ready, clock=time.monotonic)
+        self.CI.CC.kick_request_id = self.kick_output.request_id
       self.last_actuators_output, can_sends = self.CI.apply(CC, now_nanos, model_v2, radar_state)
+      can_sends = self.kick_output.isolate(can_sends, model_v2, time.monotonic())
       if self.tesla_signals.configured:
         fresh = all(self.sm.seen[s] and self.sm.alive[s] and self.sm.valid[s] and
                     0 <= time.monotonic() - self.sm.recv_time[s] <= 0.2 for s in ('carControl', 'modelV2'))
@@ -474,6 +496,8 @@ class Car:
       apply_done_ns = time.monotonic_ns()
       self.pm.send('sendcan', can_list_to_can_capnp(can_sends, msgtype='sendcan', valid=CS.canValid))
       sendcan_done_ns = time.monotonic_ns()
+      if self.kick_output.configured:
+        self.kick_output.feedback(CS, sendcan_done_ns * 1e-9, can_sends)
       if self.native_voice_indicator is not None:
         self.native_voice_indicator.update(sendcan_done_ns * 1e-9, CC, CS, self.CI.CS, can_sends)
 
@@ -549,10 +573,13 @@ class Car:
     self.initialized_prev = initialized
     self.CS_prev = CS
     self.runtime_diagnostics.record(
-      context={'can_backend': CAN_BACKEND},
+      context={'can_backend': CAN_BACKEND, 'cruise_frame': self.v_cruise_helper.frame,
+               'cruise_params_refreshed': (self.v_cruise_helper.frame - 1) % 10 == 0,
+               'state_receive_mono_ns': self.card_diag_recv_ns},
       work_ms=(time.monotonic_ns() - self.card_diag_recv_ns) / 1e6,
       thread_cpu_ms=(time.thread_time() - cpu_start) * 1000,
       **{f'{name}_ms': value / 1000 for name, value in self.card_diag_stage_current.items()},
+      **self.v_cruise_helper.runtime_timing,
     )
 
   def params_thread(self, evt):

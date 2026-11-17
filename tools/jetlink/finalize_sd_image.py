@@ -206,6 +206,8 @@ def provision(root, setup, bundle, stage):
         '[Service]\nLogsDirectory=carrot-jetlink-hud\nLogsDirectoryMode=0700\n'
         'WorkingDirectory=/var/log/carrot-jetlink-hud\n')
   script = RUNTIME + '/current/tools/jetlink/'
+  from power_setup import configure as configure_power
+  configure_power(root, release/'tools/jetlink')
   from install_wifi import configure as configure_wifi
   configure_wifi(root)
   from install_usbc import configure as configure_usbc

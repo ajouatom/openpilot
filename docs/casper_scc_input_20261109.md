@@ -108,7 +108,8 @@ The fault-field values are not a diagnostic trouble code identifying a component
 ## Connection-health follow-up
 
 The owner explicitly asked whether unstable connectivity could be responsible.
-All 600 pandaStates samples show `faultTemp` and `interruptRateCan2`.
+All 600 pandaStates samples show faultStatus `faultTemp` and fault
+`interruptRateCan2`. Here `faultTemp` means temporary fault status.
 
 | Counter / state | canState1, first -> last |
 | --- | --- |
@@ -185,3 +186,170 @@ from the original received FCA messages; it is not a log from modified software.
 Dedicated event/state-machine and full state_control tests check the inhibit.
 The new CAN-FD stop-object trial is separate from this classic-CAN Casper case;
 see `docs/canfd_signal_stop_object_20261109.md`.
+
+## Older-version normal-driving comparison, 2026-11-11
+
+The owner supplied `00001f02--55bd6d59a1--0` and `--1` as normal-driving
+examples after returning to commit `2ea4415ac24d3a76f48a66d2834382d5717384ee`.
+The recordings themselves are from November 11 around 08:10–08:12 KST.
+October 21 is the commit date. The earlier failure `00001ef4--23d781cad3--12`
+was recorded November 9 around 08:09 KST at
+`b1c827468fc44f7a77958c658159b651953b9c7d`.
+Both recordings identify HardwareSerial `ac960474`, tici/DOS, AGNOS
+`19.8-carrot-bt1`, HYUNDAI_CASPER_EV, CP flags 67976 and Hyundai safety param 13.
+Both use EnableRadarTracks=0, EnableCornerRadar=0, HyundaiCameraSCC=1 and active
+openpilot longitudinal control. Recorded stopping, actuator-delay and following-gap
+parameters checked in this comparison also agree.
+
+| Measurement | Older version, segment 0 | Older version, segment 1 | Failure, segment 12 |
+| --- | --- | --- | --- |
+| Raw received SCC11 packets | 3,163 | 2,997 | 2,990 |
+| Plausible status1/valid1 objects below 150 m | 3,056 | 2,997 | 2,217 |
+| Of those, fixed 10.4 m / +0.2 m/s | 0 | 0 | 2,163 |
+| SCC11 counter discontinuities | 0 | 0 | 0 |
+| Maximum SCC11 interarrival gap | 30.44 ms | 31.09 ms | 30.69 ms |
+| SCC/vision/absent source changes | 5 | 0 | 176 |
+| Raw FCA fault packets | 4 | 0 | 297 |
+| canState1 error-passive samples | 632/632 | 600/600 | 600/600 |
+| canState1 totalErrorCnt growth | 245,809 | 244,634 | 606,231 |
+| interruptRateCan2 fault samples | 0 | 0 | 600/600 |
+
+Normal-driving segment 0 has four FCA fault packets near 13.11–13.17 s.
+Segment 1 has continuous SCC selection, including 910 packets at 4.5 m and
+zero relative speed. The owner's normal-driving description is consistent with
+these varying SCC measurements and stable selection. Physical braking performance
+was not independently measured in this comparison.
+
+### What the normal logs change in the diagnosis
+
+The separate canState1 error-passive condition exists during both normal-driving
+segments. Its error IRQ/reset growth in segment 1 is about 4,084/s, compared
+with about 10,121/s in the failure. The F4 CAN interrupt-rate threshold is 12,000/s
+and the failure has individual observed intervals above that threshold. The
+normal example therefore prevents treating error-passive alone as an explanation
+for the SCC object freeze. The earlier severe error storm remains real, and its
+causal relationship to SCC perception remains unresolved.
+
+All 9,150 SCC11 packets match independent little-endian field extraction and
+the repository CANParser. The fixed object is present in received bus-2 bytes.
+The recorded failure chain is received fixed/invalid SCC content, acceptance of
+the repeated valid-looking object, SCC/vision handoffs, and changing controller
+inputs. The earlier fault-admission correction addresses continuing control under
+the observed faults. It does not identify the trigger of the received object freeze.
+
+### Version comparison and recorded-input replay
+
+Between the two recorded commits, these sources are byte-identical
+
+- `opendbc_repo/opendbc/car/hyundai/radar_interface.py`
+- `opendbc_repo/opendbc/dbc/hyundai_kia_generic.dbc`
+- `opendbc_repo/opendbc/car/hyundai/hyundaican.py`
+- Panda board drivers and `openpilot/selfdrive/pandad`
+
+The CameraSCC MAIN-availability change was reviewed against the actual data.
+Both segment 1 and the failure have cruiseState.available=true throughout,
+outgoing SCC11 MainMode_ACC=1 throughout, received MainMode_ACC=0 throughout
+and received SCC12 ACCMode=0 throughout. This change does not explain the
+difference in these recorded windows.
+
+Added CommaPedal paths require another vehicle profile and flags. The recorded
+Casper flags and safety param do not enable those paths. The recorded outgoing
+CAN address set and periodic counts agree between segment 1 and the failure.
+Neither window contains a direct sendcan command to bus 2 or diagnostic traffic.
+For vehicle-side receive packets forwarded to camera-side TX echo, every one of
+115,387 packets in normal segment 1 has an identical payload within the
+comparison window. In the failure, 115,479 of 115,480 match. The single unmatched
+packet is address 0x490. There is no broad forwarding loss or modified-payload
+pattern in these windows. Startup is excluded from this steady-state comparison.
+
+The private replay loads each commit's complete Python `radar_motion` package in
+isolation, preserving source hashes. It runs both implementations on identical
+recorded model, liveTracks, carState and pose inputs with EnableRadarTracks=0.
+At each model publication it uses the latest preceding recorded inputs and the
+production exposure/publication time calculation. It also executes each commit's
+actual `_update_scc` method on every received SCC11 packet with recorded ego speed.
+
+| Replay comparison | Segment 0 | Segment 1 | Failure |
+| --- | --- | --- | --- |
+| SCC method calls | 3,163 | 2,997 | 2,990 |
+| Different SCC method outputs | 0 | 0 | 0 |
+| Complete radar-controller calls | 1,152 | 1,199 | 1,200 |
+| Different radar-controller outputs | 0 | 0 | 0 |
+| Fixed object accepted by either SCC method | 0 | 0 | 2,083 |
+| Fixed object selected by either radar controller | 0 | 0 | 787 |
+
+Thus the older source also accepts the failure's input. These observations provide
+no reproduction of a version regression in the decoded SCC/lead-selection path.
+They establish an existing weakness in trusting plausible repeated SCC content.
+The replay uses Python backends and a common model-publication schedule. It does
+not reconstruct original process scheduling or execute the vehicle ECU/Panda binary.
+
+### Remaining limits and evidence needed for the upstream cause
+
+The normal logs record dirty=true with an empty saved GitDiff. Their exact local
+source changes cannot be recovered from these logs. The failure records dirty=false.
+The saved PandaSignatures parameter also differs between versions. This is a
+recorded firmware-signature parameter, and does not independently verify the
+flashed binary. The good recording starts near Panda uptime 5 s and continues
+through the first two minutes. The failure segment starts near uptime 729 s.
+Version, restart and accumulated runtime are therefore confounded.
+
+The failure route's NAS directories for segments 11–14 are now empty. The archived
+segment 12 remains available. No surviving startup/first-fault transition from
+that route was located in this task. The two-version source replay cannot establish
+whether the upstream trigger was ECU state, an electrical/runtime condition, an
+initialization interaction or another executable difference. A same-condition
+capture beginning before the first SCC/FCA transition would distinguish those
+possibilities. A specific causal commit has not been established.
+
+Analysis made no production control or radar changes. Private inputs, decoded
+evidence, comparison scripts, source snapshots and replay results are archived at
+`.analysis/archive/2026-11-11/casper-version/evidence.zip`. Rlog SHA256 values are
+
+- Segment 0 `588dbc23e7c7450da4f05fe15215582557e0b0ade41ea67249a517eb3bd0a98f`
+- Segment 1 `fc0384394ac52e106baa74225cea4792009d8685ed70ddf91892e4b82941060b`
+- Failure `34f00df4794598576bd59e5135c62501941109f4ae20da95e19521197175e781`
+
+### Owner's stock-control and intermittent-onset follow-up
+
+The owner additionally reports normal operation with stock SCC, and intermittent
+failures with recent software both immediately after starting and later during
+driving. These are owner-reported observations. The stock test's comma/harness
+connection state and the recent failing executable revision are awaiting clarification.
+Together with normal older-version operation, this increases the priority of
+software-dependent ECU interaction and startup/state transitions in the investigation.
+The received-byte evidence identifies where the abnormal content is observed.
+The cause can still involve software that influences the transmitting ECU.
+
+An additional offline check executed the actual `CarInterface.init` methods from
+2ea4415ac, b1c827468f and ecdd043934 with recorded Casper CP flags 67976,
+extFlags 20 and EnableRadarTracks=0. All three make only the same
+LongitudinalPersonalityMax=4 parameter write. None attempts ECU-disable, radar
+track enablement or blinker-ECU diagnostics in that configuration. Recorded
+CAMERA_SCC also excludes the periodic tester-present branch in all three.
+Params writes and CAN functions were captured by offline spies, with no device IO.
+This narrows those specific diagnostic paths. The earlier received-data replay
+and this initialization check leave full runtime/ECU interaction unresolved.
+
+The owner then clarifies that operation is normal when SCC data is used directly
+without blocking. This investigation interprets that description as forwarding
+stock SCC commands to the vehicle. The exact configuration or implementation of
+that successful path has not been supplied. This observation strengthens the
+priority of investigating command substitution and its ECU feedback effects.
+
+The actual `hyundai_fwd_hook` is byte-identical across 2ea4415ac, b1c827468f
+and the November 11 source. Accepted host SCC12 transmissions suppress forwarding
+of stock SCC11/SCC12/SCC14 for 400 ms. FCA11 has its own 400 ms suppression timer.
+The recorded host SCC12 maximum transmission gaps are 23.97, 23.78 and 23.64 ms
+in good segment 0, good segment 1 and the failure respectively. Normal older-version
+operation therefore already includes this substitution mechanism.
+
+After excluding the first 0.5 s following each segment's first host SCC12, original
+SCC11/SCC14 payloads have no matching vehicle-side TX echoes in any of the three
+logs. The sole failure SCC12 payload overlap also matches a preceding host send,
+so it does not establish stock passthrough. Stock SCC13 and FCA12 payloads continue
+through in all three windows, with no host replacements for those addresses.
+FCA11 echo identity alone cannot distinguish forwarding from a host copy with
+unchanged fields. This evidence narrows intermittent forwarding takeover as an
+explanation for the supplied windows. Timing or ECU interactions outside those
+windows remain unresolved. Private results are in `forwarding-followup.json`.

@@ -22,6 +22,89 @@ def scene():
   return cs,md
 
 
+@pytest.mark.parametrize('source', ['manual', 'manual_turn', 'model_path'])
+@pytest.mark.parametrize('minimum', [0., 2.])
+@pytest.mark.parametrize('send_delay', [0., .5, 1.5])
+def test_native_manual_minimum_starts_at_first_transmission(source, minimum, send_delay):
+  from openpilot.selfdrive.controls.lib.desire_lib.manual_turn_indicator import ManualTurnMovement
+  cs, md = scene()
+  cs.steeringAngleDeg = 0.
+  detector, isolation = ModelIndicator(), BoundaryIndicator()
+  detector.request_time = 10.
+  detector.active = ManualTurnMovement(10., 1) if source == 'manual_turn' else Movement(10., 1, source, cs, md)
+  detector.active.crossed = True
+  ended = None
+  for i in range(1, 80):
+    now = 10. + i * .05
+    feedback = {'stamp': now}
+    if now >= 10. + send_delay:
+      feedback['native_start'] = {'request': 10., 'direction': 'left', 'time': 10. + send_delay}
+    detector.update(now, cs, md, valid=True, lateral_active=True, desire_enabled=False,
+                    path_enabled=True, busy=False, isolation=isolation, feedback=feedback,
+                    manual_turn_enabled=source == 'manual_turn', yaw_rate=0., manual_minimum=minimum)
+    if detector.active is None:
+      ended = now
+      break
+  assert ended is not None
+  if minimum and source in ('manual', 'manual_turn'):
+    assert 2. <= ended - (10. + send_delay) <= 2.051
+  else:
+    assert ended < 10.6
+
+
+@pytest.mark.parametrize('fault', ['invalid', 'busy', 'stalk', 'opposite', 'gear', 'pose', 'driver_opposite', 'disabled'])
+def test_native_minimum_never_delays_manual_turn_cancellation(fault):
+  from openpilot.selfdrive.controls.lib.desire_lib.manual_turn_indicator import ManualTurnMovement
+  cs, md = scene()
+  cs.steeringAngleDeg = 0.
+  cs.blinkerLever = 2 if fault == 'stalk' else 0
+  cs.rightBlinker = fault == 'opposite'
+  cs.gearShifter = 'park' if fault == 'gear' else 'drive'
+  if fault == 'driver_opposite':
+    cs.steeringPressed, cs.steeringTorque, cs.steeringAngleDeg = True, -100., -5.
+  detector, isolation = ModelIndicator(), BoundaryIndicator()
+  detector.active, detector.request_time = ManualTurnMovement(10., 1), 10.
+  detector.update(10.05, cs, md, valid=fault != 'invalid', lateral_active=False, desire_enabled=False,
+                  path_enabled=False, busy=fault == 'busy', isolation=isolation,
+                  manual_turn_enabled=fault != 'disabled', yaw_rate=None if fault == 'pose' else 0., manual_minimum=2.)
+  assert detector.active is None
+
+
+@pytest.mark.parametrize('fault', ['returned', 'geometry', 'timeout'])
+def test_native_minimum_never_delays_lane_observation_cancellation(fault):
+  cs, md = scene()
+  detector, isolation = ModelIndicator(), BoundaryIndicator()
+  detector.active, detector.request_time = Movement(10., 1, 'manual', cs, md), 10.
+  if fault == 'returned':
+    md.laneLines[1].y[0] -= .3
+  if fault == 'geometry':
+    md.laneLines[1].y[0] = math.nan
+  detector.update(10.2 if fault == 'timeout' else 10.05, cs, md, valid=True, lateral_active=False,
+                  desire_enabled=False, path_enabled=False, busy=False, isolation=isolation, manual_minimum=2.)
+  assert detector.active is None
+
+
+@pytest.mark.parametrize('fault', ['request', 'direction', 'old_record', 'future_record', 'future_start', 'nan_start'])
+def test_native_minimum_rejects_unbound_or_stale_transmission_time(fault):
+  from openpilot.selfdrive.controls.lib.desire_lib.manual_turn_indicator import ManualTurnMovement
+  cs, md = scene()
+  cs.steeringAngleDeg = 0.
+  detector, isolation = ModelIndicator(), BoundaryIndicator()
+  detector.active, detector.request_time = ManualTurnMovement(10., 1), 10.
+  for i in range(1, 42):
+    now = 10. + i * .05
+    native = {'request': 9. if fault == 'request' else 10.,
+              'direction': 'right' if fault == 'direction' else 'left',
+              'time': math.nan if fault == 'nan_start' else now+1. if fault == 'future_start' else 10.5}
+    feedback = {'stamp': now-1. if fault == 'old_record' else now+1. if fault == 'future_record' else now,
+                'native_start': native}
+    detector.update(now, cs, md, valid=True, lateral_active=False, desire_enabled=False, path_enabled=False,
+                    busy=False, isolation=isolation, feedback=feedback, manual_turn_enabled=True, yaw_rate=0., manual_minimum=2.)
+    if detector.active is None:
+      break
+  assert detector.active is None and now <= 12.05
+
+
 def run(detector, cs, md, **kwargs):
   isolation=BoundaryIndicator()
   args=dict(valid=True,lateral_active=True,desire_enabled=False,path_enabled=True,busy=False,isolation=isolation,command_curvature=md.action.desiredCurvature)
@@ -80,8 +163,47 @@ def test_desire_nonzero_is_not_event_and_turn_does_not_require_adjacent_lane():
   d=ModelIndicator();run(d,cs,md,path_enabled=False,desire_enabled=True)
   assert d.active is None
   md.meta.desireState=[.1,0.,.9,0.,0.,0.,0.,0.];md.roadEdges[1].y=[2.]*13
-  d=ModelIndicator();run(d,cs,md,path_enabled=False,desire_enabled=True)
+  cs.steeringAngleDeg=-25.
+  d=ModelIndicator();run(d,cs,md,path_enabled=False,desire_enabled=True,yaw_rate=.1)
   assert d.active and d.active.source=='model_turn'
+
+
+@pytest.mark.parametrize('angle,yaw', [(-1.6,.0044), (25.,.1), (-25.,-.1), (-25.,None), (-25.,math.nan),
+                                     (math.inf,-.1), (math.nan,-.1)])
+def test_model_turn_needs_matching_measured_rotation(angle, yaw):
+  cs, md = scene()
+  cs.steeringAngleDeg = angle
+  md.meta.desireState = [.4692,.5009,.0138,0.,0.,0.,0.,0.]
+  d = ModelIndicator()
+  run(d,cs,md,path_enabled=False,desire_enabled=True,yaw_rate=yaw)
+  assert d.active is None
+
+
+@pytest.mark.parametrize('direction', [1, 2])
+def test_model_turn_accepts_matching_rotation_at_threshold(direction):
+  cs, md = scene()
+  sign = 1 if direction == 1 else -1
+  cs.steeringAngleDeg = sign * 15
+  md.meta.desireState = [.1,0.,0.,0.,0.,0.,0.,0.]
+  md.meta.desireState[direction] = .9
+  d = ModelIndicator()
+  run(d,cs,md,path_enabled=False,desire_enabled=True,yaw_rate=-sign*math.radians(3))
+  assert d.active and d.active.direction == direction and d.active.source == 'model_turn'
+
+
+def test_model_turn_withdrawn_before_peak_ends_after_stable_return():
+  cs, md = scene()
+  cs.steeringAngleDeg=20.
+  md.meta.desireState=[.1,.9,0.,0.,0.,0.,0.,0.]
+  movement=Movement(10.,1,'model_turn',cs,md)
+  assert movement.update(10.05,cs,md)
+  cs.steeringAngleDeg=5.
+  assert movement.update(10.1,cs,md)
+  md.meta.desireState=[.9,.1,0.,0.,0.,0.,0.,0.]
+  for i in range(8):
+    assert movement.update(10.15 + i*.05,cs,md)
+  assert not movement.update(10.6,cs,md)
+  assert movement.reason=='completed'
 
 
 def test_left_crossing_on_a_right_curve_uses_relative_curvature():
@@ -240,6 +362,26 @@ def test_travel_gap_invalidates_anchor_without_extrapolating_stale_speed():
   j,s=turn()
   assert s(12.,travel=(1,1.)) is None
 
+
+@pytest.mark.parametrize('speed', [-.002311213/3.6, -.000962035/3.6, -.003020115/3.6])
+def test_confirmed_drive_stop_noise_preserves_tbt_distance_epoch(speed):
+  travel = Travel()
+  travel.update(10., 0., True)
+  for i in range(1, 101):
+    assert travel.update(10.+i*.05, speed, True, standstill=True, gear='drive') == (0, 0.)
+  assert travel.update(15.05, 2., True, standstill=False, gear='drive') == pytest.approx((0, .05))
+
+
+@pytest.mark.parametrize('speed,standstill,gear,valid', [
+  (-.001, False, 'drive', True), (-.001, True, 'reverse', True),
+  (-.1, True, 'drive', True), (-.001, True, 'drive', False),
+  (float('nan'), True, 'drive', True), (float('-inf'), True, 'drive', True),
+])
+def test_stop_noise_exception_preserves_reverse_and_invalid_distance_gates(speed, standstill, gear, valid):
+  travel = Travel()
+  travel.update(10., 0., True)
+  assert travel.update(10.05, speed, valid, standstill=standstill, gear=gear) is None
+
 @pytest.mark.parametrize('side', [1, 2])
 @pytest.mark.parametrize('case', ['approaching', 'no_motion', 'other_side', 'one_boundary', 'split_vote',
                                   'low_confidence', 'no_target_line', 'bad_shape', 'invalid', 'cancel'])
@@ -306,3 +448,23 @@ def test_forecast_hold_tracks_widening_fork_without_a_second_request(side, stop)
     for i in range(1, 15):
       assert move.update(10.6+i*.05, cs, md)
   assert not move.update(11.41 if stop == 'stalled' else 11. if stop == 'gap' else 10.65, cs, md)
+
+
+@pytest.mark.parametrize('direction', [1, 2])
+@pytest.mark.parametrize('crossing', [False, True])
+def test_current_model_lane_desire_requires_measured_boundary_approach(direction, crossing):
+  cs, md = scene()
+  detector, isolation = ModelIndicator(), BoundaryIndicator()
+  md.meta.desireState = [.1, 0., 0., 0., 0., 0., 0., 0.]
+  md.meta.desireState[direction + 2] = .9
+  sign = 1 if direction == 1 else -1
+  for i in range(30):
+    now = 10 + i * .05
+    md.frameId = i
+    cs.laneLineInfoMonoTime = int(now * 1e9)
+    shift = min(.8, i * .03) if crossing else .04 * math.sin(i)
+    for lane, initial in zip(md.laneLines[1:3], (-1.4, 1.4), strict=True):
+      lane.y = [initial + sign * shift] * 13
+    detector.update(now, cs, md, valid=True, lateral_active=True, desire_enabled=True,
+                    path_enabled=False, busy=False, isolation=isolation)
+  assert bool(detector.active) is crossing

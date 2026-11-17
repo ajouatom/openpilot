@@ -281,8 +281,10 @@ def test_audio_cue_schema_roundtrip():
     assert read.atcTurnStartMonoTime==11000000000 and str(read.atcTurnDirection)=='left'
 
 
-def test_actual_source_loop_starts_from_audio_cue_before_model_turn(monkeypatch):
+@pytest.mark.parametrize('stopped_speed', [0., -.003020115/3.6])
+def test_actual_source_loop_starts_from_audio_cue_before_model_turn(monkeypatch, stopped_speed):
   import blink_source as source
+  from opendbc.car.hyundai.values import HyundaiSafetyFlags
   import json
   import types
   from contextlib import nullcontext
@@ -302,7 +304,8 @@ def test_actual_source_loop_starts_from_audio_cue_before_model_turn(monkeypatch)
     sm['selfdriveState'].atcTurnDirection='left' if i else 'none'
     sm['carrotMan'].atcType='turn left' if i else 'none'
     sm['modelV2'].meta.desire='turnLeft' if i==2 else 'none'
-    sm['carState'].vEgo=0. if 3<=i<=5 else 5.
+    sm['carState'].vEgo=stopped_speed if 3<=i<=5 else 5.
+    sm['carState'].standstill=3<=i<=5
     sm['carState'].steeringAngleDeg=60. if i==6 else 0.
     sm['carControl'].latActive=not 3<=i<=5
     sm['livePose'].orientationNED.z=-.5 if i>=6 else 0.
@@ -311,7 +314,8 @@ def test_actual_source_loop_starts_from_audio_cue_before_model_turn(monkeypatch)
   fake_params.Params=lambda:NS(get=lambda _:b'cp',get_int=lambda _:1,get_bool=lambda _:True)
   fake_cereal=types.ModuleType('openpilot.cereal')
   fake_cereal.messaging=NS(SubMaster=lambda _:sm)
-  fake_cereal.car=NS(CarParams=NS(from_bytes=lambda _:nullcontext(NS(carFingerprint='HYUNDAI_IONIQ_5_PE'))))
+  fake_cereal.car=NS(CarParams=NS(from_bytes=lambda _:nullcontext(NS(carFingerprint='HYUNDAI_IONIQ_5_PE', brand='hyundai', passive=False,
+      safetyConfigs=[NS(safetyParam=HyundaiSafetyFlags.CANFD_BLINKER_KICK)]))))
   monkeypatch.setitem(sys.modules,'openpilot.common.params',fake_params)
   monkeypatch.setitem(sys.modules,'openpilot.cereal',fake_cereal)
   sock=NS(setblocking=lambda _:None,recv=lambda _:b'',send=lambda raw:sent.append(json.loads(raw)))
@@ -481,10 +485,12 @@ def test_missing_heading_cancels_turn_without_blocking_lane_mode():
   assert a.update(14,2,True,11.,'left','fork left','none','left',heading=None)==('lane','left')
 
 
+@pytest.mark.parametrize('kick', [False, True])
 @pytest.mark.parametrize('initial_ack', [False, True])
 @pytest.mark.parametrize('peer_after', ['driver_override', 'stale', 'error', 'guard_expired'])
-def test_tbt_source_preserves_confirmed_hold_through_receiver_override(monkeypatch, initial_ack, peer_after):
+def test_tbt_source_preserves_confirmed_hold_through_receiver_override(monkeypatch, initial_ack, peer_after, kick):
   import blink_source as source
+  from opendbc.car.hyundai.values import HyundaiSafetyFlags
   import json
   import types
   from contextlib import nullcontext
@@ -532,7 +538,8 @@ def test_tbt_source_preserves_confirmed_hold_through_receiver_override(monkeypat
     get=lambda _: b'cp', get_int=lambda key: 1 if key in ('AutoBlinkerControl','AutoTurnControl') else 0,
     get_bool=lambda key: key == 'AlwaysLateral')))
   monkeypatch.setitem(sys.modules, 'openpilot.cereal', NS(messaging=NS(SubMaster=lambda _: sm),
-    car=NS(CarParams=NS(from_bytes=lambda _: nullcontext(NS(carFingerprint='HYUNDAI_IONIQ_5_PE'))))))
+    car=NS(CarParams=NS(from_bytes=lambda _: nullcontext(NS(carFingerprint='HYUNDAI_IONIQ_5_PE', brand='hyundai', passive=False,
+      safetyConfigs=[NS(safetyParam=HyundaiSafetyFlags.CANFD_BLINKER_KICK)]))))))
   sock = NS(setblocking=lambda _: None, recv=receive, send=lambda raw: sent.append(json.loads(raw)))
   monkeypatch.setattr(source.socket, 'socket', lambda **kw: sock)
   monkeypatch.setattr(source.select, 'select', lambda *args: ([sock] if len(sent) not in received else [], [], []))
@@ -541,10 +548,10 @@ def test_tbt_source_preserves_confirmed_hold_through_receiver_override(monkeypat
   monkeypatch.setattr(model, 'read_json', lambda *args: {})
   monkeypatch.setattr(model, 'config', dict)
   monkeypatch.setattr(model, 'atomic_json', lambda path, value: leases.append(value) if path.name == 'physical-hold.json' else None)
-  source.main(0)
+  source.main(0, kick=kick)
   assert len(leases) == 100
   assert all(not record['events'] for record in sent)
-  if initial_ack and peer_after == 'driver_override':
+  if initial_ack and peer_after == 'driver_override' and not kick:
     assert all(value['direction'] == 'left' and value['override'] for value in leases[8:80])
     assert len({record['hold']['id'] for record in sent[1:80]}) == 1
   else:

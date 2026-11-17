@@ -1,5 +1,10 @@
 """Data-only R2 boot patch. No kernel, firmware or model replacement."""
 import hashlib
+import json
+from pathlib import Path
+import shutil
+
+from initrd_readonly import entries, encode
 
 R2_INIT_SHA = '83174f01887fb443de24e4c9a64ccab3543d10ddebcfc532b8ec2d462b0b3a94'
 APP_UUID = 'd3fb8cf2-60ea-44b1-bec1-63a7417719cf'
@@ -47,3 +52,29 @@ def patch(body):
       raise ValueError('Unexpected portable initrd anchor')
     text = text.replace(old, new, 1)
   return text.encode('utf-8')
+
+
+def configure(root, source):
+  """Install the reviewed portable boot path into a new mounted R2 image."""
+  root, source = Path(root), Path(source)
+  if root.resolve() == Path('/') or not (root / 'etc/carrot-jetlink-protected.json').is_file():
+    raise ValueError('Offline protected image required')
+  boot = root / 'boot/extlinux/extlinux.conf'
+  command = boot.read_text()
+  if command.count('root=/dev/mmcblk0p1') != 1:
+    raise ValueError('Unexpected boot command line')
+  initrd = root / 'boot/initrd'
+  members = list(entries(initrd.read_bytes()))
+  if sum(name == 'init' for name, _, _ in members) != 1:
+    raise ValueError('Expected exactly one init program')
+  modified = [(name, fields, patch(body) if name == 'init' else body) for name, fields, body in members]
+  packed = encode(modified)
+  # Header sizes are recomputed by encode; verify all names and payloads.
+  if [(name, body) for name, _, body in entries(packed)] != [(name, body) for name, _, body in modified]:
+    raise ValueError('Portable initrd roundtrip mismatch')
+  initrd.write_bytes(packed)
+  boot.write_text(command.replace('root=/dev/mmcblk0p1', 'root=PARTUUID=' + APP_UUID))
+  for name in ('protected_storage.py', 'protected_first_boot.py'):
+    shutil.copyfile(source / name, root / 'usr/lib/carrot-jetlink-storage' / name)
+  (root / 'etc/carrot-jetlink-protected.json').write_text(json.dumps({'format': 2, 'layout': 'carrot-r2-sd-nvme'}) + '\n')
+  (root / 'etc/fstab').write_text('/dev/root / ext4 ro,noload 0 0\n/run/carrot-efi /boot/efi vfat ro,nofail 0 0\n')

@@ -56,7 +56,8 @@ def test_timing_records_usb_and_display_tail_after_unchanged_reply(monkeypatch, 
 
   def begin(images, packed, frame, reset, want_state, **options):
     assert options == ({"nav_metadata": (77, 10_000_000_000, 10_500_000_000)} if map_staging is not None else {})
-    assert frame == 42 and reset and not want_state
+    # The one-second idle interval requests telemetry even at frame 42.
+    assert frame == 42 and reset and want_state
     assert client.project_output == projection_request
     assert images.shape == link.SPEC.warped_shape and packed.size == link.SPEC.packed_nelem
     step('usb_send', .003)
@@ -65,6 +66,8 @@ def test_timing_records_usb_and_display_tail_after_unchanged_reply(monkeypatch, 
   def end(seq):
     assert seq == 99
     step('usb_response', .08)
+    client.last_state = {'carrot_health': {'age_s': .1, 'performance': {
+      'version': 1, 'sample_mono': 123., 'age_s': .1, 'emc': {'clock_mhz': 2133}}}}
     return output
 
   def reply(conn, header, result):
@@ -87,7 +90,9 @@ def test_timing_records_usb_and_display_tail_after_unchanged_reply(monkeypatch, 
   early = ['hud'] + (['early_media'] if fast_receiver and not map_staging else []) if usb and navigation else []
   tail = (['hud'] if not navigation else ['tail'] if not fast_receiver else []) if usb else []
   assert calls == ['receive', 'usb_send', 'phase', *(['map_stage'] if map_staging is not None else []), *early, 'usb_response', 'reply', *tail, 'wifi']
-  assert len(events) == 1 and events[0]['component'] == 'jetlinkd'
+  assert len(events) == 2 and events[0]['component'] == 'jetlinkd'
+  assert events[1]['status'] == 'ok' and events[1]['sample']['emc']['clock_mhz'] == 2133
+  assert events[1]['frame_id'] == 42 and events[1]['usb_seq'] == 99
   assert events[0]['frame_id'] == 42 and events[0]['usb_seq'] == 99
   metrics = events[0]['metrics']
   assert metrics['map_stage_bytes']['max'] == (map_staging or 0)

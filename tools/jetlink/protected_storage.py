@@ -110,11 +110,22 @@ def valid_runtime(path):
       target = target.relative_to(RUNTIME)
     current = (path / target).resolve(strict=True)
     releases = (path / 'releases').resolve(strict=True)
-    return (marker == {'format': 1} and current.is_relative_to(releases)
+    cache_ready = (path / 'cache/last-loaded.json').is_file()
+    if marker != {'format': 1}:
+      if not isinstance(marker, dict) or set(marker) != {'format', 'preloaded_model'} or marker['format'] != 1:
+        return False
+      preloaded = marker['preloaded_model']
+      if (not isinstance(preloaded, dict) or set(preloaded) != {'sha256', 'bytes'}
+          or not isinstance(preloaded['sha256'], str) or not re.fullmatch('[0-9a-f]{64}', preloaded['sha256'])
+          or type(preloaded['bytes']) is not int or preloaded['bytes'] <= 0):
+        return False
+      model = path / 'cache/models' / (preloaded['sha256'][:16] + '.onnx')
+      cache_ready = cache_ready or (model.is_file() and model.stat().st_size == preloaded['bytes'])
+    return (current.is_relative_to(releases)
             and (current / 'tools/jetlink/server.py').is_file()
             and (current / 'SOURCE_COMMIT').is_file()
             and (path / 'venv/bin/python').is_file()
-            and (path / 'cache/last-loaded.json').is_file())
+            and cache_ready)
   except (OSError, ValueError, RuntimeError):
     return False
 

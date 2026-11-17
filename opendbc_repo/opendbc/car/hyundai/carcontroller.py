@@ -3,7 +3,8 @@ from collections import deque
 import numpy as np
 from opendbc.car.hyundai.scalar import clip_float
 from opendbc.can import CANPacker
-from opendbc.car import Bus, DT_CTRL, apply_driver_steer_torque_limits, common_fault_avoidance, make_tester_present_msg, structs, apply_std_steer_angle_limits
+from opendbc.car import Bus, CanData, DT_CTRL, apply_driver_steer_torque_limits, common_fault_avoidance, make_tester_present_msg, structs, \
+  apply_std_steer_angle_limits
 from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.hyundai import hyundaicanfd, hyundaican
 from opendbc.car.hyundai.carstate import CarState
@@ -11,7 +12,7 @@ from opendbc.car.hyundai.stopping import CanfdStopping
 from opendbc.car.hyundai.steering_handover import SteeringHandover
 from opendbc.car.carlog import carlog
 from opendbc.car.hyundai.hyundaicanfd import CanBus
-from opendbc.car.hyundai.values import HyundaiFlags, Buttons, CarControllerParams, CAR, CAN_GEARS, HyundaiExtFlags
+from opendbc.car.hyundai.values import HyundaiFlags, Buttons, CarControllerParams, CAR, CAN_GEARS, HyundaiExtFlags, HyundaiSafetyFlags
 from opendbc.car.interfaces import CarControllerBase
 from opendbc.car.vehicle_model import VehicleModel
 from opendbc.car.hyundai.values import get_pedal_interceptor_params
@@ -38,11 +39,27 @@ PRE_OVERRIDE_FILTERED_MIN_RATIO = 0.65
 PRE_OVERRIDE_MIN_RATE_RATIO = 0.50
 PRE_OVERRIDE_CONFIRM_FRAMES = 2
 PRE_OVERRIDE_MAX_TORQUE_DELTA = -10.0
+# Hand-resting torque blips shorter than this must not stretch recovery_time.
+OVERRIDE_COUNT_MIN_FRAMES = int(0.3 / DT_CTRL)
 LOW_SPEED_ANGLE_RATE_RAMP_SPEED = 15.0 * CV.KPH_TO_MS
 MID_SPEED_ANGLE_RATE_LIMIT_SPEED = 40.0 * CV.KPH_TO_MS
 LARGE_ANGLE_UNWIND_RATE = 1.5  # deg/tick: allow a quicker return from the EPS fault-angle region
 CANFD_JERK_UPPER_MIN = 1.0
 CANFD_JERK_LIMIT_MAX = 5.0
+# CanfdBlinkerKick (KICK_CARS on the camera-SCC harness, CAN-FD): in D at any speed the parking ECU (APRK, 0x7B1) is
+# asked to go quiet around a kick and SPAS2 BLINKER_CONTROL is sent in its place; its default session is restored right
+# after the kick
+APRK_ADDR = 0x7B1
+APRK_EXT_SESSION = bytes([0x02, 0x10, 0x03, 0, 0, 0, 0, 0])
+APRK_COM_DISABLE = bytes([0x03, 0x28, 0x83, 0x01, 0, 0, 0, 0])
+APRK_DEFAULT_SESSION = bytes([0x02, 0x10, 0x01, 0, 0, 0, 0, 0])
+# Handoff like spas.Session: SPAS frames go out only after the ECU answered 10 03 (50 03) and its own SPAS1/SPAS2 stayed
+# off ECAN for 0.1 s; they stop the moment a stock frame shows up again. On the Ioniq 5 PE the ECU never answered on bus 0
+# (0 of ~140, 10-26..30) and frames written over the live stock stream caused bus-offs, so the request also goes to ACAN,
+# where a second SPAS1 stream runs, and an unanswered request falls back to the panda piggyback (CanfdBlinkerKickMode).
+APRK_IDLE, APRK_ASK, APRK_WAIT_QUIET, APRK_ACTIVE, APRK_FAILED = range(5)
+APRK_REPLY_FRAMES = int(0.4 / DT_CTRL)
+APRK_QUIET_NANOS = 100_000_000
 CANFD_JERK_ERROR_DELAY = 0.5
 CANFD_JERK_ERROR_FILTER_TIME = 0.4
 CANFD_JERK_ERROR_DEADBAND = 0.25
@@ -205,6 +222,13 @@ class CarController(CarControllerBase):
     self.blinking_signal = False # 1Hz
     self.blinking_frame = int(1.0 / DT_CTRL)
     self.soft_hold_mode = 2
+    self.blinker_control = False
+    self.kick_output_ready = False  # card owns the shared USB/BLE/native output lease
+    self.blinker_kick_mode = 1  # CanfdBlinkerKickMode: 0 only after an ack; anything else (a stored 2/3 too) is 1, piggyback
+    self.aprk_state, self.aprk_frame, self.aprk_nanos, self.aprk_acked, self.aprk_buses = APRK_IDLE, 0, 0, False, ()
+    self.kick_direction = 0  # Fresh common-policy request, supplied by card.
+    self.kick_request_id = self.aprk_request_id = None
+    self.blinker_side = 0
 
     self.activateCruise = 0
     self.button_wait = 12
@@ -224,6 +248,7 @@ class CarController(CarControllerBase):
     self.recovering_from_override = False
     self.full_recovery_frames = 0
     self.repeated_override_count = 0
+    self.steering_pressed_frames = 0
     self.override_latched = False
     self.override_release_frames = 0
     self.driver_torque_filtered = 0.0
@@ -248,6 +273,57 @@ class CarController(CarControllerBase):
 
     self.steerDeltaUpOrg = self.steerDeltaUp = self.steerDeltaUpLC = self.params.STEER_DELTA_UP
     self.steerDeltaDownOrg = self.steerDeltaDown = self.steerDeltaDownLC = self.params.STEER_DELTA_DOWN
+
+  def aprk_blinkers(self, CS):
+    ret = []
+    direction = self.kick_direction
+    opposite = CS.out.rightBlinker if direction == 3 else CS.out.leftBlinker
+    want = (self.blinker_control and self.kick_output_ready and direction in (3, 4) and
+            CS.out.gearShifter == structs.CarState.GearShifter.drive and not opposite)
+    if self.kick_request_id != self.aprk_request_id:
+      # A fresh policy request gets one handshake, including after an earlier
+      # failed request. A continuing request never repeatedly retries the ECU.
+      ret += [CanData(APRK_ADDR, APRK_DEFAULT_SESSION, bus) for bus in self.aprk_buses]
+      self.aprk_state, self.aprk_buses = APRK_IDLE, ()
+      self.aprk_request_id = self.kick_request_id
+    self.blinker_side = direction if want else 0
+    now, stock, ack = getattr(CS, "can_nanos", 0), getattr(CS, "aprk_stock_nanos", 0), getattr(CS, "aprk_ack_nanos", 0)
+
+    def give_back():
+      restore = [CanData(APRK_ADDR, APRK_DEFAULT_SESSION, bus) for bus in self.aprk_buses]
+      self.aprk_state, self.aprk_buses = (APRK_FAILED if want else APRK_IDLE), ()
+      return ret + restore
+
+    if not want:
+      ret = give_back()
+    elif self.aprk_state == APRK_IDLE:
+      self.aprk_buses = (self.CAN.ECAN, self.CAN.ACAN)
+      ret += [CanData(APRK_ADDR, APRK_EXT_SESSION, bus) for bus in self.aprk_buses]
+      self.aprk_state, self.aprk_frame, self.aprk_nanos = APRK_ASK, self.frame, now
+    elif self.aprk_state == APRK_ASK:
+      if ack >= self.aprk_nanos and ack > 0:
+        ret += [CanData(APRK_ADDR, APRK_COM_DISABLE, bus) for bus in self.aprk_buses]
+        self.aprk_state, self.aprk_frame = APRK_WAIT_QUIET, self.frame
+      elif self.frame - self.aprk_frame >= APRK_REPLY_FRAMES:
+        if self.blinker_kick_mode == 0:
+          return give_back()  # mode 0 blinks only after an ack
+        # No answer (Ioniq 5 PE: 0 of ~180 requests, 10-24..11-05): the stock stream stays on the bus. Mode 1: panda holds
+        # each of our SPAS frames and sends it right behind the stock one (hyundai_canfd_rx_tx_hook), so the same id
+        # never starts twice at once - 10-30..11-02 that collision made error frames in 78/111 kicks and bus-off in 33.
+        self.aprk_state, self.aprk_frame, self.aprk_nanos, self.aprk_acked = APRK_ACTIVE, self.frame, now, False
+    elif self.aprk_state == APRK_WAIT_QUIET:
+      if self.frame - self.aprk_frame >= APRK_QUIET_NANOS // 10_000_000 and now - stock >= APRK_QUIET_NANOS:
+        self.aprk_state, self.aprk_frame, self.aprk_nanos, self.aprk_acked = APRK_ACTIVE, self.frame, now, True
+      elif self.frame - self.aprk_frame >= APRK_REPLY_FRAMES:
+        return give_back()
+    elif self.aprk_state == APRK_ACTIVE:
+      if self.aprk_acked and stock > self.aprk_nanos:
+        return give_back()  # the ECU came back: stop before our frames collide with its own
+      if self.frame % 100 == 0:
+        ret += [make_tester_present_msg(APRK_ADDR, bus, suppress_response=True) for bus in self.aprk_buses]
+      # every frame (100 Hz), twice APRK's 50 Hz: 10-26 APRK stayed on, so its BLINKER_CONTROL 0 frames interleave with ours
+      ret.extend(hyundaicanfd.create_spas_messages(self.packer, self.CAN, self.frame, self.blinker_side == 3, self.blinker_side == 4))
+    return ret
 
   def update(self, CC, CS, now_nanos):
 
@@ -293,6 +369,11 @@ class CarController(CarControllerBase):
         self.steerDeltaDownLC = self.steerDeltaDown
 
       self.soft_hold_mode = 1 if params.get_int("AutoCruiseControl") > 1 else 2
+      # CANFD_BLINKER_KICK: set at fingerprint time only for KICK_CARS on the camera-SCC harness, and panda admits the Kick
+      # ids only with it. The setting can still switch the Kick off mid-drive; switching it on waits for the next start.
+      self.blinker_control = (any(cfg.safetyParam & HyundaiSafetyFlags.CANFD_BLINKER_KICK for cfg in self.CP.safetyConfigs)
+                              and params.get_bool("CanfdBlinkerKick"))
+      self.blinker_kick_mode = params.get_int("CanfdBlinkerKickMode")
       self.hapticFeedbackWhenSpeedCamera = int(params.get_int("HapticFeedbackWhenSpeedCamera"))
 
       self.button_spam1 = params.get_int("CruiseButtonTest1")
@@ -349,10 +430,12 @@ class CarController(CarControllerBase):
 
     steering_pressed_rising = CS.out.steeringPressed and not self.steering_pressed_prev
     if steering_pressed_rising:
+      self.recovering_from_override = True
+    self.steering_pressed_frames = self.steering_pressed_frames + 1 if CS.out.steeringPressed and CC.latActive else 0
+    if self.steering_pressed_frames == OVERRIDE_COUNT_MIN_FRAMES:
       if 0 < self.full_recovery_frames < int(5.0 / DT_CTRL):
         self.repeated_override_count = min(self.repeated_override_count + 1, 3)
       self.full_recovery_frames = 0
-      self.recovering_from_override = True
 
     torque_threshold = max(self.params.STEER_THRESHOLD, 1.0)
     # Filter signed torque so alternating sensor noise cancels out before its
@@ -577,6 +660,10 @@ class CarController(CarControllerBase):
       # blinkers
       if hda2 and self.CP.flags & HyundaiFlags.ENABLE_BLINKERS:
         can_sends.extend(hyundaicanfd.create_spas_messages(self.packer, self.CAN, self.frame, CC.leftBlinker, CC.rightBlinker))
+      # carrot-wip's own SPAS path (CanfdBlinkerControl -> CANFD_SPAS_BLINKERS, card.py) owns APRK/SPAS when it is on;
+      # aprk_state != idle: a kick that was just switched off still restores the ECU's default session
+      elif not self.CP.flags & HyundaiFlags.CANFD_SPAS_BLINKERS and (self.blinker_control or self.aprk_state):
+        can_sends.extend(self.aprk_blinkers(CS))
 
       if self.camera_scc_params in [2, 3]:
         self.canfd_toggle_adas(CC, CS)
@@ -597,10 +684,16 @@ class CarController(CarControllerBase):
             can_sends.extend(hyundaicanfd.create_fca_warning_light(self.CP, self.packer, self.CAN, self.frame))
         if self.frame % 2 == 0:
           if self.CP.flags & HyundaiFlags.CAMERA_SCC.value:
-            msg, self.accel_value_last = hyundaicanfd.create_acc_control_scc2(
-              self.packer, self.CAN, CC.enabled, self.accel_value_last, accel, stopping, CC.cruiseControl.override,
-              set_speed_in_units, hud_control, self.hyundai_jerk, CS, self.canfd_stopping, hud_lateral=hud_lateral,
-            )
+            if CC.enabled:
+              CS.stock_adopt_pending = False
+            msg = None
+            # stock cruise hand-over (carstate._update_stock_adopt): send nothing, so panda keeps forwarding the camera's
+            # cruising SCC until openpilot engages
+            if not getattr(CS, "stock_adopt_pending", False):
+              msg, self.accel_value_last = hyundaicanfd.create_acc_control_scc2(
+                self.packer, self.CAN, CC.enabled, self.accel_value_last, accel, stopping, CC.cruiseControl.override,
+                set_speed_in_units, hud_control, self.hyundai_jerk, CS, self.canfd_stopping, hud_lateral=hud_lateral,
+              )
             if msg is not None:
               can_sends.append(msg)
             can_sends.extend(hyundaicanfd.create_tcs_messages(self.packer, self.CAN, CS)) # for sorento SCC radar...

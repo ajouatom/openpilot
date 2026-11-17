@@ -4,14 +4,21 @@ import os
 import argparse
 import subprocess
 import sys
+import logging
 
 
 def migrate_running_release(runtime=Path('/opt/carrot-jetlink')):
   """A signed runtime can migrate its own updater without per-car SSH setup.
 
   Published images already grant the jetlink service account passwordless sudo.
-  Enable only next boot so installing never interrupts the current session.
+  Updater migration takes effect next boot. The power check runs at the server
+  entry point before backend imports and inference, once per boot.
   """
+  try:
+    subprocess.run(['sudo', '-n', sys.executable, str(runtime / 'current/tools/jetlink/install_updates.py'),
+                    '--performance-runtime'], check=True, timeout=45)
+  except (OSError, subprocess.SubprocessError) as exc:
+    logging.getLogger('jetlink').warning('Jetson startup power setup or performance observer unavailable: %s', type(exc).__name__)
   if Path('/etc/systemd/system/carrot-jetlink-boot-display.service').is_file():
     migrate_boot_display(runtime)
   if not (runtime / 'current/tools/jetlink/boot_update.py').is_file():
@@ -27,6 +34,36 @@ BOOT_DISPLAY_OVERRIDE = """[Service]
 ExecStart=
 ExecStart=/opt/carrot-jetlink/venv/bin/python /opt/carrot-jetlink/current/tools/jetlink/boot_display.py
 """
+
+PERFORMANCE_UNIT = """[Unit]
+Description=Read-only Jetson performance samples for route diagnostics
+PartOf=carrot-jetlink.service
+ConditionPathExists=/opt/carrot-jetlink/current/tools/jetlink/host_performance.py
+[Service]
+ExecStart=/usr/bin/python3 /opt/carrot-jetlink/current/tools/jetlink/host_performance.py
+Restart=on-failure
+RestartSec=5
+RuntimeDirectory=carrot-jetlink-performance
+RuntimeDirectoryMode=0755
+Nice=19
+IOSchedulingClass=idle
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+ReadWritePaths=/run/carrot-jetlink-performance
+"""
+
+
+def configure_runtime_performance(unit=Path('/run/systemd/system/carrot-jetlink-performance-observer.service')):
+  # /run survives signed-runtime activation but is recreated at boot, including
+  # protected images. Root is needed only to read BPMP debugfs and nvpmodel.
+  temporary = unit.with_suffix('.new')
+  temporary.write_text(PERFORMANCE_UNIT)
+  temporary.replace(unit)
+  subprocess.run(['systemctl', 'daemon-reload'], check=True, timeout=5)
+  subprocess.run(['systemctl', 'restart', unit.name], check=True, timeout=5)
 
 
 def migrate_boot_display(runtime):
@@ -80,6 +117,10 @@ def bootstrap(root, source, defer_this_boot=False):
 def configure(root, source):
   root = Path(root)
   bootstrap(root, source)
+  # Optional only for older offline payloads that predate automatic power setup.
+  if (Path(source) / 'power_setup.py').is_file():
+    from power_setup import configure as configure_power
+    configure_power(root, source)
   systemd = root / 'etc/systemd/system'
   command = '/opt/carrot-jetlink/venv/bin/python /opt/carrot-jetlink/updater/update_host.py'
   units = {
@@ -130,8 +171,13 @@ if __name__ == '__main__':
   parser = argparse.ArgumentParser(description=__doc__)
   parser.add_argument('--boot-display-runtime', action='store_true', help='Use the signed display runtime for this boot only')
   parser.add_argument('--bootstrap-only', action='store_true', help='Migrate an installed runtime; enable from its next boot without OS writes')
+  parser.add_argument('--performance-runtime', action='store_true', help='Apply startup Super mode and start performance sampling')
   args = parser.parse_args()
-  if args.boot_display_runtime:
+  if args.performance_runtime:
+    from power_setup import run_once
+    run_once()
+    configure_runtime_performance()
+  elif args.boot_display_runtime:
     configure_runtime_boot_display()
   elif args.bootstrap_only:
     source = Path('/opt/carrot-jetlink/current/tools/jetlink')

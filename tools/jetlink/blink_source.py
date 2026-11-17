@@ -75,13 +75,13 @@ class Events:
     return result[-4:]
 
 
-def main(fd, spas=False, ble=False):
-  if spas:
+def main(fd, spas=False, ble=False, kick=False):
+  if spas or kick:
     import os
     try:
       os.sched_setaffinity(0, {0, 1, 2, 3})
       os.nice(10)
-    except OSError:
+    except (AttributeError, OSError):
       pass
   from openpilot.cereal import messaging
   from openpilot.selfdrive.carrot.bluetooth.model import RUNTIME, config, read_json, atomic_json
@@ -93,11 +93,16 @@ def main(fd, spas=False, ble=False):
     front_radar_available = not getattr(cp, 'radarUnavailable', True)
     if ble and getattr(cp, 'passive', False):
       return
+    if kick:
+      from opendbc.car.hyundai.values import HyundaiSafetyFlags
+      if (cp.brand != 'hyundai' or cp.passive or not any(
+          cfg.safetyParam & HyundaiSafetyFlags.CANFD_BLINKER_KICK for cfg in cp.safetyConfigs)):
+        return
     if spas:
       from opendbc.car.hyundai.values import HyundaiFlags
       if cp.brand != 'hyundai' or not cp.flags & HyundaiFlags.CANFD_SPAS_BLINKERS or cp.passive:
         return
-  if not spas and not ble and json.loads(PACKAGE_CONFIG.read_text()).get('fingerprint') != fingerprint:
+  if not spas and not ble and not kick and json.loads(PACKAGE_CONFIG.read_text()).get('fingerprint') != fingerprint:
     return
   sock = socket.socket(fileno=fd)
   sock.setblocking(False)
@@ -141,7 +146,7 @@ def main(fd, spas=False, ble=False):
         feedback = {}
     sm.update(0)
     now = time.monotonic()  # SubMaster assigns receive timestamps during update.
-    ok = vehicle_ready(sm, now, fingerprint, spas or ble)
+    ok = vehicle_ready(sm, now, fingerprint, spas or ble or kick)
     status = read_json(RUNTIME/'status.json', {})
     settings, learning, cancelled = config(), read_json(RUNTIME/'learn.json', {}), read_json(RUNTIME/'cancelled.json', {})
     commands = events.read(read_json(RUNTIME/'blinker.json', {}), settings, status, learning, cancelled, now)
@@ -161,7 +166,7 @@ def main(fd, spas=False, ble=False):
     auto_fresh = all(k in sm.services and sm.valid[k] and sm.alive[k] and
                      fresh(sm.recv_time[k], now, 1.0 if k == 'carrotMan' and automatic.direction else .35)
                      for k in ('modelV2', 'carrotMan'))
-    travelled = travel.update(now, cs.vEgo, ok)
+    travelled = travel.update(now, cs.vEgo, ok, standstill=getattr(cs, 'standstill', False), gear=str(cs.gearShifter))
     auto_valid = not auto_paused and auto_fresh and ok and automatic_control_allowed(
       cs, sm['carControl'], sm['selfdriveState'], params.get_bool('AlwaysLateral'), automatic.direction is not None)
     auto_valid = auto_valid and not navigation_cancelled(sm, now)
@@ -240,7 +245,9 @@ def main(fd, spas=False, ble=False):
     observation_feedback.prepare(now, hold, meta, cs)
     receiver_override = fresh(feedback.get('stamp'), now, .35) and feedback.get('state') == 'driver_override'
     native_hold = not ble or fingerprint == 'HYUNDAI_IONIQ_5_PE'
-    tbt_turn_hold = bool(not spas and native_hold and hold and hold['source'] == 'turn' and automatic.journey.active)
+    # Kick reports a verified physical lever override; external receiver echoes
+    # retain their existing confirmed-turn exception.
+    tbt_turn_hold = bool(not spas and not kick and native_hold and hold and hold['source'] == 'turn' and automatic.journey.active)
     # A confirmed TBT lamp is maintained by the comma-side lease. Receiver
     # one-touch ownership ending must not erase the ongoing turn. This cannot
     # activate a hold whose initial send and lamp were never acknowledged.
@@ -323,12 +330,19 @@ def main(fd, spas=False, ble=False):
         'board_lamp': bool(ble and confirmation and feedback.get('lamps') is not None),
         'tap': voice_tap.sent(now, feedback, submitted and ok)})
     if mode and not spas:
+      native_start = {}
+      if (kick and submitted and ok and hold and hold['source'] == 'observation' and
+          fresh(feedback.get('stamp'), now, .15) and feedback.get('accepted_id') == hold['id'] and
+          fresh(feedback.get('first_sent'), now, 30.)):
+        native_start = {'native_start': {'request': getattr(meta, 'observedIndicatorMonoTime', 0)/1e9,
+                                        'direction': hold['direction'], 'time': feedback['first_sent']}}
       atomic_json(HOLD_PATH, {'stamp':now, 'mode':mode, 'fingerprint':fingerprint,
                              'direction':hold['direction'] if hold and activated_id == hold['id'] else None,
                              'tap':observation_feedback.sent(now, feedback, submitted and ok),
+                             **native_start,
                              'override':activated_id is not None or now < release_until or (policy.suppressed and release_until > 0)})
     time.sleep(max(0, now+.05-time.monotonic()))
 
 
 if __name__ == '__main__':
-  main(int(sys.argv[1]), 'spas' in sys.argv[2:], 'ble' in sys.argv[2:])
+  main(int(sys.argv[1]), 'spas' in sys.argv[2:], 'ble' in sys.argv[2:], 'kick' in sys.argv[2:])

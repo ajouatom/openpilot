@@ -31,6 +31,90 @@ without receiving the publisher's private signing key or a replacement image.
 
 ## Health
 
+### Performance in uploaded routes
+
+Updated hosts run `carrot-jetlink-performance-observer.service` as a separate,
+low-priority read-only process. Every second it samples CPU/GPU clocks and
+configured limits, EMC clock, CPU/GPU utilization, thermal cooling states,
+board power rails, available memory and the five busiest processes. CPU usage
+uses one core as 100 percent. The first sample has no utilization delta.
+Server threads include CPU time and runnable scheduler wait over the sampling
+interval, plus the kernel's schedstats enablement flag. These measurements help
+distinguish GPU completion waits from CPU scheduling contention.
+Automatic startup power setup selects the installed NVIDIA `MAXN_SUPER` profile
+by name and verifies the resulting mode and GPU ceiling. New-image performance
+units run this before inference, Xorg and HUD. Existing signed runtimes run the
+same check at server startup. NVIDIA reboot prompts are declined, with an explicit
+pending-reboot result. Firmware with no Super profile or a restricted GPU ceiling
+is reported for image/QSPI repair. The runtime does not flash board firmware.
+The `/run/carrot-jetlink-power.json` result includes L4T, compatible strings,
+profile names/IDs and application status. It is copied into cached health and
+`jetsonPerformance` route events. A once-per-boot lock prevents repeated changes.
+
+The November 12 Ioniq 5 route `0000000d--430c0ed5a6` confirms that the updated
+runtime ran, with `super_profile_missing` in all 174 samples. The device tree
+identifies `p3767-0005` without the Super suffix. NVIDIA's R36.4.7 `nvpower.sh`
+relinks the image's Super configuration to the ordinary 15W/7W configuration
+for this identity. The public R2 image itself contains the Super profile and
+Super boot specification. The runtime now reports `super_firmware_required`
+for this combination. This establishes a non-Super boot configuration; the
+reporter's precise QSPI version and physical firmware repair remain unverified.
+The runtime leaves NVIDIA's board selection intact. The official firmware
+installation procedure is documented in the
+[NVIDIA Jetson setup guide](https://docs.nvidia.com/jetson/orin-nano-devkit/user-guide/update_firmware.html).
+
+`refresh_protected_image.py` rebuilds the hash-pinned public R2 image on an
+isolated ARM64 Linux builder. It installs the signed runtime into factory and
+DATA copies, preloads the matching ONNX, removes reference-device TensorRT
+caches and installs startup power ordering. First model preparation builds the
+recipient's engine. The manual `Jetson SD image build` workflow produces the
+compressed image, hashes and offline validation metadata. Physical boot and
+firmware compatibility still require device evidence.
+
+The subsequent Super bootstrap image restores the NVIDIA 36.4.7 Super capsule
+from a hash-pinned official bootloader package. The original image excluded
+`/opt/ota_package` and mounted EFI read-only, which left its normal vendor update
+path incomplete. `super_bootstrap.py` runs before GPU consumers on the protected
+Orin Nano 8GB developer-kit SD. It validates the boot SD/EFI/DATA relationship,
+board identity and firmware version, uses NVIDIA's capsule helper with a
+temporarily writable EFI volume, verifies the staged hash and reboot indication,
+then reboots automatically. APP stays read-only. A device-bound DATA transaction
+prevents repeated staging after failures. The next boot checks capsule status,
+the changed slot, target version, Super identity and actual power setup before
+inference. Unsupported/newer firmware is reported without a downgrade.
+The vendor service retains board discovery and slot verification while capsule
+staging is serialized through this image service. This is an SD-image feature.
+Bootable JetPack 6.x firmware is a prerequisite. Physical firmware update and
+power-interruption recovery still require device testing.
+
+Fresh-image DATA admission accepts an explicit preloaded ONNX descriptor before
+the first TensorRT engine has been built. Legacy completed-runtime markers keep
+their existing last-loaded check. The image builder runs the installed storage
+helper inside the image against the mounted DATA tree to verify this first-boot
+path. The backend still validates the model and builds the recipient's engine.
+
+`nvpmodel -q` supplies the selected mode and ID every 30 seconds. Its query age
+is included. Root access allows reading BPMP debugfs through the observer.
+The observer writes a bounded snapshot under `/run`; the inference process
+reads the existing health cache. Missing or denied sensors have explicit
+unavailable entries. Sample age includes host cache age and comma receipt age.
+
+Comma records `jetsonPerformance` events in `rlog` at most once per second,
+with frame/USB sequence, runtime commit, model hash, temperature and the
+matching response's server timing. The sensor snapshot covers its sampling
+interval, so it cannot attribute every short GPU stall to one frame. The
+existing `runtimeTiming` events retain the per-window USB/model statistics.
+Telemetry requests use elapsed time so dropped camera frame IDs cannot
+indefinitely skip diagnostics. Old hosts log an explicit unavailable status.
+
+Normal Git Pull and a full comma/Jetson restart deliver the selected signed
+runtime through the existing updater. The new observer is installed in `/run`
+at server startup and requires no SD reflash. Logs distinguish selected power
+mode, actual clocks and contention; determining a physical power fault can
+still require additional measurement. Sensor meanings follow NVIDIA's
+[clock documentation](https://docs.nvidia.com/jetson/archives/r36.4.3/DeveloperGuide/SD/Clocks.html)
+and [power-management documentation](https://docs.nvidia.com/jetson/archives/r36.4.3/DeveloperGuide/SD/PlatformPowerAndPerformance/JetsonOrinNanoSeriesJetsonOrinNxSeriesAndJetsonAgxOrinSeries.html).
+
 The host samples sysfs and IPv4 interface addresses on a separate worker, once
 per second. Inference reads a cached record. Temperature uses actual thermal
 trip points: warning within 5 C of a passive/hot/critical trip, error at the

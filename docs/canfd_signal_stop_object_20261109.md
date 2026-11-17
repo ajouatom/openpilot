@@ -99,3 +99,45 @@ normal comma Git Pull and full restart/reboot. No new model or Jetson runtime
 bundle is part of this change. Physical stop/hold acceptance remains unverified.
 Private archived source logs and reproduction scripts are under
 `.analysis/archive/2026-11-09/stop-object/`; raw evidence is excluded from Git.
+
+## Receding real lead during a stop request, 2026-11-11
+
+The owner requested applying object state 2 after reviewing an Ioniq 5 PE
+re-stop failure with a continuously detected radar lead. The selected scope is
+the camera-SCC final stopping packet. With the stopping controller present,
+ACCMode=1 and final StopReq=1, state 1 now joins the existing state-0 fallback
+to state 2. The lead's measured distance, relative speed and lateral position
+continue through the existing object encoding. On departure, the ordinary
+relative-speed rule resumes. The synthetic signal-stop object has its existing
+separate admission and display marker.
+
+The supplied OEM DBC names this field SCC_ObjSta and defines state 1 as an
+in-path object detected but uncontrollable, and state 2 as controllable
+longitudinally. In the failure, the camera's received state stayed 2 while the
+generated state became 1 for a receding lead. The influence of this field on
+the brake ECU's stop acceptance remains unverified. Nine historical failure
+entries also carried state 2.
+
+Other differences from OEM control remain material to the investigation.
+The owner's OEM Ioniq 5 PE reference uses lower band 0.04, while the current
+Carrot trial uses 0.20. Target-distance calculation, InfoDisplay handling,
+stop-entry timing and acceleration trajectories also differ. The latest
+re-stop transitions from positive aReq into StopReq with zero aReq, while the
+owner's recorded OEM approaches enter after negative acceleration requests.
+The broader OEM cohort includes an EV6 PE successful entry after +0.02 aReq.
+These observations leave the causal ECU transition unresolved.
+
+Four focused cases fail on the prior implementation and pass after the change.
+The related desktop suite passes 261 checks, covering real CAN packing,
+relative-speed boundary values, leadOne/leadTwo, final approach and pedal/CAN/
+gear admission, soft hold, departure and legacy packet builders.
+
+An A/B replay through both complete packet builders uses eight archived
+segments and 23,987 calls. Exactly 475 packets change SCC_ObjSta bits108–110
+and the recalculated CRC, and 23,512 packets are byte-identical. Acceleration
+outputs, stopping phases and synthetic-object markers agree on every call.
+The latest failure segment contributes 214 changed packets. The replay uses
+recorded input streams and packet jerk values with independent builder state
+per segment. Physical braking and exact historical runtime reconstruction
+remain unverified. Private evidence and the replay script are archived under
+`.analysis/archive/2026-11-11/stop-state-trial/`.

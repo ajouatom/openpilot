@@ -70,6 +70,7 @@ class Controls:
                                    'carrotMan', 'lateralPlan', 'radarState',
                                    'driverMonitoringState', 'onroadEvents', 'driverAssistance'], poll='selfdriveState')
     self.pm = messaging.PubMaster(['carControl', 'controlsState'])
+    self.lat_err_frames = 0
 
     self.steer_limited_by_safety = False
     self.curvature = 0.0
@@ -277,6 +278,20 @@ class Controls:
 
     return CC, lac_log
 
+  def lat_hud_state(self, lat_active, lac_log):
+    # HUDControl.latHudState for the Hyundai CAN-FD CCNC cluster (CcncClusterDisplay) lane highlight: 0 lat off,
+    # 1 laneless, 2 lane mode, 3 angle error over the saturation threshold for 0.3 s, 4 controller saturated.
+    # Other brands' carcontrollers do not read it.
+    err = abs(getattr(lac_log, 'steeringAngleDesiredDeg', 0.) - getattr(lac_log, 'steeringAngleDeg', 0.))
+    self.lat_err_frames = self.lat_err_frames + 1 if lat_active and err > STEER_ANGLE_SATURATION_THRESHOLD else 0
+    if not lat_active:
+      return 0
+    if lac_log.saturated:
+      return 4
+    if self.lat_err_frames >= int(0.3 / DT_CTRL):
+      return 3
+    return 2 if self.lanefull_mode_enabled else 1
+
   def publish(self, CC, lac_log):
     CS = self.sm['carState']
 
@@ -372,6 +387,12 @@ class Controls:
     hudControl.leadDistanceBars = self.sm['selfdriveState'].personality.raw + 1
     hudControl.visualAlert = self.sm['selfdriveState'].alertHudVisual
     hudControl.driverMonitoringAlert = driver_monitoring_hud_alert(self.sm)
+    # Read only by the Hyundai CAN-FD CCNC cluster (CcncClusterDisplay / CcncTrafficBackground): traffic-light
+    # background, lane highlight, target ring at the gap openpilot keeps, and stock texts for openpilot alerts.
+    hudControl.trafficState = self.sm['longitudinalPlan'].trafficState
+    hudControl.latHudState = self.lat_hud_state(CC.latActive, lac_log)
+    hudControl.desiredDistance = self.sm['longitudinalPlan'].desiredDistance
+    hudControl.alertType = self.sm['selfdriveState'].alertType
 
     radarState = self.sm['radarState']
     leadOne = radarState.leadOne

@@ -7,9 +7,10 @@ from openpilot.selfdrive.controls.lib.desire_lib.boundary_lane import MANUAL_IND
 
 def allowed(cs, cc, md, source, now, holding=False, tap_echo=False):
   try:
+    stopped_hold = holding and getattr(cs, 'standstill', False) and abs(cs.vEgo) < .1
     if (not cs.canValid or str(cs.gearShifter) != 'drive' or cs.trailerConnected or
         cs.steerFaultTemporary or cs.steerFaultPermanent or (cs.blinkerLever and not (holding and tap_echo)) or
-        not math.isfinite(cs.vEgo) or cs.vEgo < 0):
+        not math.isfinite(cs.vEgo) or cs.vEgo < 0 and not stopped_hold):
       return False
     if source not in ('manual', 'manual_turn') and not cc.latActive:
       return False
@@ -21,7 +22,9 @@ def allowed(cs, cc, md, source, now, holding=False, tap_echo=False):
       minimum_speed = MANUAL_INDICATOR_MIN_SPEED
     return (direction != 0 and not cs.leftBlinker and not cs.rightBlinker and cs.vEgo >= minimum_speed and
             str(md.meta.laneChangeState) in ('off', 'preLaneChange') and
-            (source in ('model_turn', 'manual_turn') or adjacent_lane(cs, md, direction, now)))
+            # The manual boundary observer already admitted this exact fresh
+            # crossing. A newer marking label must not discard its one-shot edge.
+            (source in ('manual', 'model_turn', 'manual_turn') or adjacent_lane(cs, md, direction, now)))
   except (AttributeError, TypeError, ValueError):
     return False
 

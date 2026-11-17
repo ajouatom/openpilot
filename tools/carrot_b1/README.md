@@ -51,6 +51,19 @@ a sustained request can renew the measured OEM one-touch after the last
 confirmed flash has been dark for 1.2 seconds. Cancelling the hold stops renewal.
 An already accepted OEM one-touch can finish its normal flashes.
 
+Release 5 tracks the confirmed tap's continuous same-side 0x413 lever report
+through dark flash intervals. The first report must arrive during the tap
+window. A neutral report after that window closes this allowance, and a new
+lever report then cancels ownership. Raw 0x3C1 changes, opposite lamps, stale
+CAN and expired leases still cancel immediately. The comma records one bounded
+`b1TapDiagnostic` read per failed request before sending STOP.
+
+Recorded-input validation on November 13–14 covers 62 captured taps and 1,820
+feedback frames. Release 4's feedback predicate rejects each sequence, while
+release 5 accepts their own-tap feedback. This replay assumes confirmed tap
+delivery and tests the feedback predicate. Physical hold duration after updating
+the board still requires vehicle verification.
+
 Amber indicates power with no matching CAN. Purple means BLE connected but
 CAN unmatched. Blue breathing means CAN present, waiting for an operating
 lease. Green means matched CAN with a valid control lease. Teal is a tap or

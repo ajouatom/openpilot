@@ -16,6 +16,7 @@ ENROLLMENT = CONFIG_PATH.with_name('b1-monitor.json')
 SERVICE = 'db340a90-804c-4ead-af37-8a0e6af754a1'
 META = 'db340a92-804c-4ead-af37-8a0e6af754a1'
 CONTROL = 'db340a93-804c-4ead-af37-8a0e6af754a1'
+TRACE = 'db340a96-804c-4ead-af37-8a0e6af754a1'
 CLAIM = 'db340a95-804c-4ead-af37-8a0e6af754a1'
 SETUP = CONFIG_PATH.with_name('b1-discovery.json')
 STAGED = CONFIG_PATH.with_name('b1-pending.json')
@@ -67,6 +68,14 @@ class Intent:
     self.queued = None
     self.seq = 0
 
+  def hold_op(self, source, ack, now):
+    hold = source.get('hold') if source else None
+    if (source and source.get('ok') and 0 <= now-source['stamp'] < .20 and
+        source.get('b1_hold') and hold and self.inflight and ack == self.inflight[0] and
+        hold['id'] == self.inflight[1] and 0 <= now-hold['time'] < 300):
+      return 4 if hold['direction'] == 'left' else 5
+    return 0
+
   def choose(self, source, state, ack, now):
     if not source or not source.get('ok') or not 0 <= now-source['stamp'] < .20 or state in ('error','driver_override','missing'):
       self.inflight = self.queued = None
@@ -92,9 +101,9 @@ class Intent:
       elif state == 'ready' and (not self.inflight or ack == self.inflight[0]):
         self.queued = None
         return (1 if event['direction'] == 'left' else 2), event['id'], min(guard, until-now)
-    if (source.get('b1_hold') and hold and self.inflight and ack == self.inflight[0] and
-        hold['id'] == self.inflight[1] and now-hold['time'] < 300):
-      return (4 if hold['direction']=='left' else 5), None, guard
+    held_op = self.hold_op(source, ack, now)
+    if held_op:
+      return held_op, None, guard
     return 0, None, guard
 
 
@@ -124,11 +133,18 @@ class Monitor:
       self.report = cloudlog.event
     self.proven_at = -10.
     self.last_command = None
+    self.diagnostic_request = None
     self.next_discovery = 0.
+    self.board_report = None
+    self.exchange_timing = {}
+    self.exchange_history = deque(maxlen=8)
+    self.next_timing_report = 0.
 
   def publish_badge(self, state, now, lamps, accepted_id):
     display = (state, lamps, accepted_id)
-    if display != self.last_display and self.report and self.last_command and 0 <= now-self.last_command['time'] < 5:
+    ownership_changed = self.last_display is None or (state, accepted_id) != (self.last_display[0], self.last_display[2])
+    if (display != self.last_display and self.report and self.last_command and
+        0 <= now-self.last_command['time'] < (300 if ownership_changed else 5)):
       self.report('b1TapFeedback', request_id=self.last_command['id'], seq=self.last_command['seq'],
                   receiver_state=state, lamps=lamps, accepted_id=accepted_id)
     if display != self.last_display or now >= self.next_badge:
@@ -152,6 +168,8 @@ class Monitor:
       with suppress(Exception):
         await self.client.device_action(self.owned, 'disconnect')
     self.owned = self.attrs = self.session = None
+    self.board_report = None
+    self.exchange_history.clear()
     self.intent = Intent()
     await self.client.close()
 
@@ -182,18 +200,57 @@ class Monitor:
     await self.client.scan()
     return 'scanning'
 
+  async def write_command(self, key, nonce, stamp, op, ttl):
+    self.intent.seq = (self.intent.seq + 1) % 65536 or 1
+    packet = command(key, nonce, stamp, self.intent.seq, op, ttl)
+    started = time.monotonic()
+    self.exchange_timing['write_started'] = started
+    await self.client.call(self.attrs[CONTROL], GATT, 'WriteValue', 'aya{sv}', (packet, {'type':('s','request')}), reply_timeout=.35)
+    self.exchange_timing['write_ms'] = (time.monotonic()-started)*1000
+    self.sent_sequences.append(self.intent.seq)
+
+  async def renew_hold(self, key):
+    from tools.jetlink.blink_owner import external_output_allowed
+    # Renew an acknowledged hold before a potentially slow ATT metadata read.
+    # The board still enforces its local CAN, driver and ownership guards.
+    if (not self.board_report or not self.worker or not self.output_owner.held or
+        self.worker.process.poll() is not None or not external_output_allowed(self.params)):
+      return 0
+    nonce, stamp, ack, state, sampled = self.board_report
+    latest = self.worker.latest()
+    if latest is not None:
+      self.source = latest
+    now = time.monotonic()
+    if (nonce != self.session or state not in ('ready', 'sending', 'waiting') or
+        not 0 <= now-sampled < .20 or not 0 <= now-self.proven_at < 1.):
+      return 0
+    op = self.intent.hold_op(self.source, ack, now)
+    if op:
+      # sample time is the completed read, so this remains a conservative lower
+      # bound on the board clock. Keep the source's original 350ms expiry.
+      stamp = (stamp + int((now-sampled)*1000)) & 0xffffffff
+      await self.write_command(key, nonce, stamp, op, self.source['stamp']+.35-now)
+    return op
+
   async def exchange(self, key):
+    from tools.jetlink.blink_owner import external_output_allowed
     from tools.jetlink.blink_protocol import Process  # noqa: TID251 -- shared standalone indicator worker
     from openpilot.common.params import Params
     if self.params is None:
       self.params = Params()
+    started = time.monotonic()
+    renewed = await self.renew_hold(key)
     # Conservative board-clock sample: GATT latency can only shorten the lease.
+    read_started = time.monotonic()
+    self.exchange_timing['read_started'] = read_started
     raw = await self.client.call(self.attrs[META], GATT, 'ReadValue', 'a{sv}', ({},), reply_timeout=.35)
     nonce, stamp, ack, state_id, lamps, version, last_seq = struct.unpack('<IIHBBBH', bytes(raw[0]))
     if not nonce or version != 2 or state_id >= len(STATES):
       raise ValueError('unsupported B1 report')
     state = STATES[state_id]
     now = time.monotonic()
+    self.exchange_timing['read_ms'] = (now-read_started)*1000
+    self.board_report = nonce, stamp, ack, state, now
     if nonce != self.session:
       self.stop_source()
       self.session, self.intent = nonce, Intent()
@@ -207,7 +264,11 @@ class Monitor:
     if last_seq in self.sent_sequences:
       self.proven_at = now
     authenticated = now-self.proven_at < 1.
-    available = authenticated and state not in ('missing','error') and self.params.get_bool('IsOnroad') and not self.params.get_bool('CanfdBlinkerControl')
+    requested_hold = self.source.get('hold') if self.source else None
+    lost_ack = bool(self.last_command and self.last_display and requested_hold and
+                    requested_hold['id'] == self.last_display[2] == self.last_command['id'] and
+                    ack != self.last_command['seq'])
+    available = authenticated and state not in ('missing','error') and external_output_allowed(self.params)
     available = self.output_owner.acquire(available and (self.output_owner.held or (state == 'ready' and not lamps)))
     if self.worker and (not available or self.worker.process.poll() is not None):
       self.stop_source()
@@ -224,16 +285,26 @@ class Monitor:
       latest = self.worker.latest()
       if latest is not None:
         self.source = latest
+    # Ownership can disappear while the board still reports Waiting. Capture
+    # that first loss before Stop replaces the receiver's diagnostic reason.
+    if (authenticated and (state in ('driver_override', 'error') or lost_ack) and self.report and self.last_command and TRACE in self.attrs and
+        self.diagnostic_request != self.last_command['id'] and 0 <= now-self.last_command['time'] < (300 if lost_ack else 5)):
+      self.diagnostic_request = self.last_command['id']
+      with suppress(Exception):
+        diagnostic = await self.client.call(self.attrs[TRACE], GATT, 'ReadValue', 'a{sv}', ({},), reply_timeout=.15)
+        self.report('b1TapDiagnostic', request_id=self.last_command['id'],
+                    receiver_state=state, ack_lost=lost_ack, board_ack=ack,
+                    exchange_timing=self.exchange_timing.copy(),
+                    recent_exchanges=list(self.exchange_history),
+                    detail=bytes(diagnostic[0])[:256].decode('ascii', errors='replace'))
     # The worker can publish a newer timestamp while latest() drains its socket.
     now = time.monotonic()
     op, ident, ttl = self.intent.choose(self.source, state, ack, now)
     if (lamps or state not in ('ready', 'missing') or ident or self.intent.queued or
         (self.source and (self.source.get('hold') or self.source.get('events')))):
       self.last_signal_at = now
-    self.intent.seq = (self.intent.seq + 1) % 65536 or 1
-    packet = command(key, nonce, stamp, self.intent.seq, op, ttl)
-    await self.client.call(self.attrs[CONTROL], GATT, 'WriteValue', 'aya{sv}', (packet, {'type':('s','request')}), reply_timeout=.35)
-    self.sent_sequences.append(self.intent.seq)
+    if not renewed or op != renewed:
+      await self.write_command(key, nonce, stamp, op, ttl)
     if ident:
       self.last_command = {'id':ident, 'seq':self.intent.seq, 'time':now}
       if self.report:
@@ -241,6 +312,14 @@ class Monitor:
       self.intent.inflight = self.intent.seq, ident, now
     self.state = f'{state} · L={lamps & 1} R={(lamps >> 1) & 1}' if authenticated else 'verifying board key'
     self.publish_badge(state if authenticated else 'auth', now, lamps, pending[1] if pending and pending[0]==ack else None)
+    finished = time.monotonic()
+    self.exchange_history.append({'started':started, 'finished':finished, 'op':op,
+                                  'renewed_before_read':bool(renewed), **self.exchange_timing})
+    if self.report and self.worker and self.last_command and self.source and self.source.get('hold') and finished >= self.next_timing_report:
+      self.next_timing_report = finished+1.
+      self.report('b1ExchangeTiming', request_id=self.last_command['id'],
+                  total_ms=(finished-started)*1000, source_age_ms=(finished-self.source['stamp'])*1000,
+                  renewed_before_read=bool(renewed), **self.exchange_timing)
 
   async def enroll(self):
     # Setup is automatic while parked. Only an explicitly selected device can

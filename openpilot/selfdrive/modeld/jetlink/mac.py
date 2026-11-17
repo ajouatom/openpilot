@@ -14,7 +14,7 @@ from openpilot.selfdrive.modeld.jetlink.link import SPEC, validate_spec
 from openpilot.selfdrive.modeld.jetlink.contracts import JETSON_SPEC, validate_model_spec
 from openpilot.selfdrive.modeld.jetlink.selection import ModelChanged, approved_spec, remember_spec
 from jetlink.client import EngineMissing
-from jetlink.transport.base import LinkTimeout
+from jetlink.transport.base import LinkError, LinkTimeout
 
 MODEL_URL = 'https://upload.shind0.synology.me/models/carrot-jetlink-cinque-v2/big_driving_supercombo.onnx'
 CACHE = Path('/data/models/carrot-jetlink-mac')
@@ -83,7 +83,7 @@ def model_file(offroad, connected, progress, cache=CACHE):
 class PreparationTransport:
   """Poll setup cancellation while existing client waits for engine responses.
 
-  Installed only during Mac preparation; inference keeps the original transport
+  Installed only during preparation; inference keeps the original transport
   and deadlines. The underlying transport retains partially received messages.
   """
   def __init__(self, transport, check):
@@ -113,29 +113,61 @@ class PreparationTransport:
         pass
 
 
+def prepare_jetson(client, peer, offroad, connected, progress):
+  # The host's preload worker survives a connection. Keep this connection too,
+  # polling its resident engine without starting a new build while onroad.
+  def check():
+    if not connected():
+      raise PreparationDeferred('Jetson disconnected')
+    progress('prepare', None, 'Waiting for Jetson model preparation')
+
+  def stopped():
+    require_setup(offroad, connected)
+    return False
+
+  waiting_message = 'Waiting for resident Jetson model; new model setup requires ignition off'
+  while True:
+    while peer.get('loaded') != JETSON_SPEC.sha256 and not offroad():
+      if not connected():
+        raise PreparationDeferred('Jetson disconnected')
+      progress('resident-wait', None, waiting_message)
+      current = client.state()
+      if not isinstance(current, dict) or 'loaded' not in current:
+        raise LinkError('Jetson did not report its loaded model')
+      peer['loaded'] = current['loaded']
+      if current.get('engine_state') == 'failed':
+        raise LinkError(f"Jetson model preparation failed: {current.get('detail', '')}")
+      progress('resident-wait', None, waiting_message)
+      time.sleep(.5)
+
+    check()
+    original = client.t
+    client.t = PreparationTransport(original, check)
+    try:
+      result = client.ensure_engine(JETSON_SPEC.sha256, JETSON_SPEC.nbytes,
+                                    frame_skip=JETSON_SPEC.frame_skip, build_timeout=900,
+                                    should_stop=stopped, progress=progress)
+    except PreparationDeferred:
+      if not connected():
+        raise
+      # Ignition may start during a load, or HELLO may have named an engine
+      # that was subsequently unloaded. Resume read-only polling on this link.
+      peer['loaded'] = None
+    else:
+      validate_spec(result, JETSON_SPEC)
+      return result
+    finally:
+      client.t = original
+      client.progress_cb = None
+      client._should_stop = lambda: False
+
+
 def prepare(client, peer, offroad, connected, progress, cache=CACHE, mode='usb'):
-  """Retain the legacy Jetson path; phones require their explicit cable mode."""
+  """Prepare the selected engine while retaining each platform's setup gates."""
   if is_jetson(peer):
     if mode not in ('usb', 'auto'):
       raise ValueError('Jetson requires USB mode')
-    # Model provisioning belongs to the signed Jetson updater, never the
-    # Mac/phone downloader. A pending load/build must stay offroad.
-    def stopped():
-      require_setup(offroad, connected)
-      return False
-
-    if not connected():
-      raise PreparationDeferred('Jetson disconnected')
-    if peer.get('loaded') != JETSON_SPEC.sha256:
-      require_setup(offroad, connected)
-    try:
-      result = client.ensure_engine(JETSON_SPEC.sha256, JETSON_SPEC.nbytes,
-                                    frame_skip=JETSON_SPEC.frame_skip, build_timeout=30, should_stop=stopped)
-    finally:
-      client.progress_cb = None
-      client._should_stop = lambda: False
-    validate_spec(result, JETSON_SPEC)
-    return result
+    return prepare_jetson(client, peer, offroad, connected, progress)
   protocol = peer.get('protocol') if isinstance(peer, dict) else None
   app_capable = protocol == 3 and may_provision(peer, mode)
   legacy_v3 = protocol == 3 and isinstance(peer, dict) and 'loaded' in peer and not app_capable

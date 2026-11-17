@@ -9,9 +9,9 @@ import sys
 import threading
 import time
 try:
-  from .blink_owner import Owner
+  from .blink_owner import Owner, external_output_allowed
 except ImportError:
-  from blink_owner import Owner
+  from blink_owner import Owner, external_output_allowed
 
 CAPABILITY = 'carrot_blinker_control_v2'
 BEGIN, ACK, DATA = 0x4030, 0x4031, 0x4032
@@ -260,7 +260,7 @@ class Sender:
     available = (state.get('token') == self.token and state.get('available') is True and
                  now-self.clock_received < .5)
     if self.params is not None:
-      available = available and self.params.get_bool('IsOnroad') and not self.params.get_bool('CanfdBlinkerControl')
+      available = available and external_output_allowed(self.params)
     generation = state.get('generation')
     if generation != self.generation:
       self.generation = generation

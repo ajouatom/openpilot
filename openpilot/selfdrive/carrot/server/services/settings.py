@@ -27,21 +27,23 @@ def _param_text(value) -> str:
   return str(value or "").strip()
 
 
-def current_vehicle_brand(params=None) -> str:
-  """Return the opendbc brand for the currently fingerprinted vehicle."""
+def current_vehicle_settings_context(params=None) -> tuple[str, bool]:
+  """Read the fingerprinted brand and active Ray pedal capability together."""
   if params is None:
     from .params import HAS_PARAMS, Params
     if not HAS_PARAMS or Params is None:
-      return ""
+      return "", False
     params = Params()
 
   try:
     cp_bytes = params.get("CarParamsPersistent")
     if cp_bytes:
-      from openpilot.cereal import car, messaging
-      brand = _param_text(messaging.log_from_bytes(cp_bytes, car.CarParams).brand).lower()
-      if brand:
-        return brand
+      from openpilot.cereal import car
+      from opendbc.car.hyundai.values import is_ray_pedal_control
+      with car.CarParams.from_bytes(cp_bytes) as cp:
+        brand = _param_text(cp.brand).lower()
+        if brand:
+          return brand, is_ray_pedal_control(cp)
   except Exception:
     pass
 
@@ -52,8 +54,12 @@ def current_vehicle_brand(params=None) -> str:
   except Exception:
     car_name = ""
   if car_name.startswith(("HYUNDAI", "KIA", "GENESIS")):
-    return "hyundai"
-  return ""
+    return "hyundai", False
+  return "", False
+
+
+def current_vehicle_brand(params=None) -> str:
+  return current_vehicle_settings_context(params)[0]
 
 
 def read_settings_file(path: str) -> Dict[str, Any]:
@@ -174,6 +180,8 @@ def filter_settings_catalog_for_brand(
   groups_list: List[Dict[str, Any]],
   categories: List[Dict[str, Any]] | None,
   brand: str,
+  *,
+  ray_pedal_control: bool = False,
 ) -> tuple[Dict[str, list], List[Dict[str, Any]], List[Dict[str, Any]] | None, set[str]]:
   """Return a catalog view with brand-restricted settings removed.
 
@@ -191,6 +199,8 @@ def filter_settings_catalog_for_brand(
       for hidden_brand in item.get("hidden_brands", [])
     }
   }
+  if normalized_brand == "hyundai" and ray_pedal_control:
+    hidden_names.difference_update(("LongTuningKpV", "LongTuningKiV", "LongTuningKf"))
   if not hidden_names:
     return dict(groups), list(groups_list), categories, set()
 

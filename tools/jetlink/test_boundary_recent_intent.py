@@ -50,9 +50,73 @@ def test_continued_approach_remembers_driver_and_emits_once(direction, mode):
     assert not any(r[3] for r in requests)
 
 
+@pytest.mark.parametrize('direction', [1, 2])
+@pytest.mark.parametrize('missing_frames', [1, 2, 4])
+def test_width_dropout_preserves_only_a_continuous_established_episode(direction, missing_frames):
+  cs, md = scene(direction)
+  detector, requests = BoundaryIndicator(), []
+  for frame in range(60):
+    now = 10 + frame * .05
+    distance = 1.3 - max(0, frame - 32) * .04
+    md.frameId = frame
+    md.laneLines[1].y = [-distance if direction == 1 else -(2.6-distance)] * 9
+    md.laneLines[2].y = [2.6-distance if direction == 1 else distance] * 9
+    if 32 <= frame < 32 + missing_frames:
+      md.laneLines[3-direction].y = [v + (.12 if direction == 2 else -.12) for v in md.laneLines[3-direction].y]
+    if frame >= 32:
+      md.laneLineProbs[direction] = .01
+    prepare_scene(cs, md, now)
+    detector.update(now, cs, md, enabled=True, valid=True, busy=False)
+    if detector.request_direction:
+      requests.append(detector.request_time)
+  assert bool(requests) == (missing_frames <= 2)
+  assert len(set(requests)) <= 1
+
+
+def test_intermittent_invalid_width_does_not_establish_a_new_episode():
+  cs, md = scene()
+  detector = BoundaryIndicator()
+  for frame in range(60):
+    now = 10 + frame * .05
+    distance = max(.2, 1.8 - max(0, frame-30) * .05)
+    md.frameId = frame
+    cs.steeringPressed = frame >= 30
+    width = 2.48 if frame >= 30 and frame % 2 else 2.6
+    md.laneLines[1].y = [-distance] * 9
+    md.laneLines[2].y = [width-distance] * 9
+    prepare_scene(cs, md, now)
+    detector.update(now, cs, md, enabled=True, valid=True, busy=False)
+    assert detector.episode is None and not detector.request_direction
+
+
 @pytest.mark.parametrize('mode', ['no_torque', 'retreat', 'stalled', 'expired'])
 def test_no_intent_replay_after_retreat_stop_or_expiry(mode):
   assert not maneuver(mode=mode)
+
+
+@pytest.mark.parametrize('direction', [1, 2])
+def test_single_frame_boundary_retreat_preserves_recent_approach(direction):
+  def jitter(cs, md, now, frame):
+    if frame == 46:
+      shift = -.22 if direction == 1 else .22
+      for lane in md.laneLines[1:3]:
+        lane.y = [y + shift for y in lane.y]
+  requests = maneuver(direction, gate=jitter)
+  assert requests and {r[1] for r in requests} == {direction}
+  assert len({r[2] for r in requests}) == 1
+
+
+@pytest.mark.parametrize('direction', [1, 2])
+@pytest.mark.parametrize('consistent', [True, False])
+def test_paired_boundary_progress_requires_consistent_width(direction, consistent):
+  def reappearing(cs, md, now, frame):
+    if frame >= 44:
+      shift = .5 if direction == 1 else -.5
+      lines = md.laneLines[1:3] if consistent else [md.laneLines[direction]]
+      for lane in lines:
+        lane.y = [y + shift for y in lane.y]
+  requests = maneuver(direction, gate=reappearing)
+  assert bool(requests) == consistent
 
 
 @pytest.mark.parametrize('code', [-1, 0, 1, 2, 12, 13, 16, 18, 20, 21, 24, 25, 30])
@@ -139,3 +203,14 @@ def test_new_timestamp_roundtrips_real_schema():
   event.init('carState').laneLineInfoMonoTime = 123456789
   with log.Event.from_bytes(event.to_bytes()) as decoded:
     assert decoded.carState.laneLineInfoMonoTime == 123456789
+
+
+@pytest.mark.parametrize('direction', [1, 2])
+def test_opposite_boundary_single_frame_jump_preserves_driver_approach(direction):
+  def jitter(cs, md, now, frame):
+    if frame == 44:
+      lane = md.laneLines[3-direction]
+      lane.y = [v + (.55 if direction == 1 else -.55) for v in lane.y]
+  requests = maneuver(direction, gate=jitter)
+  assert requests and len({r[2] for r in requests}) == 1
+  assert requests[0][0] < 12.6

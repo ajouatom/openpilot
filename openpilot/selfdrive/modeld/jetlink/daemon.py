@@ -12,6 +12,7 @@ import time
 import numpy as np
 
 from openpilot.common.jetlink_peer import classify_auto_peer, may_provision
+from openpilot.common.jetson_model import is_jetson
 from openpilot.selfdrive.modeld.jetlink import VENDOR
 from openpilot.selfdrive.modeld.jetlink.link import (SOCKET, STATUS, REQUEST, REPLY, PacketReader, send, send_parts)
 from openpilot.selfdrive.modeld.jetlink.phase import Publisher as PhasePublisher
@@ -20,7 +21,7 @@ from openpilot.selfdrive.modeld.jetlink.compat import ProtocolChoice
 from openpilot.selfdrive.modeld.jetlink.mobile import transport_mode, setup_gadget, MobileCable, AutoTransport, MobileLinkError
 from openpilot.selfdrive.modeld.jetlink.power import UsbInputPower
 from openpilot.selfdrive.modeld.jetlink.scheduling import UsbCompletionPriority
-from openpilot.selfdrive.modeld.jetlink.contracts import model_name
+from openpilot.selfdrive.modeld.jetlink.contracts import JETSON_SPEC, model_name
 from openpilot.selfdrive.modeld.jetlink.selection import ModelChanged, check_loaded
 from openpilot.selfdrive.modeld.jetlink.startup import (CAPABILITY as BOOT_UPDATE_CAPABILITY, wait_for_boot_update,
                                                        RuntimeHandoff, ConnectionStartup)
@@ -36,6 +37,7 @@ SESSION_MODE = 'usb'
 ACTIVE_UDC = None
 SESSION_DETACHED = False
 log = logging.getLogger('carrot.jetlink')
+LAST_STATUS_EVENT = None
 sys.path.insert(0, str(VENDOR.parents[1] / 'tools/jetlink'))
 from hud_protocol import Publisher, HUD_MESSAGE
 from hud_wifi import publisher as display_publisher, USB_CAPABILITY as HUD_USB_CAPABILITY
@@ -131,6 +133,7 @@ def _role_attached():
 
 
 def publish(status, spec=None, **extra):
+  global LAST_STATUS_EVENT
   record = dict(state=status, updated=time.monotonic(), model=model_name(spec) if spec else 'App selection',
                 sha256=spec.sha256 if spec else None,
                 transport=SESSION_MODE if TRANSPORT_MODE == 'auto' else TRANSPORT_MODE,
@@ -138,6 +141,18 @@ def publish(status, spec=None, **extra):
   temporary = STATUS.with_suffix('.tmp')
   temporary.write_text(json.dumps(record))
   os.replace(temporary, STATUS)
+  preparation = extra.get('preparation') or {}
+  peer = extra.get('peer') or {}
+  event = dict(state=status, stage=preparation.get('stage'), detail=str(extra.get('error') or '')[:300],
+               message=str(preparation.get('message') or '')[:300], transport=record['transport'],
+               host=peer.get('carrot_host'), source_commit=peer.get('carrot_source_commit'),
+               loaded_sha256=peer.get('loaded'), requested_sha256=JETSON_SPEC.sha256 if is_jetson(peer) else record['sha256'])
+  if event != LAST_STATUS_EVENT:
+    from openpilot.common.swaglog import cloudlog
+    # SwagLogger treats the presence of "error" as ERROR, even an empty string.
+    severity = {'error': True} if status in ('retrying', 'blocked') else {}
+    cloudlog.event('jetlinkConnectionState', **event, **severity)
+    LAST_STATUS_EVENT = event
 
 
 class CarrotTransport(FfsTransport):
@@ -253,11 +268,14 @@ def _serve_local(listener, client, peer, publisher, phase, wifi=None, blinker=No
   from openpilot.common.swaglog import cloudlog
   params = Params()
   diagnostics = RuntimeDiagnostics('jetlinkd', cloudlog.event, peak_metric='usb_exchange_ms')
+  from openpilot.selfdrive.modeld.jetlink.performance_log import PerformanceLog
+  performance_log = PerformanceLog(cloudlog.event, peer, getattr(client.spec, 'sha256', None))
   from tools.jetlink.model_library import Client as ModelLibrary  # noqa: TID251 -- shared standalone host protocol
   library = ModelLibrary(peer)
   last_status = 0.
   last_ping = time.monotonic()
   telemetry_updated = 0.
+  last_state_request = time.monotonic()
   hud_connected = None
   spec = client.spec
   usb_display = publisher is not None and (peer.get('carrot_host') != 'jetson' or peer.get(HUD_USB_CAPABILITY) is True)
@@ -377,8 +395,11 @@ def _serve_local(listener, client, peer, publisher, phase, wifi=None, blinker=No
           map_options = {'nav_metadata': nav_meta} if nav_meta is not None else {}
           # Output ownership needs fresh receiver health within 500 ms. The
           # usual 1 Hz display telemetry would repeatedly expire that lease.
+          want_state = blinker is not None or time.monotonic() - last_state_request >= 1
           seq = client.infer_begin(images, packed, frame, reset=bool(reset & 1),
-                                   want_state=(blinker is not None or frame % 20 == 0), **map_options)
+                                   want_state=want_state, **map_options)
+          if want_state:
+            last_state_request = time.monotonic()
           sent = time.monotonic()
           if peer.get('carrot_host') == 'jetson':
             phase.sent(source_sof)
@@ -459,6 +480,7 @@ def _serve_local(listener, client, peer, publisher, phase, wifi=None, blinker=No
             **display_metrics,
             **receive_metrics,
           )
+          performance_log.record(client.last_state, telemetry_updated, frame, seq, client.last_timings)
       except (ConnectionError, BrokenPipeError, ValueError) as exc:
         log.info('local client ended: %s', exc)
       finally:
@@ -549,11 +571,13 @@ def main():
         if owner is None:
           # Optional iOS networking must not make existing bulk USB depend on
           # NCM, dnsmasq or a firewall backend. Cleanup is verified below first.
+          publish('connecting', peer=peer, preparation={'stage': 'usb-setup'})
           setup_gadget('usb' if mobile_unavailable else TRANSPORT_MODE)
           udc = next(Path('/sys/class/udc').iterdir()).name
           owner = CarrotTransport('/dev/ffs-jetlink', gadget=GADGET, udc=udc)
           if TRANSPORT_MODE in ('auto', 'ios') and not mobile_unavailable:
             cable = MobileCable(owner)
+            publish('connecting', peer=peer, preparation={'stage': 'network-setup'})
             cable.start()
             if TRANSPORT_MODE == 'auto':
               log.warning('%s', AutoTransport.diagnostic)

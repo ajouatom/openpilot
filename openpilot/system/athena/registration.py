@@ -6,11 +6,10 @@ from typing import cast
 from pathlib import Path
 
 from datetime import datetime, timedelta, UTC
-from openpilot.common.api import api_get, get_key_pair
+from openpilot.common.api import api_get, comma_connect_enabled, get_key_pair
 from openpilot.common.params import Params
 from openpilot.common.spinner import Spinner
-from openpilot.selfdrive.selfdrived.alertmanager import set_offroad_alert
-from openpilot.system.hardware import HARDWARE, PC
+from openpilot.system.hardware import HARDWARE
 from openpilot.system.hardware.hw import Paths
 from openpilot.common.swaglog import cloudlog
 
@@ -39,6 +38,12 @@ def register(show_spinner=False) -> str | None:
     # not all devices will have this; added early in comma 3X production (2/28/24)
     with open(Paths.persist_root()+"/comma/dongle_id") as f:
       dongle_id = f.read().strip()
+
+  if not comma_connect_enabled():
+    # Keep the real identity for local logs; never register or replace it offline.
+    if dongle_id:
+      params.put("DongleId", dongle_id)
+    return dongle_id or UNREGISTERED_DONGLE_ID
 
   # Create registration token, in the future, this key will make JWTs directly
   jwt_algo, private_key, public_key = get_key_pair()

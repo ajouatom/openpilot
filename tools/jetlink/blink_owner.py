@@ -10,6 +10,11 @@ DIRECTORY = Path('/dev/shm/carrot-bluetooth')
 GRACE = .9  # Longer than the old receiver's command lease and in-flight send.
 
 
+def external_output_allowed(params):
+  return (params.get_bool('IsOnroad') and not params.get_bool('CanfdBlinkerControl')
+          and not params.get_bool('CanfdBlinkerKick'))
+
+
 def current(record, now):
   until = record.get('until') if isinstance(record, dict) else None
   return type(until) in (int, float) and math.isfinite(until) and 0 < until-now <= GRACE+1

@@ -230,6 +230,7 @@ bool safety_rx_hook(const CANPacket_t *to_push) {
 }
 
 int _prev_not_allowed_addr = -1;
+static uint32_t _prev_not_allowed_print_us = 0U;
 static bool tx_msg_safety_check(const CANPacket_t *to_send, const CanMsg msg_list[], int len) {
   int addr = GET_ADDR(to_send);
   int bus = GET_BUS(to_send);
@@ -242,7 +243,11 @@ static bool tx_msg_safety_check(const CANPacket_t *to_send, const CanMsg msg_lis
       break;
     }
   }
-  if (!allowed && _prev_not_allowed_addr != addr && len > 0) {
+  // At most once per second: two alternating rejected ids (HDA1 0x165/0x16A) printed this ~200x/s and the host's
+  // serial drain starved the pandad heartbeat until the panda went SILENT (TUCSON 4TH GEN, 2026-11-11).
+  const uint32_t now_us = microsecond_timer_get();
+  if (!allowed && _prev_not_allowed_addr != addr && len > 0 && get_ts_elapsed(now_us, _prev_not_allowed_print_us) >= 1000000U) {
+    _prev_not_allowed_print_us = now_us;
     print("allowed addr = ");
     for(int i=0;i<len;i++) {putui((uint32_t)msg_list[i].addr); print(",");}
     print("\nbus = ");
@@ -294,6 +299,10 @@ bool safety_tx_hook(CANPacket_t *to_send) {
 
 int safety_fwd_hook(CANPacket_t *to_send) {
   return (relay_malfunction ? -1 : current_hooks->fwd(to_send));
+}
+
+bool safety_rx_tx_hook(const CANPacket_t *to_push, CANPacket_t *to_send) {
+  return !relay_malfunction && (current_hooks->rx_tx != NULL) && current_hooks->rx_tx(to_push, to_send);
 }
 
 bool get_longitudinal_allowed(void) {

@@ -3,6 +3,7 @@ import time
 import threading
 import logging
 import json
+import pytest
 from pathlib import Path
 from openpilot.system.hardware.hw import Paths
 
@@ -36,6 +37,10 @@ cloudlog.addHandler(log_handler)
 
 
 class TestUploader(UploaderTestCase):
+  @pytest.fixture(autouse=True)
+  def enable_comma_connect(self, monkeypatch):
+    monkeypatch.setenv("COMMA_CONNECT_ENABLED", "1")
+
   def setup_method(self):
     super().setup_method()
     log_handler.reset()

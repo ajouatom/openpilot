@@ -33,9 +33,9 @@ try {
   if ($source.Count -ne 1) { throw "설치 파일이 저장된 디스크를 확인할 수 없습니다. C:에 풀어서 실행하세요.`nCannot identify the source disk. Extract to C: and retry." }
   $sourceDisk = [int]$source[0].DiskNumber
   $choices = @(Get-Disk | Where-Object { Test-InstallDisk $_ $release.image_bytes $sourceDisk })
-  if ($choices.Count -eq 0) { throw "설치할 USB SD카드가 없습니다. 카드 리더를 PC에 연결하고 다시 실행하세요.`nNo eligible USB SD card. Connect the card reader and retry." }
+  if ($choices.Count -eq 0) { throw "설치할 USB SD카드/SSD가 없습니다. 카드 리더 또는 NVMe USB 케이스를 PC에 연결하고 다시 실행하세요.`nNo eligible USB SD card/SSD. Connect the reader or NVMe USB enclosure and retry." }
   Write-Host ''
-  Write-InstallerPair '설치할 SD카드를 선택하세요. 기존 내용은 모두 지워집니다.' 'Select the SD card. All its contents will be erased.' Yellow
+  Write-InstallerPair '설치할 SD카드/SSD를 선택하세요. 기존 내용은 모두 지워집니다.' 'Select the SD card/SSD. All its contents will be erased.' Yellow
   foreach ($disk in $choices) {
     Write-Host ("[{0}] {1} / {2:N1} GB / ID: {3}" -f $disk.Number,$disk.FriendlyName,($disk.Size/1e9),$disk.SerialNumber)
   }

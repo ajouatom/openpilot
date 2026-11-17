@@ -1,21 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 test -f /etc/nv_tegra_release
-/usr/sbin/nvpmodel -q | grep -q MAXN_SUPER
-cat > /etc/systemd/system/carrot-jetlink-performance.service <<'EOF'
-[Unit]
-Description=Jetson inference clocks within the selected MAXN_SUPER mode
-After=nvpmodel.service
-Requires=nvpmodel.service
-Before=carrot-jetlink.service
-
-[Service]
-Type=oneshot
-ExecStart=/usr/bin/jetson_clocks
-RemainAfterExit=yes
-
-[Install]
-WantedBy=multi-user.target
-EOF
+SOURCE=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+python3 - "$SOURCE" <<'PY'
+import sys
+from pathlib import Path
+sys.path.insert(0, sys.argv[1])
+from power_setup import configure
+configure(Path('/'), Path(sys.argv[1]))
+PY
 systemctl daemon-reload
-systemctl enable --now carrot-jetlink-performance
+# Activate with the normal full reboot so no running GPU workload changes mode.
+systemctl enable carrot-jetlink-performance

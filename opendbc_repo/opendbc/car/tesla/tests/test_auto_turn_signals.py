@@ -5,7 +5,7 @@ import pytest
 from opendbc.car import Bus, gen_empty_fingerprint, structs
 from opendbc.car.tesla.carstate import CarState
 from opendbc.car.tesla.interface import CarInterface
-from opendbc.car.tesla.values import CAR, TeslaFlags, TeslaSafetyFlags
+from opendbc.car.tesla.values import CAR, CANBUS, TeslaFlags, TeslaSafetyFlags
 
 N = 10_000_000_000
 
@@ -51,9 +51,35 @@ def test_configuration_is_independent_and_only_enables_supported_platforms(candi
   assert bool(cp.flags & TeslaFlags.AUTO_TURN_SIGNALS) == expected
   assert bool(cp.safetyConfigs[0].safetyParam & TeslaSafetyFlags.AUTO_TURN_SIGNALS) == expected
   assert bool(cp.flags & TeslaFlags.HAS_VEHICLE_BUS) == vehicle_bus
-  assert bool(cp.flags & TeslaFlags.AUTO_SPEED_LIMIT) == (vehicle_bus and longitudinal)
+  assert bool(cp.flags & TeslaFlags.AUTO_SPEED_LIMIT) == (enabled and vehicle_bus and longitudinal)
+  assert bool(cp.safetyConfigs[0].safetyParam & TeslaSafetyFlags.AUTO_SPEED_LIMIT) == (enabled and vehicle_bus and longitudinal)
   assert bool(cp.safetyConfigs[0].safetyParam & TeslaSafetyFlags.LONG_CONTROL) == longitudinal
   assert cp.dashcamOnly == (candidate == CAR.TESLA_MODEL_X)
+
+
+@pytest.mark.parametrize("enabled", [False, True])
+@pytest.mark.parametrize("other_features", [False, True])
+@pytest.mark.parametrize("vehicle_bus", [False, True])
+@pytest.mark.parametrize("longitudinal", [False, True])
+def test_speed_wheel_switch_is_independent(enabled, other_features, vehicle_bus, longitudinal):
+  fingerprint = gen_empty_fingerprint()
+  if vehicle_bus:
+    fingerprint[CANBUS.vehicle][0x3DF] = 8
+  with patch("opendbc.car.tesla.interface.Params") as store:
+    store.return_value.get_bool.side_effect = lambda key: enabled if key == "TeslaAutoSpeedLimit" else other_features
+    cp = CarInterface.get_params(CAR.TESLA_MODEL_Y, fingerprint, [], longitudinal, False, False)
+  expected = enabled and vehicle_bus and longitudinal
+  assert bool(cp.flags & TeslaFlags.AUTO_SPEED_LIMIT) == expected
+  assert bool(cp.safetyConfigs[0].safetyParam & TeslaSafetyFlags.AUTO_SPEED_LIMIT) == expected
+  assert bool(cp.flags & TeslaFlags.AUTO_TURN_SIGNALS) == (other_features and vehicle_bus)
+  assert bool(cp.flags & TeslaFlags.CAN_TRAFFIC_STOP) == (other_features and longitudinal)
+  assert cp.openpilotLongitudinalControl == longitudinal
+  from opendbc.car.tesla.speed_limit_controller import TeslaSpeedLimitController
+  from opendbc.car.tesla.tests.test_speed_limit_controller import fake_control, fake_state
+  controller = TeslaSpeedLimitController(cp)
+  state = fake_state()
+  assert controller.update(fake_control(), state, 2_000_000_000) == []
+  assert bool(controller.update(fake_control(), state, 2_500_000_000)) == expected
 
 
 @pytest.mark.parametrize("bus", [0, 2])

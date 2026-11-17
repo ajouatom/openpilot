@@ -16,6 +16,28 @@ inline uint8_t crc(const uint8_t *data) {
 enum class Direction { Left, Right };
 struct TapFrame { uint32_t offsetUs; uint8_t data[8]; };
 
+// 0x413 can retain the tap's lever bit through the dark halves of its flashes.
+// The caller independently checks every raw 0x3C1 against the neutral seed.
+struct TapFeedback {
+  bool seen = false;
+  bool cleared = false;
+
+  bool accepts(uint8_t report, uint8_t lamps, Direction direction,
+               bool confirmed, uint32_t elapsedUs, uint32_t tapEndUs) {
+    uint8_t expectedLamp = direction == Direction::Left ? 1 : 2;
+    uint8_t expectedReport = direction == Direction::Left ? 1 : 4;
+    if (lamps & ~expectedLamp) return false;
+    if (!report) {
+      if (seen && elapsedUs > tapEndUs) cleared = true;
+      return true;
+    }
+    if (cleared || report != expectedReport || !confirmed) return false;
+    if (!seen && elapsedUs > tapEndUs) return false;
+    seen = true;
+    return true;
+  }
+};
+
 // Return zero for an invalid seed. Caller supplies space for seven frames.
 // Pure encoder: no TWAI transmit or scheduling side effects.
 inline int encode(const uint8_t (&original)[8], Direction dir, unsigned counter,

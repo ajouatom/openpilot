@@ -98,16 +98,29 @@ def reports(tmp_path, monkeypatch):
 
 def test_wait_and_model_preparation_are_progress_not_red(reports):
   reports('connecting', error='last unanswered initial HELLO')
-  assert status.badge() == ('jetSON 연결 대기', 'loading')
+  assert status.badge() == ('jetSON 응답 대기 중', 'loading')
   reports('loading')
   assert status.badge() == ('jetSON 모델 준비 중', 'loading')
+
+
+@pytest.mark.parametrize('message,label', [
+  ('Jetlink model setup requires ignition off', '시동 끄고 모델 준비 필요'),
+  ('Jetson disconnected', '모델 준비 보류'),
+])
+def test_deferred_model_preparation_exposes_its_reason(reports, message, label):
+  reports('loading')
+  link = json.loads(status.LINK_STATUS.read_text())
+  link['preparation'] = {'stage': 'waiting', 'message': message}
+  status.LINK_STATUS.write_text(json.dumps(link))
+  assert status.badge() == (f'jetSON {label}', 'loading')
+  assert message in status.diagnostics()['reason']
 
 
 @pytest.mark.parametrize('age', [3., 5., 7.9])
 def test_bounded_blocking_hello_does_not_expire_as_an_error(reports, monkeypatch, age):
   reports('connecting')
   monkeypatch.setattr(status.time, 'monotonic', lambda: 20. + age)
-  assert status.badge() == ('jetSON 연결 대기', 'loading')
+  assert status.badge() == ('jetSON 응답 대기 중', 'loading')
 
 
 def test_stalled_handshake_eventually_becomes_an_error(reports, monkeypatch):
@@ -136,3 +149,44 @@ def test_fresh_model_failure_overrides_extended_handshake_lease(reports, monkeyp
 def test_real_error_overrides_startup_progress(reports, state, model_error):
   reports(state, error='failed', model_error=model_error)
   assert status.badge() == ('jetSON ERROR', 'error')
+
+
+@pytest.mark.parametrize('stage,text', [('usb-setup', 'USB 연결 준비 중'), ('network-setup', 'USB 통신 준비 중')])
+def test_setup_lease_covers_bounded_helper_without_hiding_failure(reports, monkeypatch, stage, text):
+  reports('connecting')
+  value = json.loads(status.LINK_STATUS.read_text())
+  value['preparation']['stage'] = stage
+  status.LINK_STATUS.write_text(json.dumps(value))
+  monkeypatch.setattr(status.time, 'monotonic', lambda: 40.)
+  assert status.badge() == (f'jetSON {text}', 'loading')
+  monkeypatch.setattr(status.time, 'monotonic', lambda: 42.)
+  assert status.badge() == ('jetSON ERROR', 'error')
+  monkeypatch.setattr(status.time, 'monotonic', lambda: 20.)
+  value.update(state='blocked', error='unsafe cleanup')
+  status.LINK_STATUS.write_text(json.dumps(value))
+  assert status.badge() == ('jetSON ERROR', 'error')
+
+
+def test_ready_host_explains_local_warp_then_actual_model_use(reports):
+  reports('ready')
+  link = json.loads(status.LINK_STATUS.read_text())
+  link.update(telemetry_updated=20., telemetry={'carrot_health': {'age_s': 0., 'severity': 'ok'}})
+  status.LINK_STATUS.write_text(json.dumps(link))
+  model = json.loads(status.MODEL_STATUS.read_text())
+  model['warp_preparing'] = True
+  status.MODEL_STATUS.write_text(json.dumps(model))
+  assert status.badge() == ('jetSON 콤마 영상 준비 중', 'loading')
+  assert status.diagnostics()['reason'] == '콤마 영상 준비 중'
+  model.update(warp_preparing=False, active=True)
+  status.MODEL_STATUS.write_text(json.dumps(model))
+  assert status.badge() == ('jetSON 사용 중', 'active')
+
+
+def test_resident_model_wait_explains_retained_usb(reports):
+  reports('loading')
+  link = json.loads(status.LINK_STATUS.read_text())
+  link['preparation'] = {'stage': 'resident-wait',
+                         'message': 'Waiting for resident Jetson model; new model setup requires ignition off'}
+  status.LINK_STATUS.write_text(json.dumps(link))
+  assert status.badge() == ('jetSON 모델 준비 대기 · USB 유지', 'loading')
+  assert 'new model setup requires ignition off' in status.diagnostics()['reason']

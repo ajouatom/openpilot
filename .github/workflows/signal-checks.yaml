@@ -27,7 +27,7 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
-      - run: pip install Cython==3.2.9 setuptools scons pytest pytest-subtests numpy pycapnp cffi setproctitle requests pycryptodome zstandard pyserial parameterized
+      - run: pip install Cython==3.2.9 setuptools scons pytest pytest-subtests numpy pycapnp cffi setproctitle requests pycryptodome zstandard pyserial parameterized jeepney
       - name: Build production CAN kernels and safety hooks
         run: |
           scons -f tools/native_cpu/SConstruct -j2
@@ -63,6 +63,8 @@ jobs:
             openpilot/selfdrive/controls/tests/test_desire_helper_stalk.py \
             openpilot/selfdrive/controls/tests/test_assistant_lane.py \
             openpilot/selfdrive/car/tests/test_assistant_speed.py \
+            openpilot/selfdrive/car/tests/test_cruise_timing.py \
+            openpilot/common/tests/test_runtime_diagnostics.py \
             openpilot/selfdrive/controls/tests/test_lever_forced_turn.py \
             openpilot/selfdrive/carrot/tests/test_xiaoge_data.py \
             tools/signal_validation/test_trial_integration.py \
@@ -72,10 +74,29 @@ jobs:
         env:
           CARROT_NATIVE_CPU: '0'
         run: python tools/signal_validation/run.py opendbc_repo/opendbc/car/hyundai/tests/test_pedal_interceptor.py
+      - name: CAN FD Kick ownership and stock handover regressions
+        run: |
+          python tools/signal_validation/run.py \
+            openpilot/selfdrive/car/tests/test_hyundai_kick.py \
+            tools/jetlink/test_blinker_boundary.py \
+            tools/jetlink/test_boundary_recent_intent.py \
+            tools/jetlink/test_manual_turn_indicator.py \
+            tools/jetlink/test_indicator_reconstruction.py \
+            openpilot/selfdrive/car/tests/test_card_diagnostics.py \
+            opendbc_repo/opendbc/car/hyundai/tests/test_aprk_blinkers.py \
+            opendbc_repo/opendbc/car/hyundai/tests/test_camera_set_speed_sync.py \
+            opendbc_repo/opendbc/car/hyundai/tests/test_ccnc_cluster.py \
+            opendbc_repo/opendbc/car/hyundai/tests/test_stock_cruise_adopt.py \
+            opendbc_repo/opendbc/safety/tests/test_hyundai_canfd_spas_piggyback.py \
+            openpilot/selfdrive/carrot/tests/test_radar_moving_lead_shield.py \
+            openpilot/selfdrive/carrot/tests/test_red_stop_hold.py
+          python tools/signal_validation/run.py \
+            openpilot/selfdrive/carrot/bluetooth/tests/test_b1.py tools/jetlink/test_blink_owner.py
       - name: Vehicle fault admission and CAN FD signal-stop object
         run: |
           python tools/signal_validation/run.py \
             openpilot/selfdrive/controls/tests/test_controlsd_publish.py \
+            openpilot/selfdrive/controls/tests/test_longcontrol_hyundai_tuning.py \
             openpilot/selfdrive/selfdrived/tests/test_vehicle_faults.py \
             opendbc_repo/opendbc/car/hyundai/tests/test_casper_fault_reporting.py \
             opendbc_repo/opendbc/car/hyundai/tests/test_stop_object.py \

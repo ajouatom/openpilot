@@ -45,6 +45,19 @@ def test_prepare_patch_and_repeat_without_touching_original(package):
   prepare.prepare(root, lambda *_: pytest.fail('Valid prepared file decompressed again'))
 
 
+@pytest.mark.parametrize('storage_format,command', [(1, '02_SD카드설치.cmd'), (2, '02_SD_SSD설치.cmd')])
+def test_preparation_points_to_the_packaged_install_command(package, capsys, storage_format, command):
+  root, *_ = package
+  manifest = root / 'support/release.json'
+  release = json.loads(manifest.read_text())
+  release['storage_format'] = storage_format
+  manifest.write_text(json.dumps(release))
+  prepare.prepare(root, open)
+  assert command in capsys.readouterr().out
+  prepare.prepare(root, lambda *_: pytest.fail('Valid image decompressed again'))
+  assert command in capsys.readouterr().out
+
+
 @pytest.mark.parametrize('name', ['carrot-jetson.img.zst', 'offline-usbc.json'])
 def test_bad_input_never_produces_ready_image(package, name):
   root, *_ = package
@@ -153,10 +166,47 @@ def test_public_integrated_package_requires_checks_for_exact_image(tmp_path, mon
   assert 'owner reports normal operation' in guide and 'tests remain pending' in guide
   assert 'boot and updates tested' not in guide and 'private test installer' not in guide.lower()
   assert '약 30~90분' in guide
-  with pytest.raises(ValueError, match='not both'):
+  with pytest.raises(ValueError, match='one publication evidence'):
     publisher.integrated_release(image, compressed, metadata, validation, owner)
   for changes in ({'image_sha256': 'd' * 64}, {'card_readback': False},
                   {'owner_reported_boot': False}, {'publication_requested': False}):
     owner.write_text(json.dumps(report | changes))
     with pytest.raises(ValueError, match='Owner preview'):
       publisher.integrated_release(image, compressed, metadata, owner_boot=owner)
+  with pytest.raises(ValueError, match='Offline preview'):
+    publisher.integrated_release(image, compressed, metadata, offline_preview=True)
+  value = json.loads(metadata.read_text())
+  value['offline_checks'] = {k: True for k in ('runtime_imports', 'model_hashes', 'privacy', 'filesystems', 'gpt', 'systemd_units')}
+  metadata.write_text(json.dumps(value))
+  preview = publisher.integrated_release(image, compressed, metadata, offline_preview=True)
+  assert preview['version'] == 'v0.5.0-super-preview'
+  assert preview['physical_boot'] is False and preview['engine_prebuilt'] is False
+  assert preview['validation_basis'] == 'offline_checks'
+  guide = publisher.candidate_guide(html, preview)
+  assert 'Physical boot is unverified' in guide and 'Requires Super boot firmware' in guide
+  value['automatic_super_firmware'] = True
+  metadata.write_text(json.dumps(value))
+  with pytest.raises(ValueError, match='capsule verification'):
+    publisher.integrated_release(image, compressed, metadata, offline_preview=True)
+  value['offline_checks']['firmware_capsule'] = True
+  value['offline_checks']['fresh_data_admission'] = True
+  metadata.write_text(json.dumps(value))
+  preview = publisher.integrated_release(image, compressed, metadata, offline_preview=True)
+  assert preview['version'] == 'v0.6.0-super-auto-preview'
+  assert preview['automatic_super_firmware'] and not preview['matching_super_firmware_required']
+  guide = publisher.candidate_guide(html, preview)
+  assert 'automatically prepares Super firmware' in guide
+  assert 'is not updated by this SD installer' not in guide
+  assert 'physical firmware update and boot are unverified' in guide
+  value.update(storage_format=2, boot_media=['microSD', 'M.2 NVMe'])
+  metadata.write_text(json.dumps(value))
+  with pytest.raises(ValueError, match='Portable image'):
+    publisher.integrated_release(image, compressed, metadata, offline_preview=True)
+  value['offline_checks']['portable_boot'] = True
+  metadata.write_text(json.dumps(value))
+  preview = publisher.integrated_release(image, compressed, metadata, offline_preview=True)
+  assert preview['version'] == 'v0.7.0-super-auto-sd-nvme-preview'
+  assert preview['storage_format'] == 2 and preview['physical_boot'] is False
+  guide = publisher.candidate_guide(html, preview)
+  assert '02_SD_SSD설치.cmd' in guide and 'Jetson M.2 slot' in guide
+  assert 'v0.7.0-super-auto-sd-nvme-preview/carrot-jetson-windows.zip' in guide
