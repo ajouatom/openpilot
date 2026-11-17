@@ -165,6 +165,8 @@ class VCruiseCarrot:
     self.bluetooth_commands = CommandReader('cruise')
     self.assistant_speed = AssistantSpeed()
     self.assistant_speed_valid = False
+    self.runtime_timing = {}
+    self.command_timing = {}
     self.frame = 0
     self.params_memory = Params("/dev/shm/params")
     self.params = Params()
@@ -328,9 +330,13 @@ class VCruiseCarrot:
       self.carrot_arg = ""
 
   def update_v_cruise(self, CS, sm, is_metric):
+    cruise_start, cruise_cpu_start = time.monotonic_ns(), time.thread_time_ns()
+    self.command_timing = {}
     prior_cruise_kph = self.v_cruise_kph
     self._add_log("")
+    params_start, params_cpu_start = time.monotonic_ns(), time.thread_time_ns()
     self.update_params(is_metric)
+    params_end, params_cpu_end = time.monotonic_ns(), time.thread_time_ns()
     self.frame += 1
     if CS.gearShifter != GearShifter.drive:
       self.autoCruiseControl_cancel_timer = 20 * 100  # 20 sec
@@ -380,7 +386,9 @@ class VCruiseCarrot:
     if CC.enabled:
       self._cruise_ready = False
     previous_lat_enabled = self._lat_enabled
+    buttons_start, buttons_cpu_start = time.monotonic_ns(), time.thread_time_ns()
     v_cruise_kph = self._update_cruise_buttons(CS, CC, self.v_cruise_kph)
+    buttons_end, buttons_cpu_end = time.monotonic_ns(), time.thread_time_ns()
     if self.assistant_speed.active:
       self._lat_enabled = previous_lat_enabled  # A speed request must not enable lateral control.
     pcm_speed = self.toyota_pcm_speed_sync.update(
@@ -425,10 +433,25 @@ class VCruiseCarrot:
 
     self.cruise_state_available_last = CS.cruiseState.available
     self.enabled_last = CC.enabled
+    finish_start, finish_cpu_start = time.monotonic_ns(), time.thread_time_ns()
     try:
       self.assistant_speed.finish(self.v_cruise_kph)
     except (OSError, ValueError, TypeError):
       pass
+    cruise_end, cruise_cpu_end = time.monotonic_ns(), time.thread_time_ns()
+    # One frame of bounded measurements. Card includes these in its existing
+    # aggregate and correlated slow-frame record; there is no per-frame logging.
+    self.runtime_timing = {
+      'cruise_total_ms': (cruise_end - cruise_start) / 1e6,
+      'cruise_total_cpu_ms': (cruise_cpu_end - cruise_cpu_start) / 1e6,
+      'cruise_params_ms': (params_end - params_start) / 1e6,
+      'cruise_params_cpu_ms': (params_cpu_end - params_cpu_start) / 1e6,
+      'cruise_buttons_ms': (buttons_end - buttons_start) / 1e6,
+      'cruise_buttons_cpu_ms': (buttons_cpu_end - buttons_cpu_start) / 1e6,
+      'cruise_finish_ms': (cruise_end - finish_start) / 1e6,
+      'cruise_finish_cpu_ms': (cruise_cpu_end - finish_cpu_start) / 1e6,
+      **self.command_timing,
+    }
 
   def initialize_v_cruise(self, CS, experimental_mode: bool) -> None:
     return
@@ -600,11 +623,20 @@ class VCruiseCarrot:
       return None
 
   def _update_cruise_buttons(self, CS, CC, v_cruise_kph):
+    command_start, command_cpu_start = time.monotonic_ns(), time.thread_time_ns()
     remote = self.bluetooth_commands.read(allowed=(CS.canValid and CS.cruiseState.available and
       CS.gearShifter == GearShifter.drive and not CS.buttonEvents and self.button_cnt == 0))
+    bluetooth_end, bluetooth_cpu_end = time.monotonic_ns(), time.thread_time_ns()
     if getattr(self.bluetooth_commands, 'is_repeat', False) and not CC.enabled:
       remote = None  # Holding a remote must never re-engage after disengagement.
     voice_speed = self._read_assistant_speed(CS, CC, v_cruise_kph, remote)
+    assistant_end, assistant_cpu_end = time.monotonic_ns(), time.thread_time_ns()
+    self.command_timing = {
+      'cruise_bluetooth_ms': (bluetooth_end - command_start) / 1e6,
+      'cruise_bluetooth_cpu_ms': (bluetooth_cpu_end - command_cpu_start) / 1e6,
+      'cruise_assistant_ms': (assistant_end - bluetooth_end) / 1e6,
+      'cruise_assistant_cpu_ms': (assistant_cpu_end - bluetooth_cpu_end) / 1e6,
+    }
     if voice_speed and voice_speed['action'] == 'speed_up':
       remote = 'accelCruise'  # Same RES/+ handling, without driver-attention input.
     button_kph, button_type, long_pressed = self._prepare_buttons(CS, v_cruise_kph, remote)
