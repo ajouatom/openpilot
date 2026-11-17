@@ -256,7 +256,6 @@ Eco caps lead response at 2 and Safe at 3; Normal and High retain the selected v
 
 `SpeedTFFactor` applies a linear speed multiplier to the selected base TF: 10 is unchanged; 20 doubles it at 100 km/h. `LeadAccelResponseTF1`–`TF4` use the common response at -1 and a gap-specific response at 0–5. Levels 4–5 retain speed TF. The driving-screen bar shows the dynamically adjusted following target in metres.
 
-
 Deceleration preview operates independently of the response level. During active control, remaining correction releases progressively when relative acceleration eases or the lead switches between radar and vision or disappears. Accelerator or brake intervention and longitudinal control exit clear it immediately.
 
 `LongTuning*` and `LongActuatorDelay` are advanced settings that directly affect vehicles using openpilot longitudinal control. Identified Ray EV Comma Pedal configurations expose these gains and apply saved values to speed PID. Other Hyundai, Kia, and Genesis configurations fix `LongTuningKpV`, `LongTuningKiV`, and `LongTuningKf` at the safe `100/0/100` values and hide them from settings. Toyota/Lexus fix and hide common gains at `0/0/100` to avoid duplicate correction before their dedicated controller. Some parameters have no effect when stock ACC remains responsible for acceleration and braking.
@@ -343,7 +342,6 @@ Display contains 34 settings. External-HUD settings control the layout and outpu
 `ClusterHud` (External HUD Display) switches a **direct USB HUD** on or off. A HUD connected to Jetson starts automatically even when this value is `0`, and normally turns its display off with ignition. Use the existing always-on `ClusterHudDebug` modes to keep it visible offroad. Brightness and layout settings also apply to the Jetson HUD.
 
 ESP32-S3 Wi-Fi display support has been removed. Connect the USB display to Jetson. Supported receivers accept HUD, navigation and signal information over bounded USB transfers during inference; older receivers keep Wi-Fi until updated. Update through Git Pull and reboot both devices when the Jetson runtime changes.
-
 
 
 The Jetson HUD shows the highest internal sensor temperature below `jetSON`, or in the upper-right corner in full-screen navigation/graph modes. If temperature data has not refreshed for three seconds, it shows `--°C`. A top-strip temperature warning starts 5°C below each sensor's configured thermal limit; reaching that limit shows an overheating warning. For example, a device configured to throttle at 99°C warns from 94°C. Check the fan and ventilation when warned. Vehicle driving alerts take precedence, and Jetson temperature remains separate from device temperature/memory statistics. This feature requires updated Jetson HUD software.
@@ -545,11 +543,15 @@ A hold-start request without confirmed lamp activation expires after four second
 
 `ManualTurnIndicator` requests an indicator when driver steering and vehicle rotation agree. The wheel must reach 42 degrees and move at least 22 degrees from the start of steering. Detection resumes two seconds after the previous indication last renewed its hold, once both lamps have also been off for one continuous second. The setting defaults to off and can detect parking turns. [Manual turn conditions](lane-change.md)
 
+After opposite steering ends a manual turn, the next opposite turn can retain recent steering evidence at 10km/h or above. Only the last 0.25s before rearm bridges the angle reference; the existing two-second wait, one continuous dark second and current same-direction steering remain required. Retained intent expires after three seconds without resetting ordinary fresh-steering detection.
+
 Junction lane-position changes preserve manual turn detection, and confirmed standstill permits small negative speed-estimator noise during a hold. Current model lane-change probability also requires measured approach of both boundaries.
 
 Manual boundary tracking checks brief boundary retreat for 0.15s. If manual-turn conditions are also met, the same indication continues through turn completion. Model-turn indication additionally requires at least 15 degrees of same-direction steering and 3 degrees/s of measured rotation.
 
 `AutoTurnControlRightLaneChange` remains the separate ATC distance add-on. `ManualLaneChangeIndicator` detects manual lane changes from 5 km/h and retains recent driver intent for up to 1.5s. The left side excludes centre lines using fresh white-line classification; the right requires at least 2.5m from the target boundary to the road edge. Outer-line probability is not required. It never requests automatic steering. See [lane changes](lane-change.md).
+
+An early boundary fluctuation is checked only within an existing request. Near-edge paired lane reassignment can wait 0.15s. When an uncertain target boundary retreats but the opposite boundary and driver steering support continued approach, stable lane geometry must return within three seconds. Opposite driver steering and invalid inputs still cancel.
 
 The manual lane-change indicator can request again after at least three seconds, one continuous second of lamp extinction and fresh steering/approach conditions. Automatic-steering feedback isolation remains at least 12 seconds.
 
@@ -560,6 +562,5 @@ An ATC recovery attempt has a new four-second activation deadline. It does not e
 Manual indication projects 0.3s of measured boundary approach, advancing the centre-to-boundary threshold by at most 0.3m. Existing speed, centre-line and road-edge gates remain.
 
 After confirmed turn entry, the TBT indicator ends its hold as the wheel returns within ±15 degrees while moving, without waiting for the remaining 30m. Pre-turn traffic-light waits remain held; see [lane changes](lane-change.md) for the entry conditions.
-
 
 The ATC right lane-change distance uses 0m for off and 50m steps up to 500m. The former ON setting migrates to 250m at restart.

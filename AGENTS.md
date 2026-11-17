@@ -1,5 +1,23 @@
 # Repository memory
 
+- 2026-11-18: Indicator continuity replay now covers467 retained full segments/
+  60routes/523934aligned inputs. Bound early manual near-edge retreat by150ms
+  paired-rebase memory; uncertain near-line retreat requires same-side torque,
+  far-line progress and stable geometry within3s. Opposite driver/input guards
+  remain. Consecutive opposite manual turns bridge only the last250ms before
+  existing2s/1s-dark rearm, at10kmh+, with current growing steering. Independent
+  ordinary detector preserves5kmh admission and survives retained-intent expiry.
+  Native363->365, delayed-first-send410ms362->364, external364->366; no previous
+  request removed, two existing starts~100ms earlier/same ends, five lane ends
+  extended. Video confirms added11d6/0+17.410 and11f5/8+49.368. Todayf5/4 hold
+  .200->2.990s, f5/7 .246->2.446s delayed-native. f5/8 cancels after1.700s on
+  opposite driver, so two physical flashes not guaranteed. Reject broad history
+  causing parking/exit indications and next-signal suppression. Three baseline
+  failure shapes reproduced;1184localpass/9platformskip, Wiki25pass. Unknown
+  marking/narrow-width/source-delivery misses remain; no whole-corpus truth rate
+  or physical lamp proof. No vehicle writes. Native/full CI follows publication.
+  Evidence .analysis/archive/2026-11-18/indicator-continuity-fixes/INDEX.md.
+
 - 2026-11-18: Review PR581 EV4 wrapped navigation and PR582 radar load shedding.
   Integrate EV4 message selection with the existing navigation policy. Scope
   empty wrapped-route padding and HDA-only availability to EV4, preserving PV5
