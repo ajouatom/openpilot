@@ -4,8 +4,13 @@
   Integrate EV4 message selection with the existing navigation policy. Scope
   empty wrapped-route padding and HDA-only availability to EV4, preserving PV5
   and legacy route handling. Tests cover real EV4 camera/HDA payloads, both HDA
-  buses, startup caching, mode/route admission, padding timeout and section
-  position expiry. Local250 checks pass; native/full CI follows publication.
+  buses, startup caching, mode/route admission and padding timeout. Extended
+  inventory covers104segments/23routes/two EV4s, three incomplete tails retained
+  only through complete messages. PR0x092 legacy mapping yields impossible
+  averages384+ and reproduces false section admission on the recorded payload.
+  Remove that unverified position DBC/registration, retain camera/bump/route
+  support; both-bus regressions fail before/pass after. Local252 checks pass;
+  native/full CI follows publication.
   Hold PR582: exact contributor controller under smooth0.8m/s2 target slowing
   reproduces lost leadCutInRisk/leadsCutIn and changed leadTwo once vLead falls
   through0.5m/s. Existing confirmed holds depend on history beyond common_ok.
