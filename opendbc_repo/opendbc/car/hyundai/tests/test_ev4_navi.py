@@ -94,15 +94,13 @@ def test_ev4_padding_does_not_refresh_route_or_keep_bump_after_timeout(ev4):
   assert state.vehicleNaviRouteState == 0
 
 
-def test_ev4_wrapped_section_position_expires(ev4):
-  state, parsers, packer = ev4
+def test_ev4_unvalidated_position_cannot_activate_section(ev4):
+  state, parsers, _ = ev4
   parser = parsers[Bus.pt]
   state.controls_ready_count = 122
-  receive(state, parsers, 1., [packer.make_can_msg(carstate.CANFD_NAVI_POSITION_MSG, parser.bus,
-                                               {'POS_OFFSET': 13, 'POS_RANGE_AVG_SPEED': 92})])
-  assert state.navi_position_4b4['POS_OFFSET'] == 13
-  assert output(state, parser, 100.).vehicleNaviSectionActive
-  receive(state, parsers, 3.)
+  # Real EV4 0x092 payload. The proposed legacy-position mapping decodes an
+  # impossible 384 km/h average and would incorrectly establish a section cap.
+  receive(state, parsers, 1., [(0x92, bytes.fromhex('24da2affffffffffd40c0070113dffff'), parser.bus)])
   assert not output(state, parser, 100.).vehicleNaviSectionActive
 
 
@@ -116,6 +114,16 @@ def test_ev4_logged_hda_marks_availability_without_profile(ev4):
   assert not ret.vehicleNaviActive
   assert state.hda_info_4a3['SPEED_LIMIT'] == 110
   assert state.hda_info_4a3['CountryCode'] == 410
+
+
+def test_ev4_logged_bump_uses_profile_distance(ev4):
+  state, parsers, _ = ev4
+  parser = parsers[Bus.pt]
+  state.controls_ready_count = 122
+  receive(state, parsers, 1., [(0x93, bytes.fromhex('7b04ecffffffffff060000005de40804ffffffffffffffff'), parser.bus)])
+  ret = output(state, parser)
+  assert ret.vehicleNaviActive
+  assert ret.speedBumpDistance == 1117.
 
 
 def test_ev4_missing_optional_navigation_does_not_add_timeouts(ev4):
