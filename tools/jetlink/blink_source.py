@@ -8,7 +8,7 @@ import time
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from openpilot.common.atc_params import right_lane_change_distance
-from blink_protocol import PACKAGE_CONFIG, LIMIT, encode, finite, fresh
+from blink_protocol import LIMIT, encode, finite, fresh
 from blink_policy import Policy, AutomaticSignals
 from blink_voice import VoiceLaneSignal
 from openpilot.selfdrive.controls.lib.desire_lib.assistant_lane import ROOT as ASSISTANT_LANE_ROOT
@@ -23,12 +23,12 @@ from openpilot.selfdrive.controls.lib.desire_lib.indicator_feedback import TapEc
 from openpilot.selfdrive.controls.lib.desire_lib.boundary_lane import adjacent_lane
 
 
-def vehicle_ready(sm, now, fingerprint, spas=False):
+def vehicle_ready(sm, now):
   """Manual indicators work while driving/engaged; unknown or stale CAN never does."""
   valid = all(sm.valid[k] and sm.alive[k] and
               0 <= now-sm.recv_time[k] < (.75 if k == 'pandaStates' else .35) for k in ('carState', 'carControl', 'selfdriveState', 'pandaStates'))
   c = sm['carState']
-  return ((spas or fingerprint == 'HYUNDAI_IONIQ_5_PE') and valid and c.canValid and finite(c.vEgo) and str(c.gearShifter) != 'unknown' and
+  return (valid and c.canValid and finite(c.vEgo) and str(c.gearShifter) != 'unknown' and
           len(sm['pandaStates']) > 0)
 
 
@@ -85,13 +85,14 @@ def main(fd, spas=False, ble=False, kick=False):
       pass
   from openpilot.cereal import messaging
   from openpilot.selfdrive.carrot.bluetooth.model import RUNTIME, config, read_json, atomic_json
-  from openpilot.selfdrive.carrot.bluetooth.physical import HOLD_PATH
+  from openpilot.selfdrive.carrot.bluetooth.physical import HOLD_PATH, native_hold_supported
   from openpilot.common.params import Params
   from openpilot.cereal import car
   with car.CarParams.from_bytes(Params().get('CarParams')) as cp:
     fingerprint = cp.carFingerprint
     front_radar_available = not getattr(cp, 'radarUnavailable', True)
-    if ble and getattr(cp, 'passive', False):
+    native_hold = native_hold_supported(cp) and not (spas or kick)
+    if getattr(cp, 'passive', False):
       return
     if kick:
       from opendbc.car.hyundai.values import HyundaiSafetyFlags
@@ -102,8 +103,6 @@ def main(fd, spas=False, ble=False, kick=False):
       from opendbc.car.hyundai.values import HyundaiFlags
       if cp.brand != 'hyundai' or not cp.flags & HyundaiFlags.CANFD_SPAS_BLINKERS or cp.passive:
         return
-  if not spas and not ble and not kick and json.loads(PACKAGE_CONFIG.read_text()).get('fingerprint') != fingerprint:
-    return
   sock = socket.socket(fileno=fd)
   sock.setblocking(False)
   sm = messaging.SubMaster(['carState', 'carControl', 'selfdriveState', 'pandaStates', 'modelV2', 'carrotMan', 'livePose', 'radarState',
@@ -146,7 +145,7 @@ def main(fd, spas=False, ble=False, kick=False):
         feedback = {}
     sm.update(0)
     now = time.monotonic()  # SubMaster assigns receive timestamps during update.
-    ok = vehicle_ready(sm, now, fingerprint, spas or ble or kick)
+    ok = vehicle_ready(sm, now)
     status = read_json(RUNTIME/'status.json', {})
     settings, learning, cancelled = config(), read_json(RUNTIME/'learn.json', {}), read_json(RUNTIME/'cancelled.json', {})
     commands = events.read(read_json(RUNTIME/'blinker.json', {}), settings, status, learning, cancelled, now)
@@ -244,7 +243,6 @@ def main(fd, spas=False, ble=False, kick=False):
     voice_tap.prepare_tap(now, voice_hold, 0., cs)
     observation_feedback.prepare(now, hold, meta, cs)
     receiver_override = fresh(feedback.get('stamp'), now, .35) and feedback.get('state') == 'driver_override'
-    native_hold = not ble or fingerprint == 'HYUNDAI_IONIQ_5_PE'
     # Kick reports a verified physical lever override; external receiver echoes
     # retain their existing confirmed-turn exception.
     tbt_turn_hold = bool(not spas and not kick and native_hold and hold and hold['source'] == 'turn' and automatic.journey.active)
@@ -314,7 +312,7 @@ def main(fd, spas=False, ble=False, kick=False):
     try:
       sock.send(encode({'stamp': now, 'ok': bool(ok), 'events': commands, 'hold': wire_hold(hold), 'devices':devices,
                         'activated':activated_id is not None, 'relights':policy.relights,
-                        'b1_hold':ble and fingerprint != 'HYUNDAI_IONIQ_5_PE',
+                        'b1_hold':ble and not native_hold,
                         'turn_phase':automatic.reason, 'turn_position':bool(automatic.journey.active and automatic.journey.active['target'] is not None),
                         'tbt_phase':tbt.reason, 'observation_phase':observed_source,
                         'indicator_origin':hold['source'] if hold else None}))
@@ -340,7 +338,7 @@ def main(fd, spas=False, ble=False, kick=False):
                              'direction':hold['direction'] if hold and activated_id == hold['id'] else None,
                              'tap':observation_feedback.sent(now, feedback, submitted and ok),
                              **native_start,
-                             'override':activated_id is not None or now < release_until or (policy.suppressed and release_until > 0)})
+                             'override':native_hold and (activated_id is not None or now < release_until or (policy.suppressed and release_until > 0))})
     time.sleep(max(0, now+.05-time.monotonic()))
 
 

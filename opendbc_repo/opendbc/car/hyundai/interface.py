@@ -1,6 +1,6 @@
 from opendbc.car import Bus, get_safety_config, structs
 from opendbc.car.hyundai.hyundaicanfd import CanBus
-from opendbc.car.hyundai.values import HyundaiFlags, CAR, DBC, CANFD_RADAR_SCC_CAR, KICK_CARS, \
+from opendbc.car.hyundai.values import HyundaiFlags, CAR, DBC, CANFD_RADAR_SCC_CAR, \
                                                    CANFD_UNSUPPORTED_LONGITUDINAL_CAR, \
                                                    UNSUPPORTED_LONGITUDINAL_CAR, HyundaiSafetyFlags, HyundaiExtFlags, \
                                                    CANFD_HYBRID_STATUS_ADDR, CANFD_HYBRID_STATUS_DLC, \
@@ -146,11 +146,12 @@ class CarInterface(CarInterfaceBase):
       if CAN.ECAN >= 4:
         cfgs.insert(0, get_safety_config(structs.CarParams.SafetyModel.noOutput))
       ret.safetyConfigs = cfgs
-      from opendbc.car.hyundai.spas import compatible
-      # CanfdBlinkerKick (carcontroller.aprk_blinkers): KICK_CARS on the camera-SCC harness only, the one whose Kick buses
-      # are known. It and this path both pause APRK and send 0x16A; Kick wins and switches this one off at boot so the
-      # menu shows what is actually running
-      kick = candidate in KICK_CARS and bool(ret.flags & HyundaiFlags.CAMERA_SCC) and params.get_bool("CanfdBlinkerKick")
+      from opendbc.car.hyundai.spas import compatible, kick_compatible
+      # Select by the observed protocol and harness, never the model name.
+      # Runtime CRC/counter/driver checks still precede each new Kick request.
+      kick = kick_compatible(fingerprint, CAN.ECAN, ret.flags & HyundaiFlags.CAMERA_SCC) and params.get_bool("CanfdBlinkerKick")
+      if ret.flags & HyundaiFlags.CAMERA_SCC and fingerprint[CAN.CAM].get(0x1EA) == 32:
+        ret.extFlags |= HyundaiExtFlags.CANFD_INDICATOR_HOLD.value
       if not docs and kick and params.get_bool("CanfdBlinkerControl"):
         params.put_bool("CanfdBlinkerControl", False)
       if params.get_bool("CanfdBlinkerControl") and compatible(fingerprint, CAN.ECAN) and not ret.flags & HyundaiFlags.ENABLE_BLINKERS:

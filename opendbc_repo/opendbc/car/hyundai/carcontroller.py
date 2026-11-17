@@ -46,7 +46,7 @@ MID_SPEED_ANGLE_RATE_LIMIT_SPEED = 40.0 * CV.KPH_TO_MS
 LARGE_ANGLE_UNWIND_RATE = 1.5  # deg/tick: allow a quicker return from the EPS fault-angle region
 CANFD_JERK_UPPER_MIN = 1.0
 CANFD_JERK_LIMIT_MAX = 5.0
-# CanfdBlinkerKick (KICK_CARS on the camera-SCC harness, CAN-FD): in D at any speed the parking ECU (APRK, 0x7B1) is
+# CanfdBlinkerKick (verified SPAS/stalk protocol on the camera-SCC harness, CAN-FD): in D at any speed the parking ECU (APRK, 0x7B1) is
 # asked to go quiet around a kick and SPAS2 BLINKER_CONTROL is sent in its place; its default session is restored right
 # after the kick
 APRK_ADDR = 0x7B1
@@ -369,7 +369,7 @@ class CarController(CarControllerBase):
         self.steerDeltaDownLC = self.steerDeltaDown
 
       self.soft_hold_mode = 1 if params.get_int("AutoCruiseControl") > 1 else 2
-      # CANFD_BLINKER_KICK: set at fingerprint time only for KICK_CARS on the camera-SCC harness, and panda admits the Kick
+      # CANFD_BLINKER_KICK: set at fingerprint time only for verified SPAS/stalk protocol on the camera-SCC harness, and panda admits the Kick
       # ids only with it. The setting can still switch the Kick off mid-drive; switching it on waits for the next start.
       self.blinker_control = (any(cfg.safetyParam & HyundaiSafetyFlags.CANFD_BLINKER_KICK for cfg in self.CP.safetyConfigs)
                               and params.get_bool("CanfdBlinkerKick"))

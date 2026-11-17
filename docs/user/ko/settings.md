@@ -298,7 +298,7 @@ VW MEB(ID.4 포함)에도 수동 조향비와 학습 비율이 적용됩니다. 
 
 설정 > 차량·하드웨어 > 깜박이 제어에 자동 점등, 출력 장치, 레버 동작을 모았습니다. 자동 점등에는 `AutoBlinkerControl`, `ManualLaneChangeIndicator`, `ManualTurnIndicator`, `ModelDesireIndicator`, `ModelPathIndicator`가 있습니다. 출력 장치에는 `CanfdBlinkerKick`, `CanfdBlinkerKickMode`, `CanfdBlinkerControl`, `CanfdBlinkerTest`가 있으며 레버 동작에는 `BlinkerLatchedTurn`, `LaneChangeLeverWait`가 있습니다.
 
-**Panda/SPAS 깜박이 출력** (`CanfdBlinkerKick`)은 공통 판단이 만든 깜박이 요청을 Panda로 송신합니다. 아이오닉5 PE·아이오닉9·그랜저 GN7의 카메라 SCC CAN-FD 구성에서 지원합니다. 수동 차로변경·수동 회전·모델 관찰·내비 회전·음성 차로변경의 시작과 유지, 종료는 기존 공통 설정을 따릅니다. 실제 레버 조작과 오래된 입력은 출력을 중단하며, 종료된 요청은 새 요청 없이 재개하지 않습니다.
+**Panda/SPAS 깜박이 출력** (`CanfdBlinkerKick`)은 공통 판단이 만든 깜박이 요청을 Panda로 송신합니다. 차종명 제한 없이 ECAN의 SPAS 0x165(24바이트)·0x16A(32바이트)와 레버 0x3C1(8바이트)가 확인된 카메라 SCC CAN-FD 구성에서 지원합니다. 수동 차로변경·수동 회전·모델 관찰·내비 회전·음성 차로변경의 시작과 유지, 종료는 기존 공통 설정을 따릅니다. 실제 레버 조작과 오래된 입력은 출력을 중단하며, 종료된 요청은 새 요청 없이 재개하지 않습니다.
 
 `CanfdBlinkerKickMode`는 ECU 응답 후 송신하는 0과 응답이 없을 때 순정 프레임 뒤에 송신하는 1을 선택합니다. 켜기는 다음 OnRoad 시작부터 적용되며 갱신된 Panda 펌웨어가 필요합니다. 끄기는 즉시 적용됩니다. Kick을 켜면 USB2CAN·BT2CAN 출력이 중단되고 잔여 명령 만료와 독점 소유권을 확인합니다. 다음 OnRoad 시작 때 `CanfdBlinkerControl`이 꺼집니다.
 

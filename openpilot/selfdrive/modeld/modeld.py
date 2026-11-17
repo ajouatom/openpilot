@@ -416,13 +416,13 @@ def main(demo=False):
   prev_action = log.ModelDataV2.Action()
 
   from opendbc.car.tesla.values import TeslaFlags
-  from opendbc.car.hyundai.values import KICK_CARS, HyundaiSafetyFlags
+  from opendbc.car.hyundai.values import HyundaiSafetyFlags
   from openpilot.selfdrive.car.voice_indicator import native_indicator
   DH = DesireHelper(fingerprint=CP.carFingerprint, native_voice_signal=native_indicator(CP) is not None,
                     tesla_auto_signals=CP.brand == "tesla" and bool(CP.flags & TeslaFlags.AUTO_TURN_SIGNALS),
-                    boundary_indicator_supported=CP.carFingerprint == 'HYUNDAI_IONIQ_5_PE',
+                    boundary_indicator_supported=not CP.passive,
                     # the same gate as carcontroller.blinker_control: the flag interface.py sets for a Kick-capable car
-                    kick_supported=CP.carFingerprint in KICK_CARS and
+                    kick_supported=CP.brand == 'hyundai' and not CP.passive and
                                    any(cfg.safetyParam & HyundaiSafetyFlags.CANFD_BLINKER_KICK for cfg in CP.safetyConfigs))
   boundary_observer = BoundaryObserver(cloudlog.event) if DH.boundary_indicator_supported else None
   nav_input = MapInput()

@@ -6,7 +6,7 @@ from opendbc.can.parser import get_raw_value
 from opendbc.car import structs
 from opendbc.car.hyundai import carcontroller
 from opendbc.car.hyundai.carcontroller import CarController
-from opendbc.car.hyundai.values import CAR, KICK_CARS, HyundaiSafetyFlags
+from opendbc.car.hyundai.values import CAR, HyundaiSafetyFlags
 
 D, P = structs.CarState.GearShifter.drive, structs.CarState.GearShifter.park
 EXT, QUIET, DEFAULT = carcontroller.APRK_EXT_SESSION, carcontroller.APRK_COM_DISABLE, carcontroller.APRK_DEFAULT_SESSION
@@ -148,8 +148,9 @@ def test_direction_change_releases_previous_session_first():
 
 @pytest.mark.parametrize("camera_scc", [0, 2])
 @pytest.mark.parametrize("car", [CAR.HYUNDAI_IONIQ_5_PE, CAR.KIA_EV6])
-def test_kick_is_limited_to_kick_cars(monkeypatch, car, camera_scc):
-  # values.KICK_CARS on the camera-SCC harness only: anything else ignores CanfdBlinkerKick, at fingerprint (panda
+@pytest.mark.parametrize("contract", [False, True])
+def test_kick_requires_protocol_not_model(monkeypatch, car, camera_scc, contract):
+  # values.verified SPAS/stalk protocol on the camera-SCC harness only: anything else ignores CanfdBlinkerKick, at fingerprint (panda
   # flag CANFD_BLINKER_KICK) and in carcontroller, which follows that flag
   from unittest.mock import patch
   from opendbc.car import gen_empty_fingerprint
@@ -167,8 +168,11 @@ def test_kick_is_limited_to_kick_cars(monkeypatch, car, camera_scc):
       return {"HyundaiCameraSCC": camera_scc, "MaxAngleFrames": 89}.get(key, 0)
 
   with patch("opendbc.car.hyundai.interface.Params", Settings):
-    CP = CarInterface.get_params(car, gen_empty_fingerprint(), [], False, False, False)
-  active = car in KICK_CARS and camera_scc > 0
+    fingerprint = gen_empty_fingerprint()
+    if contract:
+      fingerprint[0].update({0x165: 24, 0x16A: 32, 0x3C1: 8})
+    CP = CarInterface.get_params(car, fingerprint, [], False, False, False)
+  active = contract and camera_scc > 0
   assert bool(CP.safetyConfigs[-1].safetyParam & HyundaiSafetyFlags.CANFD_BLINKER_KICK) == active
 
   controller, cs, cc, _ = setup_controller(monkeypatch)
