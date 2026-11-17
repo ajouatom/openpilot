@@ -56,7 +56,7 @@ def test_card_step_publishes_correlated_cruise_measurement(frame, refreshed):
   tree = ast.parse(path.read_text(encoding='utf8'))
   cls = next(node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == 'Car')
   method = next(node for node in cls.body if isinstance(node, ast.FunctionDef) and node.name == 'step')
-  namespace = {'time': SimpleNamespace(thread_time=lambda: 0., monotonic_ns=lambda: 1_000_000_000),
+  namespace = {'time': SimpleNamespace(thread_time=lambda: 0., monotonic_ns=lambda: 1_000_000_000, monotonic=lambda: 1.),
                'CAN_BACKEND': 'test'}
   exec(compile(ast.Module(body=[method], type_ignores=[]), str(path), 'exec'), namespace)
   events = []
@@ -73,6 +73,9 @@ def test_card_step_publishes_correlated_cruise_measurement(frame, refreshed):
     card_diag_recv_ns=923_000_000, card_diag_stage_current={'state_tail': 71409},
     v_cruise_helper=SimpleNamespace(frame=frame, runtime_timing={'cruise_params_ms': 70., 'cruise_params_cpu_ms': 1.}),
     runtime_diagnostics=timing,
+    # joongyu01/carrot-wip-dev: step() also runs the parked parking-ECU probe (CanfdAprkDiag), idle here
+    aprk_diag=SimpleNamespace(supported=False, update=lambda *a, **k: []), CI=SimpleNamespace(CC=None),
+    initialized_prev=False,
   )
   namespace['step'](car)
   peak = events[0]['peak_sample']
