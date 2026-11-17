@@ -216,7 +216,7 @@ class Car:
     self.card_diag_stage_current = dict.fromkeys(self.card_diag_stage_names, 0)
     self.card_diag_stage_sum_us = dict.fromkeys(self.card_diag_stage_names, 0)
     self.card_diag_stage_max_us = dict.fromkeys(self.card_diag_stage_names, 0)
-    self.runtime_diagnostics = RuntimeDiagnostics('card', cloudlog.event)
+    self.runtime_diagnostics = RuntimeDiagnostics('card', cloudlog.event, peak_metric='state_tail_ms')
 
   def _log_tesla_signals(self, CS, now: int) -> None:
     changed = self.tesla_signals.status != self.tesla_signal_status
@@ -562,10 +562,13 @@ class Car:
     self.initialized_prev = initialized
     self.CS_prev = CS
     self.runtime_diagnostics.record(
-      context={'can_backend': CAN_BACKEND},
+      context={'can_backend': CAN_BACKEND, 'cruise_frame': self.v_cruise_helper.frame,
+               'cruise_params_refreshed': (self.v_cruise_helper.frame - 1) % 10 == 0,
+               'state_receive_mono_ns': self.card_diag_recv_ns},
       work_ms=(time.monotonic_ns() - self.card_diag_recv_ns) / 1e6,
       thread_cpu_ms=(time.thread_time() - cpu_start) * 1000,
       **{f'{name}_ms': value / 1000 for name, value in self.card_diag_stage_current.items()},
+      **self.v_cruise_helper.runtime_timing,
     )
 
   def params_thread(self, evt):
