@@ -58,6 +58,15 @@ pub struct Model {
     pub orientation_x: Vec<f64>,
     pub orientation_y: Vec<f64>,
     pub acceleration_y: Vec<f64>,
+    /// Ego lane lines (laneLines[1] left, [2] right) and the plan, for
+    /// laneless centring.
+    pub lane_x: Vec<f64>,
+    pub left_y: Vec<f64>,
+    pub right_y: Vec<f64>,
+    pub left_prob: f64,
+    pub right_prob: f64,
+    pub path_x: Vec<f64>,
+    pub path_y: Vec<f64>,
 }
 #[derive(Default)]
 pub struct LongPlan {

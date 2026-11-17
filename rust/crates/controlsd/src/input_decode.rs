@@ -90,7 +90,26 @@ pub fn decode(state: &State, now: f64) -> Result<Inputs, Error> {
     let model = service!(state, "modelV2", ModelV2);
     let meta = model.get_meta()?;
     let jetlink = model.get_jetlink()?;
+    let lines = model.get_lane_lines()?;
+    let probs = floats(model.get_lane_line_probs()?);
+    let line = |index: u32| -> Result<(Vec<f64>, Vec<f64>), capnp::Error> {
+        if index >= lines.len() {
+            return Ok((Vec::new(), Vec::new()));
+        }
+        let line = lines.get(index);
+        Ok((floats(line.get_x()?), floats(line.get_y()?)))
+    };
+    let (lane_x, left_y) = line(1)?;
+    let (_, right_y) = line(2)?;
+    let position = model.get_position()?;
     let model = Model {
+        lane_x,
+        left_y,
+        right_y,
+        left_prob: probs.get(1).copied().unwrap_or(0.),
+        right_prob: probs.get(2).copied().unwrap_or(0.),
+        path_x: floats(position.get_x()?),
+        path_y: floats(position.get_y()?),
         desired_curvature: f64::from(model.get_action()?.get_desired_curvature()),
         jetlink_latched: jetlink.get_loss_latched(),
         jetlink: jetlink.get_source() == Ok(log_capnp::jetlink_frame_status::Source::Jetlink),
