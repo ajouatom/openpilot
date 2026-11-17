@@ -168,12 +168,7 @@ class DPathRadarD:
 
 
 def main() -> None:
-  # joongyu01 11-17: cores 4 and 5, not 5 alone. card runs on 5 at CTRL_HIGH (7.3 ms x 100 Hz = 73 % of it); in a jam
-  # with 30-35 tracks radard needs 14-15 ms x 20 Hz, so on 5 it waited ~770 ms/s, published ~16-17 Hz and selfdrived
-  # disengaged on commIssue/commIssueAvgFreq (IONIQ 9 7465eee5 route 4cd seg26-27, 02_logs/measurements.md s65).
-  # Core 4 had ~38 % idle (plannerd, radarcan at the same priority); the RT scheduler pulls radard to whichever frees
-  # first. Q4 moved radard to core 4 for the same 14-17 Hz drop (Sonata 11-14).
-  config_realtime_process([4, 5], Priority.CTRL_LOW)
+  config_realtime_process(5, Priority.CTRL_LOW)
 
   cloudlog.info("dPath radard is waiting for CarParams")
   CP = messaging.log_from_bytes(
