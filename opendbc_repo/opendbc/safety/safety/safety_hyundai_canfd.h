@@ -108,6 +108,13 @@ const CanMsg HYUNDAI_CANFD_HDA1_TX_MSGS[] = {
   {0x7D0, 0, 8},  // tester present for radar ECU disable
   {0x3C1, 0, 8},  // BLINKER_STALKS replay (CanfdBlinkerStalk)
   {0x400, 0, 8},  // SVM_STATUS_400 BVM_VIEW spoof (CanfdBvmView)
+  // joongyu01 11-17 (user): the parking ECU / SPAS ids of the HDA2 list on HDA1 too. Before, HDA1 had only the
+  // piggyback copy of SPAS frames (held before this allowlist); KickMode 0 (APRK pause) and 2/3 (direct) never left.
+  // Same content checks as HDA2 (UDS whitelist, SPAS zero apart from BLINKER_CONTROL / stock fields).
+  {0x7B1, 0, 8},  // parking ECU (APRK) session / disable / tester present
+  {0x7B1, 1, 8},  // same on bus 1 (camera-SCC harness only, as on HDA2)
+  {0x165, 0, 24}, // SPAS1
+  {0x16A, 0, 32}, // SPAS2 BLINKER_CONTROL
   {0x1AA, 2, 16}, // CRUISE_ALT_BUTTONS , carrot
   {203, 0, 24}, // CB
   {373, 2, 24}, // TCS(0x175)
