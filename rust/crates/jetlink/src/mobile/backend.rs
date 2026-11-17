@@ -137,6 +137,11 @@ impl Backend for MobileBackend {
             client.set_source_sof(source_sof);
         }
     }
+    /// The tablet's own inference, queue and total times, so `runtimeTiming`
+    /// (jetlinkd) carries `server_*` for a tablet as it does for a Jetson.
+    fn last_timings(&self) -> Option<[f64; 3]> {
+        self.client.as_ref().and_then(Backend::last_timings)
+    }
     fn connect(&mut self) -> Result<Identity, Error> {
         if self.mode == Mode::Ios && self.version != Version::V3 {
             return Err(Error::Contract("iOS cable requires protocol3"));
