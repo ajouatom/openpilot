@@ -56,6 +56,10 @@ from openpilot.selfdrive.carrot.radar_motion.primary import (
   vision_only_lead_allowed,
 )
 from openpilot.selfdrive.carrot.radar_motion.trajectory_cutin import (
+  CUTIN_MAX_DREL_M as TRAJECTORY_CUTIN_MAX_DREL_M,
+  MAX_DREL_M as TRAJECTORY_MAX_DREL_M,
+  MIN_MOVING_VLEAD_MPS,
+  MOTION_SCOPE_HALF_WIDTH_M,
   TrajectoryCutInDetector,
 )
 from openpilot.selfdrive.carrot.radar_motion.trajectory_cutout import TrajectoryCutOutTracker
@@ -521,35 +525,50 @@ class RadarLeadDynamics:
     return state.tau if state is not None else LEAD_ACCEL_TAU_S
 
 
-# joongyu01 11-17 (RadarCutInLoadShed): what radard leaves out of the cut-in work while it is falling behind.
-# IONIQ 9 7465eee5 route 4cd seg26-27 (rain, 8 km/h jam): below ~18 km/h guardrail/rain reflections pass the
-# |v_rel| <= 5 m/s motion filter, so ~27 points per frame went through TrajectoryCutInDetector (2-8 in every other log)
-# and radard dropped to 16-17 Hz -> commIssue. Replay over 41 local segments with shedding forced on every frame:
-# dropping ground-stationary points and points beyond CUTIN_MAX_DREL_M cuts radard 32-34 % on that segment, but the
-# 45 m rule cut the history of the one real cut-in in the logs (99 km/h, first seen at 42 m) and lost it; with the
-# 45 m rule only below 50 km/h no candidate, risk, confirmed cut-in or radarState lead changed anywhere and the saving
-# stays (the overload was at 5-20 km/h). Stationary points are already outside the motion filter above ~18 km/h.
-# The primary lead is always kept (02_logs/measurements.md s65).
-SHED_STATIONARY_V_LEAD = 1.0  # m/s over ground
-SHED_MAX_DREL_M = 45.0  # = trajectory_cutin.CUTIN_MAX_DREL_M
+# RadarCutInLoadShed (setting, default off): what radard leaves out of the cut-in work while it is falling behind.
+# IONIQ 9 route 000004cd--da4e1b0f78 seg26-27 (rain, 8 km/h multi-lane jam): below ~18 km/h guardrail and rain
+# reflections pass the |v_rel| <= 5 m/s motion filter, ~27 points per frame went through TrajectoryCutInDetector (2-8 in
+# the other logs) and radard fell to 16-17 Hz, below selfdrived's 16 Hz radarState check -> commIssue disengage.
+# While shedding, a point is left out only when the detector could not use it for a cut-in or a pre-deceleration risk in
+# this frame anyway (v_lead <= MIN_MOVING_VLEAD_MPS, the detector's own common gate), or, below 50 km/h, when it is
+# beyond the detector's CUTIN_MAX_DREL_M. The 45 m rule without the speed gate lost the only real cut-in in the replayed
+# logs (99 km/h, first confirmed at 42 m). Above ~18 km/h standing points are already outside the motion filter, so at
+# speed the shed changes nothing. The primary lead is always kept, also when a corner track stands for it.
 SHED_FAR_MAX_V_EGO = 50.0 / 3.6  # the 45 m rule only below 50 km/h
 
 
-def shed_cutin_points(points: Any, lead_one: Any, v_ego: float) -> tuple:
+def shed_cutin_points(points: Any, lead_one: Any, v_ego: float, front_matches: Any = None) -> tuple:
   primary = int(lead_one.get("radarTrackId", -1)) if lead_one else -1
-  max_d_rel = SHED_MAX_DREL_M if v_ego < SHED_FAR_MAX_V_EGO else float("inf")
-  return tuple(
-    point for point in points
-    if point.track_id == primary or (abs(point.v_lead) >= SHED_STATIONARY_V_LEAD and point.d_rel <= max_d_rel)
-  )
+  matches = front_matches or {}
+  max_d_rel = TRAJECTORY_CUTIN_MAX_DREL_M if v_ego < SHED_FAR_MAX_V_EGO else math.inf
+
+  def keep(point: Any) -> bool:
+    if primary >= 0:
+      # corner mode: a corner track matched to the front primary stands for it in motion_points
+      match = matches.get((point.source, point.track_id))
+      if point.track_id == primary or (match is not None and match.track_id == primary):
+        return True
+    return point.v_lead > MIN_MOVING_VLEAD_MPS and point.d_rel <= max_d_rel
+
+  return tuple(point for point in points if keep(point))
+
+
+def in_cutin_scope(point: Any, path: Any) -> bool:
+  """TrajectoryCutInDetector.update's own scope gate; every point inside it gets an estimate there."""
+  if not (point.measured or (point.source == "frontRadar" and point.d_rel > 0.8)):
+    return False
+  if not (-5.0 <= point.d_rel <= TRAJECTORY_MAX_DREL_M):
+    return False
+  return abs(project_to_model_path(path, point.d_rel, point.y_rel).d_path) <= MOTION_SCOPE_HALF_WIDTH_M
 
 
 class CutInLoadShed:
-  """RadarCutInLoadShed (Joongyu Lab, default off): on while radard's own publish rate over the last second is below
-  ON_HZ, off after OFF_HOLD_S at OFF_HZ or more. selfdrived raises commIssueAvgFreq when both the 10 s and the 1 s
-  average of radarState fall below 16 Hz (20 x 0.8, cereal FrequencyTracker); normal logs never go below 19.0 Hz
-  (39 local segments, 7 cars), the IONIQ 9 rainy jam ran a 16.6 Hz median (02_logs/measurements.md s65)."""
-  ON_HZ, OFF_HZ, OFF_HOLD_S = 18.0, 19.5, 3.0
+  """RadarCutInLoadShed: on while radard's publish rate over the last 20 intervals (about 1 s) is below ON_HZ, off
+  after OFF_HOLD_S at OFF_HZ or more. selfdrived raises commIssueAvgFreq when both the 10 s and the 1 s average of
+  radarState fall below 16 Hz (20 x 0.8, cereal FrequencyTracker). Healthy logs never went below 19.0 Hz over 1 s (39
+  segments, 7 cars); the IONIQ 9 rainy jam ran a 16.6 Hz median. OFF_HZ 18.9 tolerates one late frame per window
+  (20 / 1.05 s = 19.05 Hz), so a single radard jitter does not restart the hold."""
+  ON_HZ, OFF_HZ, OFF_HOLD_S = 18.0, 18.9, 3.0
 
   def __init__(self, enabled: bool) -> None:
     self.enabled = enabled
@@ -1258,10 +1277,12 @@ class DPathRadarController:
         )
       )
     scoped_motion_points = _scoped_motion_points(motion_points, path)
+    cutin_points = (shed_cutin_points(motion_points, lead_one, v_ego, front_kinematic_matches)
+                    if self.cutin_load_shed else motion_points)
     estimates = self.trajectory_cutin.update(
       time_s,
       v_ego,
-      shed_cutin_points(motion_points, lead_one, v_ego) if self.cutin_load_shed else motion_points,
+      cutin_points,
       path,
       model,
       yaw_rate_rad_s=yaw_rate_rad_s,
@@ -1273,6 +1294,15 @@ class DPathRadarController:
       (estimate.point.source, estimate.point.track_id)
       for estimate in estimates
     }
+    if cutin_points is not motion_points:
+      # RadarCutInLoadShed keeps display and lane-change inputs as they were: _display_leads shows an occluded point
+      # only with an estimate, and the full detector gives every in-scope point one (leadLeft/leadRight and leadsLeft/
+      # leadsRight feed DesireHelper's lane-change obstacle check). A shed point keeps the visibility it had.
+      kept = {(point.source, point.track_id) for point in cutin_points}
+      estimate_identities |= {
+        (point.source, point.track_id) for point in motion_points
+        if (point.source, point.track_id) not in kept and in_cutin_scope(point, path)
+      }
     leads_left, leads_center, leads_right = self._display_leads(
       scoped_motion_points,
       estimate_identities,

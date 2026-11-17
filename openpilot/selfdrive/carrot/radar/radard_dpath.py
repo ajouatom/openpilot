@@ -124,6 +124,7 @@ class DPathRadarD:
     self.load_shed = CutInLoadShed(params.get_int("RadarCutInLoadShed") > 0)
 
   def update(self, sm: messaging.SubMaster, rr: car.RadarData) -> None:
+    self.controller.cutin_load_shed = self.load_shed.active
     self.radar_state_valid = sm.all_checks()
     # Cap'n Proto arenas cannot reclaim replaced lists/structs. Keeping this
     # builder across frames retains old allocations for the whole drive, even
@@ -165,6 +166,9 @@ class DPathRadarD:
     radar_msg.valid = self.radar_state_valid
     radar_msg.radarState = self.radar_state
     pm.send("radarState", radar_msg)
+    shed = self.load_shed.active
+    if self.load_shed.update(time.monotonic()) != shed:
+      cloudlog.event("radard cut-in load shed", active=not shed, hz=round(self.load_shed.hz, 1))
 
 
 def main() -> None:
@@ -203,13 +207,9 @@ def main() -> None:
     sm.update()
     if sm.updated["modelV2"]:
       start, cpu_start = time.monotonic(), time.thread_time()
-      radar.controller.cutin_load_shed = radar.load_shed.active
       radar.update(sm, sm["liveTracks"])
       radar.publish(pm)
-      shed = radar.load_shed.active
-      if radar.load_shed.update(time.monotonic()) != shed:
-        cloudlog.event("radard cut-in load shed", active=not shed, hz=round(radar.load_shed.hz, 1))
-      diagnostics.record(context={'motion_backend': MOTION_BACKEND, 'cutin_load_shed': shed}, work_ms=(time.monotonic() - start) * 1000,
+      diagnostics.record(context={'motion_backend': MOTION_BACKEND}, work_ms=(time.monotonic() - start) * 1000,
                          thread_cpu_ms=(time.thread_time() - cpu_start) * 1000,
                          model_age_ms=(start - sm.logMonoTime['modelV2'] * 1e-9) * 1000,
                          tracks_age_ms=(start - sm.logMonoTime['liveTracks'] * 1e-9) * 1000)
