@@ -30,6 +30,13 @@ def compatible(fingerprint, bus):
   return all(fingerprint.get(bus, {}).get(a) == size for a, size in SPAS.items())
 
 
+def kick_compatible(fingerprint, bus, camera_scc):
+  # Panda's Kick output uses ECAN0/ACAN1 on the camera-SCC harness.
+  # The independent classic stalk is required for driver priority.
+  return bool(camera_scc and bus % 4 == 0 and compatible(fingerprint, bus) and
+              fingerprint.get(bus, {}).get(0x3C1) == 8)
+
+
 def frame(address, counter, direction, bus):
   data = bytearray(SPAS[address])
   data[2] = counter
