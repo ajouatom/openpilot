@@ -1,5 +1,19 @@
 # Repository memory
 
+- 2026-11-18: Review PR581 EV4 wrapped navigation and PR582 radar load shedding.
+  Integrate EV4 message selection with the existing navigation policy. Scope
+  empty wrapped-route padding and HDA-only availability to EV4, preserving PV5
+  and legacy route handling. Tests cover real EV4 camera/HDA payloads, both HDA
+  buses, startup caching, mode/route admission, padding timeout and section
+  position expiry. Local250 checks pass; native/full CI follows publication.
+  Hold PR582: exact contributor controller under smooth0.8m/s2 target slowing
+  reproduces lost leadCutInRisk/leadsCutIn and changed leadTwo once vLead falls
+  through0.5m/s. Existing confirmed holds depend on history beyond common_ok.
+  Two deterministic full-controller cases change14/11 frames; this is not a
+  replay of a captured maneuver. Reporter I9 route4cd/26..27 does confirm low
+  radarState cadence. No vehicle writes or measured physical improvement.
+  Private review and raw-log inventory .analysis/scratch/2026-11-18-pr581-582.
+
 - 2026-11-17: Carnival c4dcf95545dafe68 route299/14 on2b202df126 has
   card state_tail71.409ms and per-frame threadCPUmax13.191ms in the same
   aggregate, bounding at least58ms of that tail outside thread CPU execution.

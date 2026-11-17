@@ -1188,7 +1188,7 @@ class CarState(CarStateBase):
     if self.canfd_wrapped_navi:
       self._update_pv5_navi_section(cp, cp_alt)
     profile_timestamp = self._vehicle_navi_message_timestamp(cp, self.navi_profile_msg)
-    hda_timestamp = self._vehicle_navi_message_timestamp(cp, self.hda_info_msg) if (self.canfd_wrapped_navi or self.canfd_wrapped_navi_full) else 0
+    hda_timestamp = self._vehicle_navi_message_timestamp(cp, self.hda_info_msg) if self.canfd_wrapped_navi_full else 0
     self.vehicleNaviAvailable = self.vehicleNaviAvailable or profile_timestamp > 0 or hda_timestamp > 0 or self.vehicleNaviSpeedZoneActive
     ret.vehicleNaviAvailable = self.vehicleNaviAvailable
     self.vehicleNaviCameraTarget = None
@@ -1215,7 +1215,11 @@ class CarState(CarStateBase):
 
     if self.navi_segment_4b9 is not None:
       timestamp = self._vehicle_navi_message_timestamp(cp, self.navi_segment_msg)
-      if timestamp > self.vehicleNaviSegmentTimestamp and not all(int(self.navi_segment_4b9.get(f"BYTE_{i + 1}", 0)) == 0xff for i in range(8)):
+      # EV4 wraps padding after sparse route updates. Padding supplies no new
+      # route evidence and must not renew the existing route timeout.
+      empty_wrapped_segment = self.canfd_wrapped_navi_full and all(
+        int(self.navi_segment_4b9.get(f"BYTE_{i + 1}", 0)) == 0xff for i in range(8))
+      if timestamp > self.vehicleNaviSegmentTimestamp and not empty_wrapped_segment:
         self.vehicleNaviSegmentTimestamp = timestamp
         segment = self._decode_vehicle_navi_segment(self.navi_segment_4b9)
         previous_route_state = self.vehicleNaviRouteState
