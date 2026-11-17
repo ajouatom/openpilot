@@ -70,6 +70,8 @@ When external navigation is connected, deceleration and countdowns use external 
 
 `VehicleNaviCanControl` selects when exact camera and speed-bump distances from stock navigation are used on supported Hyundai/Kia CAN-FD vehicles. The modes below apply only without an external navigation connection. Always apply in mode `1` means independent of stock route guidance.
 
+The Kia EV4 also uses stock-navigation camera and speed-bump distances. Route-dependent modes require valid current-route information, and empty EV4 route messages do not extend its freshness period.
+
 A current camera warning is associated only with a nearby distance candidate with the same limit. If only a distant same-speed camera is available, the current warning uses its own virtual distance while the distant camera remains queued for a later approach.
 
 | Value | vNAVI future-event scope |
