@@ -22,6 +22,89 @@ def scene():
   return cs,md
 
 
+@pytest.mark.parametrize('source', ['manual', 'manual_turn', 'model_path'])
+@pytest.mark.parametrize('minimum', [0., 2.])
+@pytest.mark.parametrize('send_delay', [0., .5, 1.5])
+def test_native_manual_minimum_starts_at_first_transmission(source, minimum, send_delay):
+  from openpilot.selfdrive.controls.lib.desire_lib.manual_turn_indicator import ManualTurnMovement
+  cs, md = scene()
+  cs.steeringAngleDeg = 0.
+  detector, isolation = ModelIndicator(), BoundaryIndicator()
+  detector.request_time = 10.
+  detector.active = ManualTurnMovement(10., 1) if source == 'manual_turn' else Movement(10., 1, source, cs, md)
+  detector.active.crossed = True
+  ended = None
+  for i in range(1, 80):
+    now = 10. + i * .05
+    feedback = {'stamp': now}
+    if now >= 10. + send_delay:
+      feedback['native_start'] = {'request': 10., 'direction': 'left', 'time': 10. + send_delay}
+    detector.update(now, cs, md, valid=True, lateral_active=True, desire_enabled=False,
+                    path_enabled=True, busy=False, isolation=isolation, feedback=feedback,
+                    manual_turn_enabled=source == 'manual_turn', yaw_rate=0., manual_minimum=minimum)
+    if detector.active is None:
+      ended = now
+      break
+  assert ended is not None
+  if minimum and source in ('manual', 'manual_turn'):
+    assert 2. <= ended - (10. + send_delay) <= 2.051
+  else:
+    assert ended < 10.6
+
+
+@pytest.mark.parametrize('fault', ['invalid', 'busy', 'stalk', 'opposite', 'gear', 'pose', 'driver_opposite', 'disabled'])
+def test_native_minimum_never_delays_manual_turn_cancellation(fault):
+  from openpilot.selfdrive.controls.lib.desire_lib.manual_turn_indicator import ManualTurnMovement
+  cs, md = scene()
+  cs.steeringAngleDeg = 0.
+  cs.blinkerLever = 2 if fault == 'stalk' else 0
+  cs.rightBlinker = fault == 'opposite'
+  cs.gearShifter = 'park' if fault == 'gear' else 'drive'
+  if fault == 'driver_opposite':
+    cs.steeringPressed, cs.steeringTorque, cs.steeringAngleDeg = True, -100., -5.
+  detector, isolation = ModelIndicator(), BoundaryIndicator()
+  detector.active, detector.request_time = ManualTurnMovement(10., 1), 10.
+  detector.update(10.05, cs, md, valid=fault != 'invalid', lateral_active=False, desire_enabled=False,
+                  path_enabled=False, busy=fault == 'busy', isolation=isolation,
+                  manual_turn_enabled=fault != 'disabled', yaw_rate=None if fault == 'pose' else 0., manual_minimum=2.)
+  assert detector.active is None
+
+
+@pytest.mark.parametrize('fault', ['returned', 'geometry', 'timeout'])
+def test_native_minimum_never_delays_lane_observation_cancellation(fault):
+  cs, md = scene()
+  detector, isolation = ModelIndicator(), BoundaryIndicator()
+  detector.active, detector.request_time = Movement(10., 1, 'manual', cs, md), 10.
+  if fault == 'returned':
+    md.laneLines[1].y[0] -= .3
+  if fault == 'geometry':
+    md.laneLines[1].y[0] = math.nan
+  detector.update(10.2 if fault == 'timeout' else 10.05, cs, md, valid=True, lateral_active=False,
+                  desire_enabled=False, path_enabled=False, busy=False, isolation=isolation, manual_minimum=2.)
+  assert detector.active is None
+
+
+@pytest.mark.parametrize('fault', ['request', 'direction', 'old_record', 'future_record', 'future_start', 'nan_start'])
+def test_native_minimum_rejects_unbound_or_stale_transmission_time(fault):
+  from openpilot.selfdrive.controls.lib.desire_lib.manual_turn_indicator import ManualTurnMovement
+  cs, md = scene()
+  cs.steeringAngleDeg = 0.
+  detector, isolation = ModelIndicator(), BoundaryIndicator()
+  detector.active, detector.request_time = ManualTurnMovement(10., 1), 10.
+  for i in range(1, 42):
+    now = 10. + i * .05
+    native = {'request': 9. if fault == 'request' else 10.,
+              'direction': 'right' if fault == 'direction' else 'left',
+              'time': math.nan if fault == 'nan_start' else now+1. if fault == 'future_start' else 10.5}
+    feedback = {'stamp': now-1. if fault == 'old_record' else now+1. if fault == 'future_record' else now,
+                'native_start': native}
+    detector.update(now, cs, md, valid=True, lateral_active=False, desire_enabled=False, path_enabled=False,
+                    busy=False, isolation=isolation, feedback=feedback, manual_turn_enabled=True, yaw_rate=0., manual_minimum=2.)
+    if detector.active is None:
+      break
+  assert detector.active is None and now <= 12.05
+
+
 def run(detector, cs, md, **kwargs):
   isolation=BoundaryIndicator()
   args=dict(valid=True,lateral_active=True,desire_enabled=False,path_enabled=True,busy=False,isolation=isolation,command_curvature=md.action.desiredCurvature)

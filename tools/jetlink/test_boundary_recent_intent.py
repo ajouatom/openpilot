@@ -50,6 +50,45 @@ def test_continued_approach_remembers_driver_and_emits_once(direction, mode):
     assert not any(r[3] for r in requests)
 
 
+@pytest.mark.parametrize('direction', [1, 2])
+@pytest.mark.parametrize('missing_frames', [1, 2, 4])
+def test_width_dropout_preserves_only_a_continuous_established_episode(direction, missing_frames):
+  cs, md = scene(direction)
+  detector, requests = BoundaryIndicator(), []
+  for frame in range(60):
+    now = 10 + frame * .05
+    distance = 1.3 - max(0, frame - 32) * .04
+    md.frameId = frame
+    md.laneLines[1].y = [-distance if direction == 1 else -(2.6-distance)] * 9
+    md.laneLines[2].y = [2.6-distance if direction == 1 else distance] * 9
+    if 32 <= frame < 32 + missing_frames:
+      md.laneLines[3-direction].y = [v + (.12 if direction == 2 else -.12) for v in md.laneLines[3-direction].y]
+    if frame >= 32:
+      md.laneLineProbs[direction] = .01
+    prepare_scene(cs, md, now)
+    detector.update(now, cs, md, enabled=True, valid=True, busy=False)
+    if detector.request_direction:
+      requests.append(detector.request_time)
+  assert bool(requests) == (missing_frames <= 2)
+  assert len(set(requests)) <= 1
+
+
+def test_intermittent_invalid_width_does_not_establish_a_new_episode():
+  cs, md = scene()
+  detector = BoundaryIndicator()
+  for frame in range(60):
+    now = 10 + frame * .05
+    distance = max(.2, 1.8 - max(0, frame-30) * .05)
+    md.frameId = frame
+    cs.steeringPressed = frame >= 30
+    width = 2.48 if frame >= 30 and frame % 2 else 2.6
+    md.laneLines[1].y = [-distance] * 9
+    md.laneLines[2].y = [width-distance] * 9
+    prepare_scene(cs, md, now)
+    detector.update(now, cs, md, enabled=True, valid=True, busy=False)
+    assert detector.episode is None and not detector.request_direction
+
+
 @pytest.mark.parametrize('mode', ['no_torque', 'retreat', 'stalled', 'expired'])
 def test_no_intent_replay_after_retreat_stop_or_expiry(mode):
   assert not maneuver(mode=mode)

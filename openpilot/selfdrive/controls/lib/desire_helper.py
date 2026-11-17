@@ -53,6 +53,7 @@ class DesireHelper:
     self.indicator_journal_time = 0.
     self.bluetooth_commands = CommandReader('lane')
     self.assistant_lane = AssistantLane(fingerprint=fingerprint, native_signal=native_voice_signal)
+    self.manual_indicator_minimum = 0.  # carrot-wip a31a59ca: only with kick_supported (False on this branch)
     self.frame = 0
 
     # FSM core
@@ -428,7 +429,8 @@ class DesireHelper:
         busy=lamp_busy,
         isolation=self.boundary_indicator, manual_edge=self.boundary_indicator.request_direction, command_curvature=indicator_curvature,
         feedback=read_json(HOLD_PATH, {}) if self.model_indicator.active else None,
-        manual_turn_enabled=self.manual_turn_indicator_enabled, yaw_rate=indicator_yaw_rate)
+        manual_turn_enabled=self.manual_turn_indicator_enabled, yaw_rate=indicator_yaw_rate,
+        manual_minimum=self.manual_indicator_minimum)
 
     elif self.boundary_indicator.blocked or not self.boundary_indicator.initialized:
       # Expire a voice-owned lamp mask without enabling PE-only geometry observation.

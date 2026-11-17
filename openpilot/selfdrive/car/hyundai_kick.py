@@ -10,10 +10,11 @@ from tools.jetlink.blink_protocol import Process, fresh  # noqa: TID251 -- commo
 
 
 class KickOutput:
-  def __init__(self, cp, params):
+  def __init__(self, cp, params, *, event=None):
     self.configured = (cp.brand == 'hyundai' and not cp.passive and
                        any(cfg.safetyParam & HyundaiSafetyFlags.CANFD_BLINKER_KICK for cfg in cp.safetyConfigs))
     self.params = params
+    self.event = event
     self.owner = Owner('CANFD Kick')
     self.bus = CanBus(cp).ECAN if self.configured else None
     self.next_update = self.last_journal = 0.
@@ -30,6 +31,7 @@ class KickOutput:
     self.request_side = 0
     self.accepted_id = None
     self.last_sent = -1.
+    self.first_sent = None
     self.request_started = self.tap_until = 0.
     self.tapping = False
     self.ready = False
@@ -84,7 +86,7 @@ class KickOutput:
     driver_active = self.driver_direction not in (None, 0) or 0 <= now - self.driver_pressed_at < .2
     return enabled and self.owner.held and not driver_active
 
-  def request(self, cs, now, initialized, ready):
+  def request(self, cs, now, initialized, ready, *, clock=None):
     """Translate the existing source's fresh hold/tap into a leased SPAS direction."""
     enabled = self.configured and self.params.get_bool('IsOnroad') and self.params.get_bool('CanfdBlinkerKick')
     if self.worker is not None and (not enabled or self.worker.process.poll() is not None):
@@ -98,6 +100,10 @@ class KickOutput:
       except OSError:
         self.worker_retry = now + 5.
     record = self.worker.latest() if self.worker is not None else None
+    # The producer may publish while latest() drains the socket. Judge its
+    # timestamp after the read, using the caller's live or replay clock.
+    if clock is not None:
+      now = clock()
     if isinstance(record, dict):
       self.record = record
     record = self.record
@@ -120,6 +126,12 @@ class KickOutput:
                     not self.tapping and valid_request and ident == self.request_id and side == self.request_side)
       opposite = cs.rightBlinker if self.request_side == 3 else cs.leftBlinker
       if not healthy or not continuing or opposite or now - self.request_started >= 300.:
+        if self.event is not None:
+          self.event('canfdIndicatorRequestEnd', request=self.request_id, side=self.request_side,
+                     now=now, started=self.request_started, first_sent=self.first_sent,
+                     healthy=healthy, continuing=bool(continuing), opposite=bool(opposite), ready=self.ready,
+                     source_stamp=record.get('stamp'), source_ok=record.get('ok'),
+                     source_origin=record.get('indicator_origin'))
         self.request_id, self.request_side, self.accepted_id = None, 0, None
     if valid_request and ident not in self.seen:
       # Consume rejected/expired requests too. Recovery requires a new policy edge.
@@ -127,6 +139,7 @@ class KickOutput:
       if healthy and self.request_id is None and fresh(candidate.get('time'), now, .4) and not (cs.leftBlinker or cs.rightBlinker):
         self.request_id, self.request_side = ident, side
         self.request_started, self.tap_until = now, now + 1.6
+        self.first_sent = None
         self.tapping = not isinstance(hold, dict)
     return self.request_side if healthy else 0
 
@@ -136,6 +149,8 @@ class KickOutput:
       address == 0x16A and len(data) == 32 and (data[16] >> 5) & 7 == self.request_side
       for address, data, _ in frames)
     if sent:
+      if self.first_sent is None:
+        self.first_sent = now
       if self.tapping and self.accepted_id != self.request_id:
         self.tap_until = now + 1.
       self.accepted_id = self.request_id
@@ -146,7 +161,8 @@ class KickOutput:
       driver = cs.blinkerLever or self.driver_direction not in (None, 0) or now - self.driver_pressed_at < .2
       state = 'driver_override' if driver else 'ready' if self.ready else 'waiting'
       self.worker.send({'stamp': now, 'state': state, 'available': self.ready,
-                        'accepted_id': self.accepted_id if self.ready else None})
+                        'accepted_id': self.accepted_id if self.ready else None,
+                        'first_sent': self.first_sent if self.ready and self.accepted_id else None})
       self.feedback_at = now + .05
 
   def isolate(self, frames, model, now):

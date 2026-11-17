@@ -59,6 +59,9 @@ def test_common_hold_acknowledgement_and_stop(source_output):
   assert feedback[-1]['accepted_id'] is None
   gate.feedback(cs, 10.1, submitted(3))
   assert feedback[-1]['accepted_id'] == 'hold-1'
+  assert feedback[-1]['first_sent'] == 10.1
+  gate.feedback(cs, 10.2, submitted(3))
+  assert feedback[-1]['first_sent'] == 10.1
   for now in (11., 25., 60.):
     hold_record(record, now, started=10.)
     assert gate.request(cs, now, True, True) == 3
@@ -66,6 +69,44 @@ def test_common_hold_acknowledgement_and_stop(source_output):
   assert gate.request(cs, 60.1, True, True) == 0
   gate.feedback(cs, 60.1, [])
   assert feedback[-1]['accepted_id'] is None
+
+
+@pytest.mark.parametrize('starting', [False, True])
+def test_request_samples_freshness_after_reading_worker(source_output, starting):
+  gate, _, record, _, cs = source_output
+  if not starting:
+    hold_record(record, 10.)
+    assert gate.request(cs, 10., True, True) == 3
+  # Source publishes between card's earlier timestamp and latest() returning.
+  hold_record(record, 10.1002, started=10.1002 if starting else 10.)
+  assert gate.request(cs, 10.1, True, True, clock=lambda: 10.1004) == 3
+  assert gate.request_id == 'hold-1'
+
+
+@pytest.mark.parametrize('stamp', [9., 10.3])
+def test_post_read_clock_still_rejects_expired_or_future_records(source_output, stamp):
+  gate, _, record, _, cs = source_output
+  hold_record(record, 10.)
+  assert gate.request(cs, 10., True, True) == 3
+  hold_record(record, stamp, started=10.)
+  assert gate.request(cs, 10.1, True, True, clock=lambda: 10.1004) == 0
+
+
+def test_request_end_records_one_bounded_diagnostic(source_output):
+  gate, _, record, _, cs = source_output
+  events = []
+  gate.event = lambda name, **data: events.append((name, data))
+  hold_record(record, 10.)
+  assert gate.request(cs, 10., True, True) == 3
+  assert gate.request(cs, 10.3, True, True) == 0
+  assert gate.request(cs, 10.4, True, True) == 0
+  assert len(events) == 1
+  name, data = events[0]
+  assert name == 'canfdIndicatorRequestEnd'
+  assert data['request'] == 'hold-1' and data['first_sent'] is None
+  assert not data['healthy'] and data['continuing'] and data['ready']
+  assert data['source_stamp'] == 10. and data['now'] == 10.3
+  assert 'error' not in data
 
 
 @pytest.mark.parametrize('fault', ['old_record', 'future_record', 'invalid', 'owner', 'lever', 'hazard', 'gear', 'opposite', 'cancel'])
@@ -132,13 +173,14 @@ def test_common_detector_settings_match_external_output(mode, selected, legacy_m
     bools['CanfdBlinkerKick'] = native
     ints = {'AutoBlinkerControl':mode, 'CanfdBlinkerKickModelMode':legacy_mode}
     reads = []
-    def get_int(key):
+    def get_int(key, reads=reads, ints=ints):
       reads.append(key)
       return ints.get(key, 0)
     helper = NS(frame=100, kick_supported=native, external_indicator_supported=not native,
                 boundary_indicator_supported=True, indicator_journal_time=0.,
-                params=NS(get_bool=lambda key:bools.get(key, False), get_int=get_int, get_float=lambda key:0.))
+                params=NS(get_bool=lambda key, bools=bools:bools.get(key, False), get_int=get_int, get_float=lambda key:0.))
     scope['_update_params_periodic'](helper)
+    assert helper.manual_indicator_minimum == (2. if native else 0.)
     for name in ('boundary_indicator_enabled', 'manual_turn_indicator_enabled', 'model_desire_indicator_enabled', 'model_path_indicator_enabled'):
       assert getattr(helper, name) == (selected and mode in (1, 2))
     assert 'CanfdBlinkerKickModelMode' not in reads
@@ -331,7 +373,7 @@ def test_verified_driver_is_recognized_while_native_lamp_mask_is_active(output, 
   path = Path(__file__).parents[2] / 'controls/lib/desire_helper.py'
   methods = [n for n in ast.walk(ast.parse(path.read_text(encoding='utf-8')))
              if isinstance(n, ast.FunctionDef) and n.name in ('_update_driver_blinker', '_update_stalk')]
-  ns = dict(BLINKER_NONE=0, BLINKER_LEFT=1, BLINKER_RIGHT=2, DT_MDL=.05)
+  ns = {'BLINKER_NONE': 0, 'BLINKER_LEFT': 1, 'BLINKER_RIGHT': 2, 'DT_MDL': .05}
   exec(compile(ast.Module(body=methods, type_ignores=[]), str(path), 'exec'), ns)
   observer = BoundaryIndicator()
   observer.own(10., direction)

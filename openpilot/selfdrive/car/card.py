@@ -154,7 +154,7 @@ class Car:
     stock_signal = native_indicator(self.CP)
     self.native_voice_indicator = NativeVoiceIndicator(stock_signal) if stock_signal else None
     self.spas_signals = SpasSignals(self.CP, self.params)
-    self.kick_output = KickOutput(self.CP, self.params)
+    self.kick_output = KickOutput(self.CP, self.params, event=cloudlog.event)
     # Bluetooth remote blinkerLeft/Right: Hyundai blinks it natively (carcontroller Kick path, any gear). The Jetson
     # USB2CAN path (tools/jetlink/blink_source.py) reads the same journal on its own; readers do not consume events.
     self.remote_blinker = CommandReader('blinker') if hasattr(self.CI.CC, 'remote_blinker') else None
@@ -492,7 +492,7 @@ class Car:
         kick_now = time.monotonic()
         self.CI.CC.kick_output_ready = self.kick_output.update(kick_valid, kick_now)
         self.CI.CC.kick_direction = self.kick_output.request(
-          CS, kick_now, self.initialized_prev, self.CI.CC.kick_output_ready)
+          CS, kick_now, self.initialized_prev, self.CI.CC.kick_output_ready, clock=time.monotonic)
         self.CI.CC.kick_request_id = self.kick_output.request_id
       if self.remote_blinker is not None:
         self.remote_blinker_update(time.monotonic())

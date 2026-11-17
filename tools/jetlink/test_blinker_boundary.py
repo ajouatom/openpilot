@@ -218,11 +218,12 @@ def test_lamp_and_synthesized_stalk_feedback_cannot_request_steering(monkeypatch
 
 
 @pytest.mark.parametrize('transport', ['usb', 'ble', 'kick'])
+@pytest.mark.parametrize('acknowledged', [False, True])
 @pytest.mark.parametrize('atc,state,nav_fresh', [('none', 'off', True), ('atc left', 'preLaneChange', True),
                                                ('fork right', 'preLaneChange', True), ('turn left', 'off', False)])
-@pytest.mark.parametrize('lane_available', [True, False])
+@pytest.mark.parametrize('lane_available', [True, False, 'changed_after_observation'])
 @pytest.mark.parametrize('observed', [False, True])
-def test_actual_source_loop_journals_then_taps_legacy_or_holds_observation(monkeypatch, atc, state, nav_fresh, lane_available, observed, transport):
+def test_actual_source_loop_journals_then_taps_legacy_or_holds_observation(monkeypatch, atc, state, nav_fresh, lane_available, observed, transport, acknowledged):
   import sys
   import json
   import types
@@ -258,7 +259,7 @@ def test_actual_source_loop_journals_then_taps_legacy_or_holds_observation(monke
     clock[0] = 10.0 + i * 0.05
     sm.recv_time = dict.fromkeys(sm, clock[0])
     prepare_scene(cs, sm['modelV2'], clock[0])
-    cs.leftLaneLine = 10 if lane_available else 21
+    cs.leftLaneLine = 10 if lane_available is True else 21
     cs.steeringPressed = False
     cs.steeringTorque = 0.
     sm['selfdriveState'].atcTurnStartMonoTime = 0
@@ -287,7 +288,10 @@ def test_actual_source_loop_journals_then_taps_legacy_or_holds_observation(monke
     if len(sent) >= 8:
       return b''
     fed[0] = len(sent)
-    return json.dumps({'stamp': 10.0 + len(sent) * 0.05, 'state': 'ready'}).encode()
+    peer = {'stamp': 10.0 + len(sent) * 0.05, 'state': 'ready'}
+    if acknowledged and sent and sent[-1]['hold']:
+      peer.update(accepted_id=sent[-1]['hold']['id'], first_sent=10.1)
+    return json.dumps(peer).encode()
 
   def send(raw):
     value = json.loads(raw)
@@ -305,15 +309,18 @@ def test_actual_source_loop_journals_then_taps_legacy_or_holds_observation(monke
   monkeypatch.setattr(model, 'atomic_json', lambda path, value: saved.append((path, value)))
   source.main(0, ble=transport == 'ble', kick=transport == 'kick')
   assert any(path.name == 'physical-hold.json' for path, _ in saved)
+  starts = [value['native_start'] for path, value in saved if path.name == 'physical-hold.json' and 'native_start' in value]
+  assert bool(starts) == (transport == 'kick' and observed and bool(lane_available) and acknowledged)
+  assert all(value == {'request': 10.1, 'direction': 'left', 'time': 10.1} for value in starts)
   events = [e for v in sent for e in v['events']]
   if observed:
     assert not events
     holds=[v['hold'] for v in sent if v['hold']]
-    assert bool(holds) == lane_available
+    assert bool(holds) == bool(lane_available)
     assert not holds or len({h['id'] for h in holds}) == 1
     assert sent[-1]['hold'] is None
   else:
-    assert len(events) == (1 if lane_available else 0)
+    assert len(events) == (1 if lane_available is True else 0)
     assert not events or events[0]['direction'] == 'left'
     assert all(v['hold'] is None for v in sent)
 
