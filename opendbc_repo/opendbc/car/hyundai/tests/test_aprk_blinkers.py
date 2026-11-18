@@ -4,7 +4,7 @@ from types import SimpleNamespace
 from opendbc.can import CANPacker
 from opendbc.can.parser import get_raw_value
 from opendbc.car import DT_CTRL, structs
-from opendbc.car.hyundai import carcontroller
+from opendbc.car.hyundai import carcontroller, hyundaicanfd
 from opendbc.car.hyundai.carcontroller import CarController
 
 D, P = structs.CarState.GearShifter.drive, structs.CarState.GearShifter.park
@@ -638,3 +638,14 @@ def test_hazard_with_camera_0x1ea_leaves_spas2_alone():
     naviRoundabout=False, leftLaneLine=10, rightLaneLine=10)))
   assert sent == [] and cc.aprk_state == carcontroller.APRK_IDLE
 
+
+
+def test_fast_hazard_switches_spas2_between_hazards_and_off():
+  # CanfdHazardTest 2 (remote "hazardFast"): the same SPAS2 hazard request, on 0.2 s / off 0.1 s, APRK kept the whole time
+  cc = make_cc(control=False, ecu=Ecu(answers=False))
+  cc.hazard_test = 2
+  step(cc, carcontroller.APRK_REPLY_FRAMES + 30, P, 0)
+  sent = step(cc, 3 * hyundaicanfd.HAZARD_FAST_PERIOD, P, 0)
+  values = spas2(cc, sent)
+  assert set(values) == {0, 1} and cc.aprk_state == carcontroller.APRK_ACTIVE
+  assert 0.5 < values.count(1) / len(values) < 0.8

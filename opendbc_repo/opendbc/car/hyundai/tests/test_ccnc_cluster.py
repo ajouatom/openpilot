@@ -736,3 +736,10 @@ def test_ioniq9_cluster_test_opens_dashed_lanes_only_on_ioniq9(monkeypatch, test
   assert hyundaicanfd._ioniq9_cluster_test(CAR.KIA_EV9) == 0
   assert bool(hyundaicanfd._ioniq9_cluster_test(CAR.HYUNDAI_IONIQ_9) & 1) == (test in (1, 3))
 
+
+
+def test_fast_hazard_request_is_switched_on_and_off():
+  frames = range(hyundaicanfd.HAZARD_FAST_PERIOD * 2)
+  on = [hyundaicanfd.hazard_request(2, f) for f in frames]
+  assert on[0] and not on[hyundaicanfd.HAZARD_FAST_ON] and sum(on) == 2 * hyundaicanfd.HAZARD_FAST_ON
+  assert all(hyundaicanfd.hazard_request(1, f) for f in frames) and not any(hyundaicanfd.hazard_request(0, f) for f in frames)

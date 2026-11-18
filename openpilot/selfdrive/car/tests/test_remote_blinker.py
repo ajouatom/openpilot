@@ -33,3 +33,15 @@ def test_hazard_action_toggles_the_hazard_lights_can_test():
   assert store["CanfdHazardTest"] == 1
   update(car, 2.0)
   assert store["CanfdHazardTest"] == 0
+
+
+def test_fast_hazard_action_uses_value_2_and_takes_over_the_plain_one():
+  car, store = make(['hazardFast', 'hazard', 'hazardFast', 'hazardFast'])
+  update(car, 0.0)
+  assert store["CanfdHazardTest"] == 2
+  update(car, 1.0)
+  assert store["CanfdHazardTest"] == 1   # plain hazard while fast is on: switches to plain
+  update(car, 2.0)
+  assert store["CanfdHazardTest"] == 2
+  update(car, 3.0)
+  assert store["CanfdHazardTest"] == 0

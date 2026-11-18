@@ -105,6 +105,8 @@ STALK_TAP_MOMENTARY_FRAMES = int(0.35 / DT_CTRL)
 # The stock column module sends 0x3C1 at 5 Hz (200 ms). Sending the same ID faster raises the chance of a
 # same-ID collision with it, which is what took the Azera bus down, so the momentary mode sticks to 5 Hz.
 STALK_MOMENTARY_HZ_DIV = 20
+# CanfdHighBeamOnEngage: a stock high-beam push is a ~0.15 s HIGHBEAM_FORWARD pulse on 0x3C1 (05_can/hba_ifs.md, 10-04)
+HIGHBEAM_PRESS_FRAMES = int(0.15 / DT_CTRL)
 
 # CanfdBlinkerStalk: when APRK can't be silenced, imitate the steering column lever (BLINKER_STALKS, 0x3C1); the BCM
 # blinks from it (09-18 log: 0x413 ALT lamp at 0.4 s while the lever is on). 10-26 logs: COUNTER_ALT goes +1 on every
@@ -301,8 +303,11 @@ class CarController(CarControllerBase):
     self.blinker_kick_model = False  # CanfdBlinkerKickModelMode != 1: also kick on a model lane change start (kick_pulse)
     self.model_flashes = 0  # CanfdBlinkerKickModelMode 2/3/4 -> 3/5/7 flashes; 0 = hold through the change
     self.blinker_test = 0  # CanfdBlinkerMenuTest: 1 left, 2 right (menu test, any speed/gear)
-    self.hazard_test = False  # CanfdHazardTest (remote hazard): SPAS2 hazards when no camera 0x1ea carries bit 104
+    self.hazard_test = 0  # CanfdHazardTest (remote hazard, 2 = fast flash): SPAS2 hazards when no camera 0x1ea carries bit 104
     self.blinker_stalk = 0  # CanfdBlinkerStalk: 1 left, 2 right (0x3C1 replay)
+    self.highbeam_on_engage = False  # CanfdHighBeamOnEngage: one high-beam lever push on the first engagement
+    self.highbeam_frame = None       # frame that push started; set once, CarController lives for one start
+    self.highbeam_prev_enabled = False
     # CanfdBvmView: 0 off, 1 left, 2 right, 3 both. Spoofs the cluster camera view status (0x400 byte4) so the
     # blind-spot camera is shown without the turn signal. Display-only message, nothing else uses it.
     self.bvm_view = 0
@@ -399,6 +404,27 @@ class CarController(CarControllerBase):
       self.stalk_counter = (self.stalk_counter + 1) % 16
     self.stalk_source_counter, self.stalk_values = source_counter, values.copy()
     values.update(COUNTER_ALT=self.stalk_counter, CHECKSUM_MAYBE=0)
+    addr, dat, bus = self.packer.make_can_msg("BLINKER_STALKS", self.CAN.ECAN, values)
+    return [CanData(addr, bytes([stalk_checksum(dat[1:])]) + bytes(dat[1:]), bus)]
+
+  def highbeam_push(self, CC, CS):
+    """CanfdHighBeamOnEngage (user 11-18): on the first engagement after the start, push the high-beam lever once like
+    the driver would (0x3C1 HIGHBEAM_FORWARD 1, released 0.15 s later), meant to switch Auto High Beam on. The lever is a
+    toggle, so it is never repeated in the same start. Each frame is the stock frame with that bit and COUNTER_ALT +1 per
+    lever change (stalk_blinkers). panda's 0x3C1 check allows byte2 bit 0x04. Likely ignored: our turn-signal replay on
+    this id reached the bus but not the BCM (05_can/blinker_route19_20261026.md)."""
+    rising = CC.enabled and not self.highbeam_prev_enabled
+    self.highbeam_prev_enabled = CC.enabled
+    if self.highbeam_frame is None and rising and self.highbeam_on_engage and CS.blinker_stalks is not None:
+      self.highbeam_frame = self.frame
+    elapsed = None if self.highbeam_frame is None else self.frame - self.highbeam_frame
+    if elapsed not in (0, HIGHBEAM_PRESS_FRAMES) or CS.blinker_stalks is None:
+      return []
+    values = dict(CS.blinker_stalks)
+    source_counter = int(values.pop("COUNTER_ALT"))
+    values.pop("CHECKSUM_MAYBE", None)
+    values.update(HIGHBEAM_FORWARD=int(elapsed == 0), COUNTER_ALT=(source_counter + (1 if elapsed == 0 else 2)) % 16,
+                  CHECKSUM_MAYBE=0)
     addr, dat, bus = self.packer.make_can_msg("BLINKER_STALKS", self.CAN.ECAN, values)
     return [CanData(addr, bytes([stalk_checksum(dat[1:])]) + bytes(dat[1:]), bus)]
 
@@ -543,7 +569,7 @@ class CarController(CarControllerBase):
       self.blinker_pulse_end, self.model_pulse = min(self.blinker_pulse_end, self.frame), False
     # CanfdHazardTest on a car whose camera sends no 0x1ea (HDA1 Tucson): bit 104 has no carrier, so SPAS2 BLINKER_CONTROL 1
     # (DBC "hazards") asks for them instead, any gear, while the test is on. A car with 0x1ea keeps bit 104 (hyundaicanfd).
-    hazard = self.hazard_test and getattr(CS, "adrv_0x1ea", None) is None
+    hazard = bool(self.hazard_test) and getattr(CS, "adrv_0x1ea", None) is None
     want = self.blinker_test in (1, 2) or kick or remote or spas or hazard
     now, stock, ack = getattr(CS, "can_nanos", 0), getattr(CS, "aprk_stock_nanos", 0), getattr(CS, "aprk_ack_nanos", 0)
 
@@ -596,7 +622,8 @@ class CarController(CarControllerBase):
         return ret  # direct 25 Hz: a quarter of the frames, a quarter of the collision chances
       left = (pulse and self.blinker_side == 3) or self.blinker_test == 1
       right = (pulse and self.blinker_side == 4) or self.blinker_test == 2
-      ret.extend(hyundaicanfd.create_spas_messages(self.packer, self.CAN, self.frame, left, right, getattr(CS, "spas2", None), hazard))
+      ret.extend(hyundaicanfd.create_spas_messages(self.packer, self.CAN, self.frame, left, right, getattr(CS, "spas2", None),
+                                                         hazard and hyundaicanfd.hazard_request(self.hazard_test, self.frame)))
     return ret
 
   def update(self, CC, CS, now_nanos):
@@ -622,7 +649,8 @@ class CarController(CarControllerBase):
       self.max_angle_frames = params.get_int("MaxAngleFrames")
       self.steer_angle_test = params.get_int("SteerAngleTest")
       self.spas_steer_test = params.get_int("SpasSteerTest")
-      self.hazard_test = params.get_int("CanfdHazardTest") == 1
+      self.hazard_test = params.get_int("CanfdHazardTest")
+      self.highbeam_on_engage = params.get_int("CanfdHighBeamOnEngage") == 1
       steerMax = params.get_int("CustomSteerMax")
       steerDeltaUp = params.get_int("CustomSteerDeltaUp")
       steerDeltaDown = params.get_int("CustomSteerDeltaDown")
@@ -963,6 +991,7 @@ class CarController(CarControllerBase):
       # blinkers
       if self.blinker_stalk in (1, 2, 3, 4) or self.stalk_counter is not None:
         can_sends.extend(self.stalk_blinkers(CS))
+      can_sends.extend(self.highbeam_push(CC, CS))
       if hda2 and self.CP.flags & HyundaiFlags.ENABLE_BLINKERS:
         can_sends.extend(hyundaicanfd.create_spas_messages(self.packer, self.CAN, self.frame, CC.leftBlinker, CC.rightBlinker,
                                                            getattr(CS, "spas2", None)))

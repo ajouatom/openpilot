@@ -1058,8 +1058,21 @@ def apply_cluster_test_control_msgs(packer, can_sends, CS):
   return can_sends
 
 
-def _hazard_test():
-  return Params().get_int("CanfdHazardTest") == 1
+# CanfdHazardTest 2 (Bluetooth remote "hazardFast", user 11-18): we switch the hazard request on and off ourselves,
+# 0.2 s on / 0.1 s off (about 200 a minute; the car's own hazard is about 85). The Tucson BCM follows SPAS2's value
+# frame by frame (measurements 64); the Ioniq 5 PE lights about 0.1 s after bit 104 is set, so a shorter on-time may not
+# show. shortcut: not seen on a car yet, tune these two frame counts (100 Hz) if the flash looks wrong.
+HAZARD_FAST_PERIOD = 30
+HAZARD_FAST_ON = 20
+
+
+def hazard_request(mode, frame):
+  """CanfdHazardTest 1: hazards held on. 2: the same request switched on/off for a fast flash. 0: off."""
+  return mode == 1 or (mode == 2 and frame % HAZARD_FAST_PERIOD < HAZARD_FAST_ON)
+
+
+def _hazard_mode():
+  return Params().get_int("CanfdHazardTest")
 
 
 def _cluster_sweep(packer, field, frame, period=100):
@@ -1724,7 +1737,7 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
         # bit 104 (no DBC name): hazard lights on the Ioniq 5 PE (cluster test 129, 10-29). Any car whose camera sends
         # 0x1ea may try it (user 11-16; it was Ioniq 5 PE only from 11-14): a test setting, cleared at manager start.
         # panda passes our 0x1ea only in HDA2 mode (CanfdHDA2=1); on HDA1 the frame is dropped there, bit or not
-        if HAZARD_REQUEST_BIT not in CLUSTER_TEST_BITS_1EA.get(test_field, ()) and _hazard_test():
+        if HAZARD_REQUEST_BIT not in CLUSTER_TEST_BITS_1EA.get(test_field, ()) and hazard_request(_hazard_mode(), frame):
           msg = _set_raw_bits(msg, (HAZARD_REQUEST_BIT,), 1)
         ret.append(msg)
 

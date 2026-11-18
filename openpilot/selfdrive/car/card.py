@@ -239,12 +239,14 @@ class Car:
 
   def remote_blinker_update(self, now):
     """Bluetooth remote -> Hyundai carcontroller. blinkerLeft/Right: remote_blinker 3 / 4 (one stock one-touch, any gear).
-    hazard: toggles CanfdHazardTest, the Joongyu Lab hazard lights CAN test (0x1ea bit 104 where the camera sends 0x1ea, else SPAS2 BLINKER_CONTROL 1: carcontroller.aprk_blinkers)."""
+    hazard: toggles CanfdHazardTest, the Joongyu Lab hazard lights CAN test (0x1ea bit 104 where the camera sends 0x1ea, else SPAS2 BLINKER_CONTROL 1: carcontroller.aprk_blinkers).
+    hazardFast: the same test as value 2, the request switched on/off by us (hyundaicanfd.hazard_request) for a fast flash."""
     action = self.remote_blinker.read()
     if action in ('blinkerLeft', 'blinkerRight'):
       self.CI.CC.remote_blinker = 3 if action == 'blinkerLeft' else 4
-    elif action == 'hazard':
-      self.params.put_int_nonblocking("CanfdHazardTest", 0 if self.params.get_int("CanfdHazardTest") == 1 else 1)
+    elif action in ('hazard', 'hazardFast'):
+      mode = 1 if action == 'hazard' else 2
+      self.params.put_int_nonblocking("CanfdHazardTest", 0 if self.params.get_int("CanfdHazardTest") == mode else mode)
 
   def state_update(self) -> car.CarState:
     """carState update loop, driven by can"""
