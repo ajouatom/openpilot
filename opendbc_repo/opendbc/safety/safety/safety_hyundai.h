@@ -124,6 +124,19 @@ static bool hyundai_cgw_frame_fits(const CANPacket_t *msg, const uint8_t *tmpl) 
   return fits;
 }
 
+// HighBeamTest (11-18): the stock frame plus exactly one bit it lacks, byte4 0x01 CF_Gway_HeadLampHigh or byte6 0x08
+// CF_Gway_PassingSW (classic CAN has no lever message; carcontroller.cgw_highbeam)
+static bool hyundai_cgw_highbeam_fits(const CANPacket_t *msg, const uint8_t *tmpl) {
+  uint8_t high = GET_BYTE(msg, 4) ^ tmpl[4];
+  uint8_t pass = GET_BYTE(msg, 6) ^ tmpl[6];
+  bool fits = ((high == 0x01U) && (pass == 0U) && ((tmpl[4] & 0x01U) == 0U)) ||
+              ((high == 0U) && (pass == 0x08U) && ((tmpl[6] & 0x08U) == 0U));
+  for (int i = 0; i < 8; i++) {
+    fits = fits && ((i == 4) || (i == 6) || (GET_BYTE(msg, i) == tmpl[i]));
+  }
+  return fits;
+}
+
 static bool hyundai_cgw_test_tx(const CANPacket_t *msg) {
   uint32_t now = microsecond_timer_get();
   // Count rejected requests as activity too, so a running sender cannot rearm itself.
@@ -149,7 +162,8 @@ static bool hyundai_cgw_test_tx(const CANPacket_t *msg) {
                  hyundai_cgw_test.template_valid && !hyundai_cgw_test.cutoff &&
                  (get_ts_elapsed(now, hyundai_cgw_test.template_ts) <= 250000U) &&
                  (!hyundai_cgw_test.sent || (get_ts_elapsed(now, hyundai_cgw_test.sent_ts) >= 50000U));
-  allowed &= hyundai_cgw_frame_fits(msg, hyundai_cgw_test.template);
+  allowed &= hyundai_cgw_frame_fits(msg, hyundai_cgw_test.template) ||
+             hyundai_cgw_highbeam_fits(msg, hyundai_cgw_test.template);
   // the parked test also wants the stock lamps off; while driving the stock frame may already echo our lamp bit
   allowed &= !parked || (((hyundai_cgw_test.template[2] & 0x18U) == 0U) &&
                          ((hyundai_cgw_test.template[7] & 0xC0U) == 0U));
@@ -216,7 +230,8 @@ static bool hyundai_rx_tx_hook(const CANPacket_t *to_push, CANPacket_t *to_send)
     // the stock frame it rides behind may have changed since TX (the BCM sends an extra CGW1 ~11 ms after any
     // change): the driver's lever, hazard or a door bit now wins
     if ((get_ts_elapsed(microsecond_timer_get(), hyundai_cgw_pb.push_us) < HYUNDAI_CGW_PB_HOLD_US) &&
-        (GET_LEN(to_push) == 8) && hyundai_cgw_frame_fits(&hyundai_cgw_pb.pkt, to_push->data)) {
+        (GET_LEN(to_push) == 8) && (hyundai_cgw_frame_fits(&hyundai_cgw_pb.pkt, to_push->data) ||
+                                    hyundai_cgw_highbeam_fits(&hyundai_cgw_pb.pkt, to_push->data))) {
       *to_send = hyundai_cgw_pb.pkt;
       send = true;
     }

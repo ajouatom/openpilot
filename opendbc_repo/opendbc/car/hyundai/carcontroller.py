@@ -105,7 +105,7 @@ STALK_TAP_MOMENTARY_FRAMES = int(0.35 / DT_CTRL)
 # The stock column module sends 0x3C1 at 5 Hz (200 ms). Sending the same ID faster raises the chance of a
 # same-ID collision with it, which is what took the Azera bus down, so the momentary mode sticks to 5 Hz.
 STALK_MOMENTARY_HZ_DIV = 20
-# CanfdHighBeamOnEngage: a stock high-beam push is a ~0.15 s HIGHBEAM_FORWARD pulse on 0x3C1 (05_can/hba_ifs.md, 10-04)
+# HighBeamTest: a stock high-beam push is a ~0.15 s HIGHBEAM_FORWARD pulse on 0x3C1 (05_can/hba_ifs.md, 10-04)
 HIGHBEAM_PRESS_FRAMES = int(0.15 / DT_CTRL)
 
 # CanfdBlinkerStalk: when APRK can't be silenced, imitate the steering column lever (BLINKER_STALKS, 0x3C1); the BCM
@@ -305,9 +305,10 @@ class CarController(CarControllerBase):
     self.blinker_test = 0  # CanfdBlinkerMenuTest: 1 left, 2 right (menu test, any speed/gear)
     self.hazard_test = 0  # CanfdHazardTest (remote hazard, 2 = fast flash): SPAS2 hazards when no camera 0x1ea carries bit 104
     self.blinker_stalk = 0  # CanfdBlinkerStalk: 1 left, 2 right (0x3C1 replay)
-    self.highbeam_on_engage = False  # CanfdHighBeamOnEngage: one high-beam lever push on the first engagement
-    self.highbeam_frame = None       # frame that push started; set once, CarController lives for one start
-    self.highbeam_prev_enabled = False
+    self.highbeam_frame = None       # frame the latest push started
+    self.highbeam_kind = 1           # 1 high beam, 2 flash-to-pass (HighBeamTest 2)
+    self.highbeam_test = 0           # HighBeamTest: 1 high beam / 2 flash-to-pass once now (all cars), back to 0 re-arms
+    self.highbeam_test_sent = False
     # CanfdBvmView: 0 off, 1 left, 2 right, 3 both. Spoofs the cluster camera view status (0x400 byte4) so the
     # blind-spot camera is shown without the turn signal. Display-only message, nothing else uses it.
     self.bvm_view = 0
@@ -407,23 +408,47 @@ class CarController(CarControllerBase):
     addr, dat, bus = self.packer.make_can_msg("BLINKER_STALKS", self.CAN.ECAN, values)
     return [CanData(addr, bytes([stalk_checksum(dat[1:])]) + bytes(dat[1:]), bus)]
 
-  def highbeam_push(self, CC, CS):
-    """CanfdHighBeamOnEngage (user 11-18): on the first engagement after the start, push the high-beam lever once like
-    the driver would (0x3C1 HIGHBEAM_FORWARD 1, released 0.15 s later), meant to switch Auto High Beam on. The lever is a
-    toggle, so it is never repeated in the same start. Each frame is the stock frame with that bit and COUNTER_ALT +1 per
-    lever change (stalk_blinkers). panda's 0x3C1 check allows byte2 bit 0x04. Likely ignored: our turn-signal replay on
-    this id reached the bus but not the BCM (05_can/blinker_route19_20261026.md)."""
-    rising = CC.enabled and not self.highbeam_prev_enabled
-    self.highbeam_prev_enabled = CC.enabled
-    if self.highbeam_frame is None and rising and self.highbeam_on_engage and CS.blinker_stalks is not None:
-      self.highbeam_frame = self.frame
-    elapsed = None if self.highbeam_frame is None else self.frame - self.highbeam_frame
+  def highbeam_elapsed(self, ready):
+    """Frames since the current HighBeamTest signal started, None before the first one. HighBeamTest (user 11-18)
+    sends once when the menu value becomes 1 (high beam) or 2 (flash-to-pass), at any gear/speed/engagement, so users
+    can check it without engaging or a remote; carcontroller writes no params, so setting the value back to 0 re-arms
+    it. Not ready (message not seen yet): it stays pending. The engage push (CanfdHighBeamOnEngage) was removed 11-18."""
+    if not self.highbeam_test:
+      self.highbeam_test_sent = False
+    if self.highbeam_test in (1, 2) and not self.highbeam_test_sent and ready:
+      self.highbeam_frame, self.highbeam_kind, self.highbeam_test_sent = self.frame, self.highbeam_test, True
+    return None if self.highbeam_frame is None else self.frame - self.highbeam_frame
+
+  def cgw_highbeam(self, CS):
+    """HighBeamTest on classic CAN (user 11-18): the lever is not on CAN there, so this is the BCM's own CGW1 (0x541)
+    with CF_Gway_HeadLampHigh (1: byte4 0x01) or CF_Gway_PassingSW (2: byte6 0x08) set for 0.15 s. CGW1 is the
+    gateway's status broadcast: forged CGW1 lit the K5 DL3 cluster, never the exterior lamps (11-14). panda sends it
+    behind the stock frame inside the kick's CGW1 trial (safety_hyundai.h hyundai_cgw_highbeam_fits)."""
+    raw = getattr(CS, "cgw_test_raw", b"")
+    elapsed = self.highbeam_elapsed(len(raw) == 8)
+    if elapsed is None or elapsed >= HIGHBEAM_PRESS_FRAMES or elapsed % CGW_TX_FRAMES or len(raw) != 8:
+      return []
+    if self.frame - self.cgw_last_tx >= CGW_REARM_FRAMES:
+      self.cgw_trial = self.frame  # same panda trial bookkeeping as cgw_blinkers
+    self.cgw_last_tx = self.frame
+    data = bytearray(raw)
+    data[4 if self.highbeam_kind == 1 else 6] |= 0x01 if self.highbeam_kind == 1 else 0x08
+    return [CanData(0x541, bytes(data), 0)]
+
+  def highbeam_push(self, CS):
+    """HighBeamTest on CAN-FD (user 11-18): the high-beam lever once like the driver would on 0x3C1, 1 pushed
+    (HIGHBEAM_FORWARD, byte2 bit 0x04) or 2 pulled (HIGHBEAM_BACKWARD flash-to-pass, byte3 bit 0x04), released 0.15 s
+    later; panda's 0x3C1 shape check allows both. Each frame is the stock frame with that bit and COUNTER_ALT +1 per
+    lever change (stalk_blinkers). Possibly ignored: our turn-signal replay on this id reached the bus but not the BCM
+    (05_can/blinker_route19_20261026.md)."""
+    elapsed = self.highbeam_elapsed(CS.blinker_stalks is not None)
     if elapsed not in (0, HIGHBEAM_PRESS_FRAMES) or CS.blinker_stalks is None:
       return []
     values = dict(CS.blinker_stalks)
     source_counter = int(values.pop("COUNTER_ALT"))
     values.pop("CHECKSUM_MAYBE", None)
-    values.update(HIGHBEAM_FORWARD=int(elapsed == 0), COUNTER_ALT=(source_counter + (1 if elapsed == 0 else 2)) % 16,
+    signal = "HIGHBEAM_BACKWARD" if self.highbeam_kind == 2 else "HIGHBEAM_FORWARD"
+    values.update({signal: int(elapsed == 0)}, COUNTER_ALT=(source_counter + (1 if elapsed == 0 else 2)) % 16,
                   CHECKSUM_MAYBE=0)
     addr, dat, bus = self.packer.make_can_msg("BLINKER_STALKS", self.CAN.ECAN, values)
     return [CanData(addr, bytes([stalk_checksum(dat[1:])]) + bytes(dat[1:]), bus)]
@@ -650,7 +675,7 @@ class CarController(CarControllerBase):
       self.steer_angle_test = params.get_int("SteerAngleTest")
       self.spas_steer_test = params.get_int("SpasSteerTest")
       self.hazard_test = params.get_int("CanfdHazardTest")
-      self.highbeam_on_engage = params.get_int("CanfdHighBeamOnEngage") == 1
+      self.highbeam_test = params.get_int("HighBeamTest")
       steerMax = params.get_int("CustomSteerMax")
       steerDeltaUp = params.get_int("CustomSteerDeltaUp")
       steerDeltaDown = params.get_int("CustomSteerDeltaDown")
@@ -991,7 +1016,7 @@ class CarController(CarControllerBase):
       # blinkers
       if self.blinker_stalk in (1, 2, 3, 4) or self.stalk_counter is not None:
         can_sends.extend(self.stalk_blinkers(CS))
-      can_sends.extend(self.highbeam_push(CC, CS))
+      can_sends.extend(self.highbeam_push(CS))
       if hda2 and self.CP.flags & HyundaiFlags.ENABLE_BLINKERS:
         can_sends.extend(hyundaicanfd.create_spas_messages(self.packer, self.CAN, self.frame, CC.leftBlinker, CC.rightBlinker,
                                                            getattr(CS, "spas2", None)))
@@ -1062,6 +1087,7 @@ class CarController(CarControllerBase):
           self.palisade_blinker_test, now_nanos, CS.cgw_test_raw, CS.cgw_test_timestamps,
           parked, not (CC.enabled or CC.latActive or CC.longActive),
         ))
+        can_sends.extend(self.cgw_highbeam(CS))
         if self.blinker_control or self.remote_blinker or self.remote_pulse:
           can_sends.extend(self.cgw_blinkers(CS))
       if CS.lkas11 is not None:

@@ -115,3 +115,29 @@ def test_stale_or_missing_stock_frame_rejects():
   d.stock()
   d.advance(300_000)
   assert d.tx(frame(1, True)) == (False, False)
+
+
+# HighBeamTest (11-18): the stock frame plus one high-beam (byte4 0x01) or passing (byte6 0x08) bit rides the same
+# hold-behind path; both bits, any other change, or a bit the stock frame already carries is refused
+def test_highbeam_test_frame_is_held_and_sent_behind_the_stock_one():
+  for byte, bit in ((4, 0x01), (6, 0x08)):
+    d = Device()
+    d.stock()
+    d.advance(30_000)
+    data = bytearray(STOCK)
+    data[byte] |= bit
+    assert d.tx(bytes(data)) == (True, True)
+    d.advance(70_000)
+    assert d.stock() == bytes(data)
+  d = Device()
+  d.stock()
+  d.advance(30_000)
+  both, other, on = bytearray(STOCK), bytearray(STOCK), bytearray(STOCK)
+  both[4] |= 0x01
+  both[6] |= 0x08
+  other[6] |= 0x10
+  on[4] |= 0x01
+  assert not d.tx(bytes(both))[0] and not d.tx(bytes(other))[0]
+  d.stock(bytes(on))
+  d.advance(60_000)
+  assert not d.tx(bytes(on))[0]

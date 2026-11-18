@@ -498,9 +498,9 @@
       "groups": [
         {
           "id": "LAB_BLINKER_TEST",
-          "ko": "방향지시등 테스트",
-          "en": "Turnlight Tests",
-          "zh": "转向灯测试",
+          "ko": "램프 테스트 (방향지시등·비상등·상향등)",
+          "en": "Lamp Tests (Turnlight·Hazard·High Beam)",
+          "zh": "灯光测试 (转向灯·危险警示灯·远光灯)",
           "groups": [
             {
               "id": "LAB_BLINKER_TEST_SPAS",
@@ -529,6 +529,16 @@
               "zh": "拨杆 0x3C1",
               "params": [
                 "CanfdBlinkerStalk"
+              ]
+            },
+            {
+              "id": "LAB_BLINKER_TEST_HAZARD",
+              "ko": "비상등·상향등",
+              "en": "Hazard & High Beam",
+              "zh": "危险警示灯·远光灯",
+              "params": [
+                "CanfdHazardTest",
+                "HighBeamTest"
               ]
             }
           ]
@@ -593,16 +603,6 @@
                 "RoundaboutLaneChangeHold"
               ]
             }
-          ]
-        },
-        {
-          "id": "LAB_HAZARD",
-          "ko": "비상등·상향등 (시험)",
-          "en": "Hazard & High Beam (test)",
-          "zh": "危险警示灯·远光灯 (测试)",
-          "params": [
-            "CanfdHazardTest",
-            "CanfdHighBeamOnEngage"
           ]
         },
         {
@@ -2410,17 +2410,17 @@
     },
     {
       "group": "Joongyu Lab",
-      "name": "CanfdHighBeamOnEngage",
-      "title": "인게이지 때 상향등 레버 1회(0x3C1)",
-      "descr": "시동 후 첫 인게이지 때 상향등 레버를 한 번 민 신호를 보냅니다(오토 상향등 켜기 시험, CAN-FD).\n주의: 이미 켜져 있으면 꺼지고, 오토 상향등이 없는 차는 상향등이 켜질 수 있습니다. 안 될 가능성이 큽니다.",
+      "name": "HighBeamTest",
+      "title": "상향등 신호 1회 보내기",
+      "descr": "상향등 신호가 차에 들어가는지 볼 때 고릅니다. 기어·속도와 상관없이 한 번만 보내며, 다시 하려면 0으로 돌렸다가 고릅니다.\n1: 상향등(CAN-FD 0x3C1 레버 밀기, 일반 CAN CGW1 상향등 비트)\n2: 패싱(CAN-FD 0x3C1 레버 당기기, 일반 CAN CGW1 패싱 비트)\n주의: 오토 상향등이 없는 차는 상향등이 바로 켜지거나 번쩍일 수 있습니다.",
       "egroup": "Joongyu Lab",
-      "etitle": "One high-beam lever push on engage (0x3C1)",
-      "edescr": "On the first engagement after the car starts, sends one high-beam lever push (test to turn on Auto High Beam, CAN-FD).\nCaution: it turns the high beam off if already on, and may turn the high beam on in cars without Auto High Beam. Likely not to work.",
+      "etitle": "Send one high-beam signal",
+      "edescr": "Pick to check whether a high-beam signal reaches the car. It sends once at any gear or speed; set 0 and pick again to repeat.\n1: High beam (CAN-FD 0x3C1 lever push, classic CAN CGW1 high-beam bit)\n2: Flash-to-pass (CAN-FD 0x3C1 lever pull, classic CAN CGW1 passing bit)\nCaution: cars without Auto High Beam may switch or flash the high beam at once.",
       "cgroup": "Joongyu Lab",
-      "ctitle": "接合时推一次远光灯拨杆(0x3C1)",
-      "cdescr": "启动后第一次接合时，发送一次推远光拨杆的信号(开启自动远光的测试，CAN-FD)。\n注意: 若已开启则会关闭，没有自动远光的车可能直接开启远光。很可能无效。",
+      "ctitle": "发送一次远光信号",
+      "cdescr": "检查远光信号是否传到车辆时选择。不论挡位和车速只发送一次，重复时先设为 0 再选择。\n1: 远光(CAN-FD 0x3C1 推拨杆，普通 CAN CGW1 远光位)\n2: 超车灯(CAN-FD 0x3C1 拉拨杆，普通 CAN CGW1 超车位)\n注意: 没有自动远光的车可能会立即开启或闪烁远光。",
       "min": 0,
-      "max": 1,
+      "max": 2,
       "default": 0,
       "unit": 1
     },

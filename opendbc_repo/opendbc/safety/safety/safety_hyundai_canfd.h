@@ -647,7 +647,10 @@ static bool hyundai_canfd_tx_hook(const CANPacket_t *to_send_const) {
   // carrot-wip SPAS path (CANFD_SPAS_BLINKERS) owns these ids only when enabled; otherwise our checks below apply
   // (CanfdBlinkerKick/MenuTest 0x7B1/0x165/0x16A, CanfdBlinkerStalk 0x3C1)
   if (hyundai_spas_enabled) {
-    if (addr == 0x3C1) { return hyundai_stalk_tx(to_send, microsecond_timer_get()); }
+    // only turn-lever frames belong to the SPAS stalk trial (it refuses any frame without one side); a frame with no
+    // blinker bit (HighBeamTest push/pull, 11-18) takes the shape check below like on any other CAN-FD car
+    bool stalk_blinker = ((GET_BYTE(to_send, 3) & 0x40U) != 0U) || ((GET_BYTE(to_send, 4) & 0x51U) != 0U);
+    if ((addr == 0x3C1) && stalk_blinker) { return hyundai_stalk_tx(to_send, microsecond_timer_get()); }
     if ((addr == 0x7B1) || (addr == 0x165) || (addr == 0x16A)) {
       return hyundai_spas_tx(to_send, microsecond_timer_get());
     }
@@ -765,15 +768,16 @@ static bool hyundai_canfd_tx_hook(const CANPacket_t *to_send_const) {
     }
   }
 
-  // BLINKER_STALKS(0x3C1) replay: only left/right/off shapes (byte3=0x00|0x40, tail 0); byte2 carries the
-  // driver's light knob / high beam bits (mask 0x34; logs: 0x00 0x10 0x20 0x24 0x30 0x34), copied from the real lever.
+  // BLINKER_STALKS(0x3C1) replay: only left/right/off shapes (byte3 within 0x44: 0x40 left, 0x04 HIGHBEAM_BACKWARD
+  // pull for HighBeamTest 2; tail 0); byte2 carries the driver's light knob / high beam bits (mask 0x34; logs: 0x00
+  // 0x10 0x20 0x24 0x30 0x34), copied from the real lever.
   // byte4 is limited to the four forms stock frames use: 0x00 off, 0x01 right held, 0x10 left tap (LEFT_BLINKER_TAP
   // bit 36), 0x41 right tap (RIGHT_BLINKER bit 32 + RIGHT_BLINKER_TAP bit 38). GV80 only latches on the tap forms.
   if (addr == 0x3C1) {
     uint8_t b4 = GET_BYTE(to_send, 4);
     bool b4_ok = (b4 == 0x00U) || (b4 == 0x01U) || (b4 == 0x10U) || (b4 == 0x41U);
     bool shape_ok = ((GET_BYTE(to_send, 2) & ~0x34U) == 0U) &&
-                    ((GET_BYTE(to_send, 3) == 0x00U) || (GET_BYTE(to_send, 3) == 0x40U)) &&
+                    ((GET_BYTE(to_send, 3) & ~0x44U) == 0U) &&
                     b4_ok &&
                     (GET_BYTE(to_send, 5) == 0U) && (GET_BYTE(to_send, 6) == 0U) && (GET_BYTE(to_send, 7) == 0U);
     if (!shape_ok) {

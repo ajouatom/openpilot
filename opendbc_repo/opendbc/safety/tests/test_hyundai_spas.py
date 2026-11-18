@@ -410,3 +410,12 @@ def test_spas_steer_request_only_while_stopped():
   assert d.tx(0x165, bytes(24))  # the blinker path's all-zero frame still goes
   assert d.tx(APRK, EXTENDED, 1) and d.tx(APRK, EXTENDED, 0)
   assert not Device(16 | 4, 1).tx(APRK, EXTENDED, 1)
+
+
+# HighBeamTest (11-18): a 0x3C1 frame with no blinker bit - the lever pushed (byte2 0x04) or pulled (byte3 0x04) -
+# takes the plain shape check whether the SPAS stalk path is on or off, in any state
+@pytest.mark.parametrize('flags', [0, 4096, 4253])
+def test_highbeam_lever_frames_take_the_shape_check(flags):
+  d = Device(flags)
+  for b2, b3, ok in ((0x34, 0x00, True), (0x30, 0x04, True), (0x30, 0x08, False), (0x38, 0x00, False)):
+    assert d.tx(0x3C1, bytes([0x12, 0xb0, b2, b3, 0, 0, 0, 0])) == ok
