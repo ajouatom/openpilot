@@ -56,8 +56,12 @@ pub fn read_json(path: &Path) -> Value {
         .filter(Value::is_object)
         .unwrap_or_else(|| json!({}))
 }
+/// Written within the last 3 s. Callers sample `now` before reading, so a
+/// concurrent atomic replacement can carry a timestamp up to that read later
+/// than `now` (carrot d3268a253); such a report is fresh, not stale. Status
+/// files live in /dev/shm, so no earlier boot's clock can appear here.
 pub fn fresh(value: &Value, now: f64) -> bool {
-    numeric(&value["updated"]).is_some_and(|updated| (0. ..3.).contains(&(now - updated)))
+    numeric(&value["updated"]).is_some_and(|updated| (-1. ..3.).contains(&(now - updated)))
 }
 pub fn read_fresh(path: &Path, now: f64) -> Value {
     let value = read_json(path);
@@ -375,4 +379,21 @@ pub fn write(path: &Path, value: &Value) -> std::io::Result<()> {
     let temporary = path.with_extension("tmp");
     fs::write(&temporary, serde_json::to_vec(value)?)?;
     fs::rename(temporary, path)
+}
+
+#[cfg(test)]
+mod freshness_tests {
+    use super::fresh;
+    use serde_json::json;
+
+    #[test]
+    fn a_report_written_after_the_reader_sampled_its_clock_is_fresh() {
+        // carrot d3268a253: the read follows the clock sample, so `updated`
+        // can be slightly newer than `now`.
+        assert!(fresh(&json!({"updated": 100.2}), 100.));
+        assert!(fresh(&json!({"updated": 100.}), 102.9));
+        assert!(!fresh(&json!({"updated": 100.}), 103.));
+        assert!(!fresh(&json!({"updated": 105.}), 100.));
+        assert!(!fresh(&json!({}), 100.));
+    }
 }
