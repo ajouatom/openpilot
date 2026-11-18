@@ -352,6 +352,7 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"CanfdBvmView", {CLEAR_ON_MANAGER_START, INT, "0"}},
     {"CanfdBvmRaw", {CLEAR_ON_MANAGER_START, INT, "0"}},
     {"CanfdBvmAltTime", {PERSISTENT, INT, "10"}},
+    {"CanfdBvmReverse", {PERSISTENT, INT, "0"}},
     {"PalisadeBlinkerTest", {CLEAR_ON_MANAGER_START, INT, "0"}},
     {"PaddleSignalPriority", {PERSISTENT, INT, "1"}},
     {"FingerPrints", {PERSISTENT | CLEAR_ON_MANAGER_START, STRING}},

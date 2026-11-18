@@ -143,16 +143,21 @@ def test_recovery_requires_reply_and_resumed_stock_and_no_replay():
   assert step(s, t + 0.31) == []
 
 
-def test_restore_is_bounded_and_cannot_rearm_after_failure():
+def test_restore_is_bounded_then_idle_without_lock():
+  # 11-19: an unconfirmed restore no longer locks the session until restart; it goes idle with the reason kept
   s, t = opened()
   step(s, t + 0.01, request=None)
   sent = []
   for i in range(1, 900):
     sent += step(s, t + 0.01 + i * 0.01, request=None)
-  assert s.state == "failed" and s.reason == "restore_unconfirmed"
+  assert s.state == "idle" and s.reason == "restore_unconfirmed" and s.request is None
   assert sum(m.dat == ENABLE for m in sent) == 2
-  stock(s, t + 10)
-  assert step(s, t + 10.2, request="new") == []
+  t2 = t + 0.01 + 899 * 0.01
+  assert step(s, t2 + 0.05, request="early") == []       # stock SPAS not running: nothing starts
+  t3 = stock(s, t2 + 0.06)                                # stock resumes (updates stay < 0.2 s apart)
+  step(s, t3, request=None)
+  assert [m.dat for m in step(s, t3 + 0.01, request="new")] == [EXTENDED]  # a new request starts again
+  assert s.reason == ""
 
 
 def test_fifty_hz_no_burst_after_delayed_update():

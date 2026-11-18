@@ -314,6 +314,7 @@ class CarController(CarControllerBase):
     self.bvm_view = 0
     self.bvm_raw = 0   # CanfdBvmRaw: 1..255 = byte4 value sent as-is, overrides bvm_view
     self.bvm_alt_time = 10  # CanfdBvmAltTime: 0.1 s per side in CanfdBvmView 4
+    self.bvm_reverse = 0    # CanfdBvmReverse: 1 left, 2 right while the gear is R (owns the view there)
     self.palisade_cgw_test = PalisadeCgwTest()
     self.palisade_blinker_test = 0
     self.stalk_counter = None
@@ -453,11 +454,13 @@ class CarController(CarControllerBase):
     addr, dat, bus = self.packer.make_can_msg("BLINKER_STALKS", self.CAN.ECAN, values)
     return [CanData(addr, bytes([stalk_checksum(dat[1:])]) + bytes(dat[1:]), bus)]
 
-  def bvm_view_msg(self):
+  def bvm_view_msg(self, reverse=False):
     # 0x400 BVM_VIEW (byte 4) is what the car broadcasts at 5 Hz while a blind-spot camera is on:
     # 1..3 left, 4..6 right, 0 off (09-12 and 10-26 logs). Stock rate (5 Hz) only: a faster same-ID copy is the
     # collision that took the Azera bus down (STALK_MOMENTARY_HZ_DIV).
-    if self.bvm_view == 4:
+    if reverse:
+      val = 3 if self.bvm_reverse == 1 else 6  # CanfdBvmReverse (user 11-19) owns the view while in R
+    elif self.bvm_view == 4:
       # The cluster only has one camera window (byte 4 is a 3-bit single-window state), so both sides cannot be
       # shown at once. Alternate them so both are visible in turn, CanfdBvmAltTime per side.
       # Floor 0.2 s = one 5 Hz frame per side: switching faster needs a faster same-ID copy than stock (collision risk)
@@ -716,6 +719,7 @@ class CarController(CarControllerBase):
       self.bvm_view = params.get_int("CanfdBvmView")
       self.bvm_raw = params.get_int("CanfdBvmRaw")
       self.bvm_alt_time = params.get_int("CanfdBvmAltTime")
+      self.bvm_reverse = params.get_int("CanfdBvmReverse")
       self.palisade_blinker_test = params.get_int("PalisadeBlinkerTest")
       self.hapticFeedbackWhenSpeedCamera = int(params.get_int("HapticFeedbackWhenSpeedCamera"))
 
@@ -1009,9 +1013,11 @@ class CarController(CarControllerBase):
         if not camera_scc:
           can_sends.extend(hyundaicanfd.create_lfa_icon_non_camera_scc(self.packer, CS, self.CAN, CC))
 
-      # blind-spot camera view (no turn signal needed)
-      if self.bvm_view or self.bvm_raw:
-        can_sends.extend(self.bvm_view_msg())
+      # blind-spot camera view (no turn signal needed); CanfdBvmReverse owns it while in R. Gate kept here: sending
+      # whenever bvm_reverse is set would put byte 4 = 0 on the bus at 5 Hz outside R too.
+      reverse = self.bvm_reverse in (1, 2) and CS.out.gearShifter == structs.CarState.GearShifter.reverse
+      if reverse or self.bvm_view or self.bvm_raw:
+        can_sends.extend(self.bvm_view_msg(reverse))
 
       # blinkers
       if self.blinker_stalk in (1, 2, 3, 4) or self.stalk_counter is not None:

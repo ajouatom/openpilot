@@ -5,11 +5,12 @@ import pytest
 from opendbc.car.hyundai.carcontroller import CarController
 
 
-def views(mode, tenths=10, raw=0, frames=600):
-  cc = SimpleNamespace(bvm_view=mode, bvm_raw=raw, bvm_alt_time=tenths, CAN=SimpleNamespace(ECAN=0), frame=0)
+def views(mode, tenths=10, raw=0, frames=600, reverse_side=0):
+  cc = SimpleNamespace(bvm_view=mode, bvm_raw=raw, bvm_alt_time=tenths, bvm_reverse=reverse_side, CAN=SimpleNamespace(ECAN=0),
+                       frame=0)
   out = []
   for cc.frame in range(frames):
-    for addr, dat, bus in CarController.bvm_view_msg(cc):
+    for addr, dat, bus in CarController.bvm_view_msg(cc, reverse=bool(reverse_side)):
       assert (addr, bus) == (0x400, 0) and dat[:4] == bytes(4) and dat[5:] == bytes(3)
       out.append((cc.frame, dat[4]))
   return out
@@ -34,3 +35,10 @@ def test_fastest_is_every_5hz_frame(tenths):
 
 def test_raw_wins():
   assert {v for _, v in views(1, raw=5, frames=100)} == {5}
+
+
+@pytest.mark.parametrize('mode,raw', [(0, 0), (1, 0), (4, 0), (2, 5)])
+def test_reverse_owns_the_view_at_stock_5hz(mode, raw):
+  # CanfdBvmReverse (11-19): in R the chosen side wins over CanfdBvmView and CanfdBvmRaw, still one frame per 0.2 s
+  assert views(mode, raw=raw, frames=100, reverse_side=1) == [(f, 3) for f in range(0, 100, 20)]
+  assert {v for _, v in views(mode, raw=raw, frames=100, reverse_side=2)} == {6}

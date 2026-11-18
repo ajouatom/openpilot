@@ -73,7 +73,7 @@ class Session:
         if address == 0x16A:
           self.stock_direction = None
         st.consecutive = 0
-        if self.state not in ('idle', 'failed', 'restore_enable', 'restore_default', 'restore_stock'):
+        if self.state not in ('idle', 'restore_enable', 'restore_default', 'restore_stock'):
           self.reason = 'stock_contract'
         return
       st.consecutive = min(20, st.consecutive+1) if 0 <= now-st.stamp < .1 and data[2] == (st.counter+1) % 256 else 1
@@ -121,10 +121,6 @@ class Session:
         self.enter('extended', now)
         return [CanData(APRK, EXTENDED, self.bus)]
       return []
-    if self.state == 'failed':
-      # No automatic reacquisition after a failed restore; require a restart
-      # and fresh stock reception. In particular a held request is never replayed.
-      return []
     if self.state.startswith('restore_'):
       if self.state == 'restore_enable':
         if self.acknowledged(b'\x68\x00') or now-self.changed >= .4:
@@ -145,7 +141,12 @@ class Session:
           return []
       if now-self.changed >= 1.:
         if self.restore_attempts >= 3:
-          self.enter('failed', now)
+          # No lock until restart (user 11-19: an open developer project, testers know): back to idle with the reason
+          # kept for the log. A held request is still never replayed (idle starts only on a new request id), and a new
+          # session needs the stock SPAS stream running again (stock_ready). No car has answered 0x7B1 so far, so
+          # every 1-4 test ends here; before this change it blocked every CanfdBlinkerTest value until reboot.
+          self.request = self.direction = None
+          self.enter('idle', now)
           self.reason = 'restore_unconfirmed'
         else:
           self.restore_attempts += 1

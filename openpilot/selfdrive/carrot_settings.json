@@ -2,6 +2,171 @@
   "apilot": 20220111,
   "menu": [
     {
+      "id": "LAB",
+      "ko": "Joongyu Lab",
+      "en": "Joongyu Lab",
+      "zh": "Joongyu Lab",
+      "groups": [
+        {
+          "id": "LAB_BLINKER_TEST",
+          "ko": "램프 테스트",
+          "en": "Lamp Tests",
+          "zh": "灯光测试",
+          "groups": [
+            {
+              "id": "LAB_BLINKER_TEST_SPAS",
+              "ko": "SPAS (CAN-FD·CCNC, 주차ECU 경로)",
+              "en": "SPAS (CAN-FD·CCNC, parking ECU path)",
+              "zh": "SPAS (CAN-FD·CCNC, 泊车ECU路径)",
+              "params": [
+                "CanfdBlinkerMenuTest",
+                "CanfdBlinkerTest",
+                "CanfdAprkDiag"
+              ]
+            },
+            {
+              "id": "LAB_BLINKER_TEST_CGW1",
+              "ko": "CGW1 (일반 CAN·팰리세이드 등)",
+              "en": "CGW1 (classic CAN, Palisade etc.)",
+              "zh": "CGW1 (普通 CAN·帕里斯帝等)",
+              "params": [
+                "PalisadeBlinkerTest"
+              ]
+            },
+            {
+              "id": "LAB_BLINKER_TEST_STALK",
+              "ko": "레버 0x3C1",
+              "en": "Lever 0x3C1",
+              "zh": "拨杆 0x3C1",
+              "params": [
+                "CanfdBlinkerStalk"
+              ]
+            },
+            {
+              "id": "LAB_BLINKER_TEST_HAZARD",
+              "ko": "비상등·상향등",
+              "en": "Hazard & High Beam",
+              "zh": "危险警示灯·远光灯",
+              "params": [
+                "CanfdHazardTest",
+                "HighBeamTest"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "LAB_BLINKER",
+          "ko": "방향지시등 설정",
+          "en": "Turnlight Settings",
+          "zh": "转向灯设置",
+          "groups": [
+            {
+              "id": "LAB_BLINKER_KICK",
+              "ko": "Kick — 핸들로 차선을 넘으면 깜빡이",
+              "en": "Kick — blink when steering across a lane line",
+              "zh": "Kick — 转向越过车道线时闪烁",
+              "params": [
+                "CanfdBlinkerKick",
+                "CanfdBlinkerKickMode",
+                "CanfdBlinkerKickModelMode"
+              ]
+            },
+            {
+              "id": "LAB_BLINKER_SPAS",
+              "ko": "SPAS 주차ECU 경유",
+              "en": "SPAS via parking ECU",
+              "zh": "SPAS 经泊车ECU",
+              "params": [
+                "CanfdBlinkerControl"
+              ]
+            },
+            {
+              "id": "LAB_BLINKER_EXT",
+              "ko": "외부장치 Jetson·B1",
+              "en": "External device Jetson·B1",
+              "zh": "外部设备 Jetson·B1",
+              "params": [
+                "AutoBlinkerControl",
+                "ManualLaneChangeIndicator",
+                "ManualTurnIndicator",
+                "ModelDesireIndicator",
+                "ModelPathIndicator",
+                "AutoTurnControlRightLaneChange"
+              ]
+            },
+            {
+              "id": "LAB_BLINKER_LEVER",
+              "ko": "레버 판단 (0x3C1 읽기)",
+              "en": "Lever reading (0x3C1)",
+              "zh": "拨杆判断 (读取 0x3C1)",
+              "params": [
+                "BlinkerLatchedTurn",
+                "LaneChangeLeverWait"
+              ]
+            },
+            {
+              "id": "LAB_BLINKER_HOLD",
+              "ko": "차선변경 보류 (CCNC)",
+              "en": "Lane change hold (CCNC)",
+              "zh": "变道保留 (CCNC)",
+              "params": [
+                "TunnelLaneChangeHold",
+                "RoundaboutLaneChangeHold"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "LAB_CRUISE",
+          "ko": "크루즈·속도",
+          "en": "Cruise & Speed",
+          "zh": "巡航·速度",
+          "params": [
+            "AutoRoadSpeedOnEngage",
+            "PaddleSignalPriority",
+            "StopGoLongAssist"
+          ]
+        },
+        {
+          "id": "LAB_BVM",
+          "ko": "사각지대 카메라",
+          "en": "Blind-Spot Camera",
+          "zh": "盲区摄像头",
+          "params": [
+            "CanfdBvmReverse",
+            "CanfdBvmView",
+            "CanfdBvmAltTime",
+            "CanfdBvmRaw"
+          ]
+        },
+        {
+          "id": "LAB_TEST",
+          "ko": "시험·진단",
+          "en": "Tests & Diagnostics",
+          "zh": "测试·诊断",
+          "params": [
+            "SpasSteerTest",
+            "SteerAngleTest",
+            "Ioniq9ClusterTest",
+            "ClusterLaneTest",
+            "ClusterLaneTestValue",
+            "ClusterLaneTestFrom",
+            "ClusterLaneTestTo"
+          ]
+        },
+        {
+          "id": "LAB_DEVICE",
+          "ko": "기기",
+          "en": "Device",
+          "zh": "设备",
+          "params": [
+            "ScreenOn",
+            "RadarCutInLoadShed"
+          ]
+        }
+      ]
+    },
+    {
       "id": "DRIVING",
       "ko": "주행 제어",
       "en": "Driving",
@@ -486,170 +651,6 @@
           "params": [
             "CommaPedalEnabled",
             "HardwareC3xLite"
-          ]
-        }
-      ]
-    },
-    {
-      "id": "LAB",
-      "ko": "Joongyu Lab",
-      "en": "Joongyu Lab",
-      "zh": "Joongyu Lab",
-      "groups": [
-        {
-          "id": "LAB_BLINKER_TEST",
-          "ko": "램프 테스트",
-          "en": "Lamp Tests",
-          "zh": "灯光测试",
-          "groups": [
-            {
-              "id": "LAB_BLINKER_TEST_SPAS",
-              "ko": "SPAS (CAN-FD·CCNC, 주차ECU 경로)",
-              "en": "SPAS (CAN-FD·CCNC, parking ECU path)",
-              "zh": "SPAS (CAN-FD·CCNC, 泊车ECU路径)",
-              "params": [
-                "CanfdBlinkerMenuTest",
-                "CanfdBlinkerTest",
-                "CanfdAprkDiag"
-              ]
-            },
-            {
-              "id": "LAB_BLINKER_TEST_CGW1",
-              "ko": "CGW1 (일반 CAN·팰리세이드 등)",
-              "en": "CGW1 (classic CAN, Palisade etc.)",
-              "zh": "CGW1 (普通 CAN·帕里斯帝等)",
-              "params": [
-                "PalisadeBlinkerTest"
-              ]
-            },
-            {
-              "id": "LAB_BLINKER_TEST_STALK",
-              "ko": "레버 0x3C1",
-              "en": "Lever 0x3C1",
-              "zh": "拨杆 0x3C1",
-              "params": [
-                "CanfdBlinkerStalk"
-              ]
-            },
-            {
-              "id": "LAB_BLINKER_TEST_HAZARD",
-              "ko": "비상등·상향등",
-              "en": "Hazard & High Beam",
-              "zh": "危险警示灯·远光灯",
-              "params": [
-                "CanfdHazardTest",
-                "HighBeamTest"
-              ]
-            }
-          ]
-        },
-        {
-          "id": "LAB_BLINKER",
-          "ko": "방향지시등 설정",
-          "en": "Turnlight Settings",
-          "zh": "转向灯设置",
-          "groups": [
-            {
-              "id": "LAB_BLINKER_KICK",
-              "ko": "Kick — 핸들로 차선을 넘으면 깜빡이",
-              "en": "Kick — blink when steering across a lane line",
-              "zh": "Kick — 转向越过车道线时闪烁",
-              "params": [
-                "CanfdBlinkerKick",
-                "CanfdBlinkerKickMode",
-                "CanfdBlinkerKickModelMode"
-              ]
-            },
-            {
-              "id": "LAB_BLINKER_SPAS",
-              "ko": "SPAS 주차ECU 경유",
-              "en": "SPAS via parking ECU",
-              "zh": "SPAS 经泊车ECU",
-              "params": [
-                "CanfdBlinkerControl"
-              ]
-            },
-            {
-              "id": "LAB_BLINKER_EXT",
-              "ko": "외부장치 Jetson·B1",
-              "en": "External device Jetson·B1",
-              "zh": "外部设备 Jetson·B1",
-              "params": [
-                "AutoBlinkerControl",
-                "ManualLaneChangeIndicator",
-                "ManualTurnIndicator",
-                "ModelDesireIndicator",
-                "ModelPathIndicator",
-                "AutoTurnControlRightLaneChange"
-              ]
-            },
-            {
-              "id": "LAB_BLINKER_LEVER",
-              "ko": "레버 판단 (0x3C1 읽기)",
-              "en": "Lever reading (0x3C1)",
-              "zh": "拨杆判断 (读取 0x3C1)",
-              "params": [
-                "BlinkerLatchedTurn",
-                "LaneChangeLeverWait"
-              ]
-            },
-            {
-              "id": "LAB_BLINKER_HOLD",
-              "ko": "차선변경 보류 (CCNC)",
-              "en": "Lane change hold (CCNC)",
-              "zh": "变道保留 (CCNC)",
-              "params": [
-                "TunnelLaneChangeHold",
-                "RoundaboutLaneChangeHold"
-              ]
-            }
-          ]
-        },
-        {
-          "id": "LAB_CRUISE",
-          "ko": "크루즈·속도",
-          "en": "Cruise & Speed",
-          "zh": "巡航·速度",
-          "params": [
-            "AutoRoadSpeedOnEngage",
-            "PaddleSignalPriority",
-            "StopGoLongAssist"
-          ]
-        },
-        {
-          "id": "LAB_BVM",
-          "ko": "사각지대 카메라",
-          "en": "Blind-Spot Camera",
-          "zh": "盲区摄像头",
-          "params": [
-            "CanfdBvmView",
-            "CanfdBvmAltTime",
-            "CanfdBvmRaw"
-          ]
-        },
-        {
-          "id": "LAB_TEST",
-          "ko": "시험·진단",
-          "en": "Tests & Diagnostics",
-          "zh": "测试·诊断",
-          "params": [
-            "SpasSteerTest",
-            "SteerAngleTest",
-            "Ioniq9ClusterTest",
-            "ClusterLaneTest",
-            "ClusterLaneTestValue",
-            "ClusterLaneTestFrom",
-            "ClusterLaneTestTo"
-          ]
-        },
-        {
-          "id": "LAB_DEVICE",
-          "ko": "기기",
-          "en": "Device",
-          "zh": "设备",
-          "params": [
-            "ScreenOn",
-            "RadarCutInLoadShed"
           ]
         }
       ]
@@ -2396,15 +2397,15 @@
       "group": "Joongyu Lab",
       "name": "CanfdHazardTest",
       "title": "CANFD(0x1ea·SPAS2) 비상등",
-      "descr": "차 밖 비상등을 켜는 시험입니다(CAN-FD).\n2: 빠른 깜빡임(블루투스 리모컨 「빠른 비상등」 전용)\n주의: 투싼 HDA1 등 일부 차는 1도 빠르게 떨리듯 깜빡입니다.",
+      "descr": "차 밖 비상등을 켜는 시험입니다(CAN-FD).\n1: 켜기\n2: 빠른 깜빡임(블루투스 리모컨 「빠른 비상등」과 같음)\n주의: 투싼 HDA1 등 일부 차는 1도 빠르게 떨리듯 깜빡입니다.",
       "egroup": "Joongyu Lab",
       "etitle": "CANFD(0x1ea·SPAS2) Hazard lights",
-      "edescr": "Test that turns on the outside hazard lights (CAN-FD).\n2: Fast flash (Bluetooth remote \"Fast hazard flash\" only)\nCaution: on some cars such as the Tucson HDA1, 1 also flickers fast.",
+      "edescr": "Test that turns on the outside hazard lights (CAN-FD).\n1: On\n2: Fast flash (same as the Bluetooth remote \"Fast hazard flash\")\nCaution: on some cars such as the Tucson HDA1, 1 also flickers fast.",
       "cgroup": "Joongyu Lab",
       "ctitle": "CANFD(0x1ea·SPAS2) 危险警示灯",
-      "cdescr": "打开车外危险警示灯的测试(CAN-FD)。\n2: 快速闪烁(仅蓝牙遥控「快速危险警示灯」)\n注意: 途胜 HDA1 等部分车型 1 也会快速抖动闪烁。",
+      "cdescr": "打开车外危险警示灯的测试(CAN-FD)。\n1: 开启\n2: 快速闪烁(与蓝牙遥控「快速危险警示灯」相同)\n注意: 途胜 HDA1 等部分车型 1 也会快速抖动闪烁。",
       "min": 0,
-      "max": 1,
+      "max": 2,
       "default": 0,
       "unit": 1
     },
@@ -3573,13 +3574,13 @@
     {
       "group": "Joongyu Lab",
       "name": "CanfdBlinkerMenuTest",
-      "title": "CANFD(HDA2) Kick Turnlight 명령",
+      "title": "CANFD(HDA1·HDA2) Kick Turnlight 명령",
       "descr": "「Kick Turnlight 자동」이 이 차에서 되는지 미리 보는 시험입니다(CAN-FD).\n1: 왼쪽\n2: 오른쪽\n주의: 켜 둔 동안 주차보조·어라운드뷰가 멈출 수 있습니다. 끝나면 0으로 돌리세요.",
       "egroup": "Joongyu Lab",
-      "etitle": "CANFD(HDA2) Kick Turnlight command",
+      "etitle": "CANFD(HDA1·HDA2) Kick Turnlight command",
       "edescr": "Test to check in advance whether \"Kick Turnlight auto\" works on this car (CAN-FD).\n1: Left\n2: Right\nCaution: parking assist and surround view may stop while it is on. Set it back to 0 when done.",
       "cgroup": "Joongyu Lab",
-      "ctitle": "CANFD(HDA2) Kick Turnlight 命令",
+      "ctitle": "CANFD(HDA1·HDA2) Kick Turnlight 命令",
       "cdescr": "预先确认「Kick Turnlight 自动」在本车是否可用的测试(CAN-FD)。\n1: 左\n2: 右\n注意: 开启期间泊车辅助·全景影像可能停止。结束后请改回 0。",
       "min": 0,
       "max": 2,
@@ -3665,6 +3666,27 @@
       "max": 100,
       "default": 10,
       "unit": 1
+    },
+    {
+      "group": "Joongyu Lab",
+      "name": "CanfdBvmReverse",
+      "title": "후진 때 사각지대 카메라",
+      "descr": "후진(R)하면 계기판에 고른 쪽 사각지대 카메라를 띄웁니다. R에서 빼면 원래대로 돌아갑니다.\nCAN-FD 차 중 사각지대 카메라(BVM)가 있는 차. 바로 적용됩니다.\nR에서는 「계기판 사각지대 카메라 보기」보다 이 설정이 먼저입니다.",
+      "egroup": "Joongyu Lab",
+      "etitle": "Blind-spot camera in reverse",
+      "edescr": "In reverse (R) the cluster shows the chosen side's blind-spot camera. Leaving R returns to normal.\nCAN-FD cars with a blind-spot camera (BVM). Applies immediately.\nIn R this setting wins over \"Cluster Blind-Spot Camera View\".",
+      "cgroup": "Joongyu Lab",
+      "ctitle": "倒车时显示盲区摄像头",
+      "cdescr": "倒车(R)时在仪表盘显示所选一侧的盲区摄像头。离开 R 后恢复原状。\n带盲区摄像头(BVM)的 CAN-FD 车。立即生效。\n在 R 挡时本设置优先于「仪表盘盲区摄像头画面」。",
+      "min": 0,
+      "max": 2,
+      "default": 0,
+      "unit": 1,
+      "options": {
+        "ko": ["끔", "왼쪽", "오른쪽"],
+        "en": ["Off", "Left", "Right"],
+        "zh": ["关闭", "左", "右"]
+      }
     },
     {
       "group": "Joongyu Lab",

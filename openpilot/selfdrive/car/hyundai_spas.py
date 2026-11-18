@@ -264,6 +264,6 @@ class SpasSignals:
                         'available': healthy and not self.test_setting and (self.session.stock_ready(now) or self.session.state == 'active'),
                         'state': 'driver_override' if self.driver_override else 'ready' if self.session.state == 'active' else 'waiting'})
       self.feedback_at = now+.05
-    if self.test_request is not None and self.session.state in ('idle', 'failed') and now >= self.test_until:
+    if self.test_request is not None and self.session.state == 'idle' and now >= self.test_until:
       self.test_request = None
     return sends
