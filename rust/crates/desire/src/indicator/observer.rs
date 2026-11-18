@@ -3,7 +3,10 @@
 use super::{
     boundary::{BoundaryIndicator, QUIET_SEC},
     echo::TapEcho,
-    lane::{adjacent_lane, anticipated_lane, finite, following_road_curve, path_direction, Sample},
+    lane::{
+        adjacent_lane, anticipated_lane, boundary_approach, finite, following_road_curve,
+        path_direction, Sample,
+    },
     manual_turn::{ManualTurnIndicator, ManualTurnMovement},
 };
 use crate::types::{Car, Model};
@@ -28,6 +31,11 @@ pub struct Movement {
     crossed: bool,
     settled: Option<f64>,
     peak_angle: f64,
+    /// Bounded retreat before a lane reassignment (carrot 171f80bf7).
+    return_since: Option<f64>,
+    return_anchor: Option<(f64, f64)>,
+    /// `(start, anchor far line, peak far line)` of a boundary reassignment.
+    geometry_recovery: Option<(f64, f64, f64)>,
     pub reason: &'static str,
 }
 
@@ -45,6 +53,9 @@ impl Movement {
             crossed: false,
             settled: None,
             peak_angle: 0.,
+            return_since: None,
+            return_anchor: None,
+            geometry_recovery: None,
             reason: "active",
         })
     }
@@ -56,9 +67,13 @@ impl Movement {
         };
         let angle = car.steering_angle_deg;
         let turn = self.source == "model_turn";
-        if !finite(&[now, left, right, angle])
-            || (!turn && !(2.5 < right - left && right - left < 4.8))
-        {
+        let width = right - left;
+        let width_ok = if self.geometry_recovery.is_some() {
+            2. < width && width < 6.
+        } else {
+            2.5 < width && width < 4.8
+        };
+        if !finite(&[now, left, right, angle]) || (!turn && !width_ok) {
             self.reason = "geometry";
             return false;
         }
@@ -82,29 +97,107 @@ impl Movement {
             let withdrawn = probability.is_finite() && probability < 0.3;
             (self.peak_angle >= 30. || withdrawn) && angle.abs() <= 10. && car.v_ego > 1. / 3.6
         } else {
-            let selected = if self.direction == 1 { -left } else { right };
-            let old_selected = if self.direction == 1 {
-                -old_left
-            } else {
-                old_right
-            };
+            let left_side = self.direction == 1;
+            let selected = if left_side { -left } else { right };
+            let old_selected = if left_side { -old_left } else { old_right };
+            let far = if left_side { right } else { -left };
+            let old_far = if left_side { old_right } else { -old_left };
+            let sign = if left_side { 1. } else { -1. };
+            let driver_return =
+                car.steering_pressed && car.steering_torque * sign < 0. && angle * sign < 0.;
+            // One uncertain crossed boundary moving away while the opposite line
+            // continues the approach is a widening/reassignment, not a measured
+            // return (carrot 171f80bf7).
+            if self.geometry_recovery.is_none()
+                && self.source == "manual"
+                && !self.crossed
+                && now - self.started <= 0.35
+                && car.steering_pressed
+                && car.steering_torque * sign > 0.
+                && self.minimum < 1.2
+                && selected - self.minimum > 0.2
+                && far - old_far > 0.1
+                && model.lane_line_probs[usize::from(self.direction)] < 0.5
+                && !driver_return
+            {
+                self.geometry_recovery = Some((now, old_far, far));
+            }
+            if let Some((started, anchor_far, peak_far)) = self.geometry_recovery {
+                let peak_far = peak_far.max(far);
+                self.geometry_recovery = Some((started, anchor_far, peak_far));
+                if driver_return
+                    || now - started >= 3.
+                    || (now - started >= 0.25 && peak_far - anchor_far < 0.15)
+                {
+                    self.reason = if driver_return {
+                        "returned"
+                    } else {
+                        "geometry"
+                    };
+                    return false;
+                }
+                let centered = 2.5 < right - left
+                    && right - left < 4.8
+                    && left < -1.
+                    && right > 1.
+                    && model.lane_line_probs[1] >= 0.5
+                    && model.lane_line_probs[2] >= 0.5
+                    && (left - old_left).abs().max((right - old_right).abs()) < 0.08;
+                self.settled = if centered {
+                    Some(self.settled.unwrap_or(now))
+                } else {
+                    None
+                };
+                if self.settled.is_some_and(|since| now - since >= 0.4) {
+                    self.reason = "completed";
+                    return false;
+                }
+                return true;
+            }
             // A pair shifting one lane after reaching its edge is a completed
             // crossing; an arbitrary relabel far from the boundary is invalid.
-            let jump = (left - old_left).abs().max((right - old_right).abs()) > 0.5;
+            let (anchor_left, anchor_right) = self.return_anchor.unwrap_or((old_left, old_right));
+            let anchor_selected = if left_side {
+                -anchor_left
+            } else {
+                anchor_right
+            };
+            let jump = (left - anchor_left).abs().max((right - anchor_right).abs()) > 0.5;
             let relabel = jump
                 && self.minimum < 0.9
-                && selected - old_selected > 1.5
-                && ((left - old_left) - (right - old_right)).abs() < 0.5;
-            if jump && !relabel {
+                && selected - anchor_selected > 1.5
+                && ((left - anchor_left) - (right - anchor_right)).abs() < 0.5;
+            if jump && !relabel && self.return_anchor.is_none() {
                 self.reason = "relabel";
                 return false;
             }
             self.crossed |= selected <= 0. || relabel;
             self.minimum = self.minimum.min(selected);
             if !self.crossed && selected - self.minimum > 0.2 {
-                self.reason = "returned";
-                return false;
+                // A model boundary can retreat briefly before both lines are
+                // assigned to the next lane: keep the pre-retreat pair for that
+                // bounded rebase (carrot 171f80bf7).
+                if self.source != "manual"
+                    || driver_return
+                    || self.minimum >= 0.3
+                    || (self.return_since.is_none() && now - self.started > 0.35)
+                {
+                    self.reason = "returned";
+                    return false;
+                }
+                if self.return_since.is_none() {
+                    self.return_since = Some(now);
+                    self.return_anchor = Some((old_left, old_right));
+                }
+                if self.return_since.is_some_and(|since| now - since >= 0.15) {
+                    self.reason = "returned";
+                    return false;
+                }
+                self.settled = None;
+                return true;
             }
+            self.return_since = None;
+            self.return_anchor = None;
             self.crossed
                 && left < 0.
                 && 0. < right
@@ -306,6 +399,10 @@ pub struct ModelIndicator {
     manual_seen: f64,
     tap_echo: TapEcho,
     pub manual_turn: ManualTurnIndicator,
+    /// `(ended, required side)` after a recognized driver turn ended on an
+    /// opposite steer, so a consecutive turn can be followed (carrot 171f80bf7).
+    follow_turn: Option<(f64, u8)>,
+    follow_observer: ManualTurnIndicator,
 }
 
 impl Default for ModelIndicator {
@@ -321,6 +418,8 @@ impl Default for ModelIndicator {
             manual_seen: 0.,
             tap_echo: TapEcho::default(),
             manual_turn: ManualTurnIndicator::default(),
+            follow_turn: None,
+            follow_observer: ManualTurnIndicator::default(),
         }
     }
 }
@@ -340,6 +439,8 @@ impl ModelIndicator {
             && !(i.desire_enabled || i.path_enabled || i.manual_turn_enabled)
         {
             self.manual_turn.reset("disabled");
+            self.follow_turn = None;
+            self.follow_observer.reset("disabled");
             self.evidence.clear();
             self.previous = None;
             self.reason = "disabled";
@@ -380,10 +481,16 @@ impl ModelIndicator {
             let direction = manual.direction();
             let curve = following_road_curve(model, car.v_ego, i.yaw_rate);
             let allowed = i.manual_turn_enabled && common && !i.busy;
-            if let Some(turn) =
-                self.manual_turn
-                    .update(now, car, model.frame_id, i.yaw_rate, allowed, curve)
-            {
+            if let Some(turn) = self.manual_turn.update(
+                now,
+                car,
+                model.frame_id,
+                i.yaw_rate,
+                allowed,
+                curve,
+                true,
+                false,
+            ) {
                 if turn.direction == direction {
                     self.active = Some(Active::ManualTurn(turn));
                     promoted = true;
@@ -421,6 +528,12 @@ impl ModelIndicator {
                 } else {
                     "cancelled"
                 };
+                // Only an independently recognized manual turn ended by an
+                // opposite steer seeds its successor; a lane crossing or an
+                // input/lever cancellation cannot (carrot 171f80bf7).
+                self.follow_turn = (source == "manual_turn" && self.reason == "driver_opposite")
+                    .then(|| (now, 3 - a.direction()));
+                self.follow_observer.reset("previous_turn");
                 self.active = None;
             } else {
                 // Keep ownership throughout the hold, including a long turn.
@@ -449,22 +562,60 @@ impl ModelIndicator {
         // A new driver turn may be observed before other sources rearm; lamp
         // masking and the uninterrupted dark interval still apply.
         let manual_turn_after = isolation.block_until - QUIET_SEC + MANUAL_TURN_QUIET_SEC;
-        // Low-speed boundary relabels are common in parking areas; a manual
-        // turn uses steering and yaw independently of those lines.
-        let labels_ready = car.v_ego < 30. / 3.6 || now >= isolation.relabel_until;
-        let allowed = i.manual_turn_enabled
-            && common
-            && !i.busy
-            && !car.left_blinker
+        // Junction lane relabels must not erase the steering onset (carrot
+        // 569f3191e). Manual turns have independent torque, angle-growth, yaw
+        // and road-curve checks.
+        let turn_ready = !car.left_blinker
             && !car.right_blinker
             && now >= manual_turn_after
-            && labels_ready
             && isolation.dark_since.is_some_and(|since| now - since >= 1.);
+        if let Some((ended, required_side)) = self.follow_turn {
+            let direction = if !car.steering_pressed {
+                0
+            } else if car.steering_torque > 0. {
+                1
+            } else if car.steering_torque < 0. {
+                2
+            } else {
+                0
+            };
+            if !common
+                || i.busy
+                || !i.manual_turn_enabled
+                || car.v_ego < 10. / 3.6
+                || !(0. ..=3.).contains(&(now - ended))
+                || (required_side != 0 && direction != 0 && direction != required_side)
+            {
+                self.follow_turn = None;
+                self.follow_observer.reset("admission");
+            }
+        }
+        let allowed = i.manual_turn_enabled && common && !i.busy && turn_ready;
         let curve = i.manual_turn_enabled && following_road_curve(model, car.v_ego, i.yaw_rate);
-        if let Some(turn) =
-            self.manual_turn
-                .update(now, car, model.frame_id, i.yaw_rate, allowed, curve)
-        {
+        let turn = self.manual_turn.update(
+            now,
+            car,
+            model.frame_id,
+            i.yaw_rate,
+            allowed,
+            curve,
+            true,
+            false,
+        );
+        // Ordinary fresh-steering detection stays independent: expiry of the
+        // retained intent must never erase a turn it would recognize.
+        let follow = self.follow_observer.update(
+            now,
+            car,
+            model.frame_id,
+            i.yaw_rate,
+            self.follow_turn.is_some(),
+            curve,
+            turn_ready,
+            true,
+        );
+        if let Some(turn) = turn.or(follow) {
+            self.follow_turn = None;
             isolation.own(now, turn.direction);
             self.active = Some(Active::ManualTurn(turn));
             self.request_time = now;
@@ -559,7 +710,15 @@ impl ModelIndicator {
                     && probs[index] >= probs[0]
                     && probs[index] - opposite >= 0.3
                     && (index >= 3 || turn_motion)
-                    && (index < 3 || car.v_ego >= 30. / 3.6)
+                    // A lane-change desire also needs a measured approach
+                    // (carrot 569f3191e): no straight-road false indications.
+                    && (index < 3
+                        || (car.v_ego >= 30. / 3.6
+                            && boundary_approach(
+                                self.approach.make_contiguous(),
+                                direction,
+                                0.15,
+                            )))
                 {
                     candidate = Some((
                         direction,

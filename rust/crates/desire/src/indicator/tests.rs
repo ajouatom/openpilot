@@ -405,5 +405,7 @@ fn moderate_turn_and_low_speed_relabel() {
         assert!(!manual_turn(direction, "moderate_turn").is_empty());
     }
     assert!(!manual_turn(1, "slow_relabel").is_empty());
-    assert!(manual_turn(1, "fast_relabel").is_empty());
+    // carrot 569f3191e: a junction relabel no longer erases the steering onset
+    // at any speed (its Python test flipped the same assertion).
+    assert!(!manual_turn(1, "fast_relabel").is_empty());
 }

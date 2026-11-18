@@ -75,6 +75,8 @@ pub struct ManualTurnIndicator {
     confirmed_since: Option<f64>,
     pub candidate: Option<(u8, &'static str)>,
     pub reason: &'static str,
+    /// The last 0.25 s of steering angles (carrot 171f80bf7).
+    recent_angles: std::collections::VecDeque<(f64, f64)>,
 }
 
 impl Default for ManualTurnIndicator {
@@ -91,6 +93,7 @@ impl Default for ManualTurnIndicator {
             confirmed_since: None,
             candidate: None,
             reason: "idle",
+            recent_angles: std::collections::VecDeque::with_capacity(8),
         }
     }
 }
@@ -105,8 +108,12 @@ impl ManualTurnIndicator {
         self.confirmed_since = None;
         self.candidate = None;
         self.reason = reason;
+        self.recent_angles.clear();
     }
 
+    /// carrot `update(now, cs, frame, yaw_rate, *, allowed, following_curve,
+    /// emit_allowed, require_growth)`: the keyword arguments stay positional here.
+    #[allow(clippy::too_many_arguments)]
     pub fn update(
         &mut self,
         now: f64,
@@ -115,6 +122,10 @@ impl ManualTurnIndicator {
         yaw_rate: Option<f64>,
         allowed: bool,
         following_curve: bool,
+        // carrot 171f80bf7: a follow-up observer may track a turn before it is
+        // allowed to emit, and may require the angle still to be growing.
+        emit_allowed: bool,
+        require_growth: bool,
     ) -> Option<ManualTurnMovement> {
         self.candidate = None;
         let Some(yaw_rate) = yaw_rate.filter(|_| allowed) else {
@@ -175,6 +186,31 @@ impl ManualTurnIndicator {
             return None;
         }
         let sign = if self.intent == 1 { 1. } else { -1. };
+        let angle = car.steering_angle_deg;
+        self.recent_angles.push_back((now, angle));
+        while self
+            .recent_angles
+            .front()
+            .is_some_and(|(stamp, _)| now - stamp > 0.25)
+        {
+            self.recent_angles.pop_front();
+        }
+        if !emit_allowed {
+            // Bridge only the last quarter-second of the rearm boundary; reusing
+            // a whole completed sweep could indicate a later alignment motion
+            // (carrot 171f80bf7).
+            let lowest = self
+                .recent_angles
+                .iter()
+                .map(|(_, a)| a * sign)
+                .fold(f64::INFINITY, f64::min);
+            self.initial_angle = sign * (self.initial_angle * sign).max(lowest);
+        }
+        // A driver may relax the wheel, then resume the same turn after takeover:
+        // measure renewed growth from that admitted motion (carrot 9eb26059a).
+        if direction == self.intent && car.steering_angle_deg * sign < self.initial_angle * sign {
+            self.initial_angle = car.steering_angle_deg;
+        }
         // Pose z is positive for right rotation; Hyundai steering is positive left.
         let signed_yaw = -yaw_rate * sign;
         self.rotation += signed_yaw * dt;
@@ -189,15 +225,17 @@ impl ManualTurnIndicator {
             && car.steering_angle_deg * sign >= 42.
             && (car.steering_angle_deg - self.initial_angle) * sign >= 22.
             && signed_yaw >= 3f64.to_radians()
-            && self.rotation >= 1.5f64.to_radians();
+            && self.rotation >= 1.5f64.to_radians()
+            && (!require_growth || (direction == self.intent && (angle - previous.2) * sign > 0.));
         self.confirmed_since = if turn {
             Some(self.confirmed_since.unwrap_or(now))
         } else {
             None
         };
-        if self
-            .confirmed_since
-            .is_some_and(|since| now - since >= 0.10)
+        if emit_allowed
+            && self
+                .confirmed_since
+                .is_some_and(|since| now - since >= 0.10)
         {
             let movement = ManualTurnMovement::new(now, self.intent);
             self.reset("manual_turn");

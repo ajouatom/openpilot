@@ -214,9 +214,15 @@ impl BoundaryIndicator {
         let probs = [model.lane_line_probs[1], model.lane_line_probs[2]];
         if !finite(&[left, right, probs[0], probs[1], car.steering_torque])
             || !(left < 0. && 0. < right)
-            || !(2.5 < right - left && right - left < 4.8)
         {
             self.reset_geometry();
+            return Some(());
+        }
+        if !(2.5 < right - left && right - left < 4.8) {
+            // Invalid width cannot establish a new approach. An existing episode
+            // keeps its last sample, still bounded by the 150 ms continuity check
+            // (carrot 2b202df12).
+            self.lane_since = [None, None];
             return Some(());
         }
         for (i, probability) in probs.iter().enumerate() {
@@ -234,13 +240,24 @@ impl BoundaryIndicator {
             return Some(());
         }
         if (0..2).map(|i| (y[i] - prev_y[i]).abs()).fold(0., f64::max) > 0.4 {
+            let approaching = self.episode.as_ref().and_then(|episode| {
+                (now - episode.intent <= 0.5 && admission(car, model, episode.direction, now))
+                    .then_some(usize::from(episode.direction - 1))
+            });
+            // Ignore a brief jump of only the far boundary (carrot 569f3191e):
+            // keep the last accepted sample so its 150 ms age still bounds
+            // recovery, and do not emit here.
+            if approaching.is_some_and(|side| {
+                (prev_y[side] - y[side]).abs() <= 0.1
+                    && (prev_y[1 - side] - y[1 - side]).abs() > 0.4
+            }) {
+                self.previous = Some((frame, stamp, prev_y));
+                return Some(());
+            }
             // During an established driver approach both boundaries can advance
             // together as markings reappear beyond an intersection.
-            let paired_approach = self.episode.as_ref().is_some_and(|episode| {
-                let side = usize::from(episode.direction - 1);
-                now - episode.intent <= 0.5
-                    && admission(car, model, episode.direction, now)
-                    && 0. < prev_y[side] - y[side]
+            let paired_approach = approaching.is_some_and(|side| {
+                0. < prev_y[side] - y[side]
                     && prev_y[side] - y[side] <= 0.8
                     && ((y[0] + y[1]) - (prev_y[0] + prev_y[1])).abs() < 0.2
             });
