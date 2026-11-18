@@ -52,6 +52,7 @@ jobs:
         run: >-
           python -m pytest -q -c /dev/null --rootdir=. --confcutdir=openpilot/selfdrive/carrot/tests
           openpilot/selfdrive/carrot/tests/test_trajectory_cutin.py
+          openpilot/selfdrive/carrot/tests/test_radar_compute_reuse.py
           openpilot/selfdrive/carrot/tests/test_trajectory_cutout.py
           openpilot/selfdrive/carrot/tests/test_radar_motion_predictor.py
           openpilot/selfdrive/carrot/tests/test_radar_cutout_fast_path.py

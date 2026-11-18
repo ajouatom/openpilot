@@ -1,5 +1,20 @@
 # Repository memory
 
+- 2026-11-18: Owner replaces PR582 point shedding with equivalent computation
+  reuse. Decode vision association fields lazily once per lead per detector
+  update; retain original short-circuit reads, precise/normal gates and each
+  radar point's missing-speed fallback. Reuse unchanged paired-front motion
+  metrics and projection. No new setting, input filtering or history/policy
+  change. Baseline446fa79624 versus final code matches all11 controller outputs,
+  estimates, observations, aliases, continuity and timers on107full segments/
+  92routes/128086aligned inputs, both initial sensor preferences256172comparisons.
+  Python fallback8segments/9594inputs also exact. Two full-controller slowing
+  regressions fail on original PR582 and pass here. Local932native-backed and
+  860Python checks pass; desktop timing improves but is not a device latency or
+  commIssue cure measurement. Native/full CI and scheduled NAS deployment follow
+  publication. No vehicle writes. Private evidence
+  .analysis/scratch/2026-11-18-radar-compute/INDEX.md.
+
 - 2026-11-18: Indicator continuity replay now covers467 retained full segments/
   60routes/523934aligned inputs. Bound early manual near-edge retreat by150ms
   paired-rebase memory; uncertain near-line retreat requires same-side torque,
