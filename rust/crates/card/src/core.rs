@@ -165,6 +165,11 @@ pub trait Vehicle {
     fn speedcam_gas_tok_consumed(&self) -> bool {
         false
     }
+    /// Stock SCC set speed (km/h) while a restart hand-over waits (carrot
+    /// PR580 `stock_adopt_kph`); 0 = nothing to adopt.
+    fn stock_adopt_kph(&self) -> f64 {
+        0.
+    }
     fn update(&mut self, packets: &[Packet], now_ns: u64) -> Result<Message, Error>;
     fn init(&mut self, io: &mut impl StartupIo) -> Result<(), Error>;
     fn apply(&mut self, input: ApplyInput<'_>) -> Result<ApplyOutput, Error>;
@@ -176,6 +181,7 @@ pub trait StateTail {
         0.
     }
     fn set_speedcam_gas_tok_consumed(&mut self, _consumed: bool) {}
+    fn set_stock_adopt_kph(&mut self, _kph: f64) {}
     fn take_prints(&mut self) -> Vec<String> {
         Vec::new()
     }

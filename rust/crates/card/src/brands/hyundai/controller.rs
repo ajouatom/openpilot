@@ -30,8 +30,10 @@ pub struct Controller {
     pub jerk: HyundaiJerk,
     pub lateral: LeadLateralFilter,
     pub blink_hold: super::blink_hold::BlinkHold,
-    /// carrot `create_ccnc_messages._camera_sync` (PR580).
-    pub camera_sync: super::camera_sync::CameraSync,
+    /// carrot `create_ccnc_messages` state (PR580: camera sync, CCNC display).
+    pub cluster: super::canfd_cluster::ClusterState,
+    /// CcncClusterDisplay / CcncTrafficBackground, read every second.
+    pub ccnc_keys: (bool, bool),
     pub stopping: Option<CanfdStopping>,
     pub accel_last: f64,
     pub value_last: f64,
@@ -62,7 +64,8 @@ impl Controller {
             jerk: HyundaiJerk::default(),
             lateral: LeadLateralFilter::default(),
             blink_hold: super::blink_hold::BlinkHold::default(),
-            camera_sync: super::camera_sync::CameraSync::default(),
+            cluster: super::canfd_cluster::ClusterState::default(),
+            ccnc_keys: (false, false),
             stopping: if state.config.flags & f::CANFD != 0 && state.config.longitudinal {
                 Some(CanfdStopping::default())
             } else {
@@ -192,6 +195,9 @@ impl Controller {
             }
         }
         if state.config.flags & f::CANFD != 0 {
+            if cc.get_enabled() && self.frame.is_multiple_of(2) {
+                state.stock_adopt.engaged();
+            }
             can.extend(super::controller_fd::messages(
                 self,
                 (cc, state),

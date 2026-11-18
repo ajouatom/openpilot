@@ -67,6 +67,10 @@ pub struct State {
     pub cruise_buttons: VecDeque<u8>,
     pub main_buttons: VecDeque<u8>,
     pub paddle: u8,
+    /// Frames a released paddle still counts as held (carrot `paddle_hold_frames`).
+    pub paddle_hold: u8,
+    /// carrot PR580 restart hand-over (`_update_stock_adopt`).
+    pub stock_adopt: super::stock_adopt::StockAdopt,
     pub buttons_counter: f64,
     pub main_mode: bool,
     pub acc_mode: f64,
@@ -138,6 +142,11 @@ impl State {
         out.init_root::<car_state::Builder>();
         let navigation_config =
             super::navigation::policy::Config::read(&settings, &mut navigation.camera_policy)?;
+        let stock_adopt = super::stock_adopt::StockAdopt::new(
+            config.flags & f::CANFD != 0
+                && config.flags & f::CAMERA_SCC != 0
+                && config.longitudinal,
+        );
         Ok(Self {
             config,
             settings,
@@ -170,6 +179,8 @@ impl State {
             cruise_buttons: VecDeque::from([0; 8]),
             main_buttons: VecDeque::from([0; 8]),
             paddle: 0,
+            paddle_hold: 0,
+            stock_adopt,
             buttons_counter: 0.,
             main_mode: false,
             acc_mode: 0.,

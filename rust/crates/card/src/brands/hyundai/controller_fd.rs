@@ -117,6 +117,10 @@ pub fn messages(
         c.jerk(input, command)?;
         if c.frame.is_multiple_of(100) {
             c.lane_check = super::parameters::setting_int(&state.settings, "LaneLineCheck")?;
+            c.ccnc_keys = (
+                super::parameters::setting_int(&state.settings, "CcncClusterDisplay")? > 0,
+                super::parameters::setting_int(&state.settings, "CcncTrafficBackground")? > 0,
+            );
         }
         let cs = state.out.get_root_as_reader::<car_state::Reader<'_>>()?;
         let blink_hold = if c.frame.is_multiple_of(5) && captures.get("adrv_0x1ea").is_some() {
@@ -145,7 +149,7 @@ pub fn messages(
             flags: config.flags,
             hud: controller_hud::input(
                 (cc, state, model),
-                (&c.settings, command, c.frame, c.lane_check),
+                (&c.settings, command, c.frame, c.lane_check, c.ccnc_keys),
             )?,
             main_mode: state.main_mode,
             acc_mode: state.acc_mode,
@@ -179,7 +183,7 @@ pub fn messages(
         };
         result.extend(canfd_cluster::messages(
             &mut c.writer,
-            &mut c.camera_sync,
+            &mut c.cluster,
             &cluster,
             &source,
         )?);
@@ -212,7 +216,11 @@ pub fn messages(
                 drive: cs.get_gear_shifter()? == car_state::GearShifter::Drive,
                 available: cruise.get_available(),
                 standstill: cs.get_standstill(),
-                paddle: state.paddle,
+                paddle: if state.paddle_hold > 0 {
+                    state.paddle.max(1)
+                } else {
+                    state.paddle
+                },
                 soft_hold: state.soft_hold != 0,
                 scc_hold: state.scc_hold,
             };
@@ -235,11 +243,15 @@ pub fn messages(
                 has_lead: model.leads.iter().any(|lead| lead.status),
             };
             if camera {
-                let (frame, value) =
-                    canfd_acc::camera_acc(&mut c.writer, &scc, c.stopping.as_mut(), &i)?;
-                c.value_last = value;
-                if let Some(frame) = frame {
-                    result.push(frame);
+                // Restart hand-over (stock_adopt): send nothing, so panda
+                // keeps forwarding the camera's cruising SCC until we engage.
+                if !state.stock_adopt.pending {
+                    let (frame, value) =
+                        canfd_acc::camera_acc(&mut c.writer, &scc, c.stopping.as_mut(), &i)?;
+                    c.value_last = value;
+                    if let Some(frame) = frame {
+                        result.push(frame);
+                    }
                 }
                 result.extend(canfd_maintenance::tcs(
                     &mut c.writer,

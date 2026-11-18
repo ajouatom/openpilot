@@ -47,6 +47,8 @@ pub struct Controls {
     pub lateral_startup: openpilot_control_policy::lateral_readiness::Gate,
     pub lateral_started: bool,
     pub lane_lines: bool,
+    /// carrot PR580 `lat_err_frames`: angle error above 3 deg in a row.
+    pub lat_err_frames: u32,
     /// LanelessCentering's state (see `centering.rs`).
     pub centering: Centering,
     pub turn_speed: i32,
@@ -104,6 +106,7 @@ impl Controls {
             lateral_startup: Default::default(),
             lateral_started: false,
             lane_lines: false,
+            lat_err_frames: 0,
             centering: Centering::default(),
             turn_speed,
             calibration: [0.; 3],

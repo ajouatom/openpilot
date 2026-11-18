@@ -43,6 +43,8 @@ pub struct Selfdrive {
     pub soft_disabling: bool,
     pub personality: u16,
     pub visual_alert: u16,
+    /// `alertType` ("eventName/eventType"), for the CCNC cluster texts.
+    pub alert_type: String,
 }
 #[derive(Default)]
 pub struct Model {
@@ -83,6 +85,9 @@ pub struct LongPlan {
     pub cruise_source: bool,
     pub fcw: bool,
     pub cruise_target: f64,
+    /// `trafficState` (0 off, 1 red, 2 green) and `desiredDistance` (m).
+    pub traffic_state: i32,
+    pub desired_distance: f64,
 }
 #[derive(Default)]
 pub struct LateralPlan {

@@ -149,6 +149,12 @@ pub fn decode_with_model(state: &State, now: f64, model: Model) -> Result<Inputs
             == Ok(log_capnp::selfdrive_state::OpenpilotState::SoftDisabling),
         personality: ordinal(driving.get_personality()),
         visual_alert: ordinal(driving.get_alert_hud_visual()),
+        alert_type: driving
+            .get_alert_type()
+            .ok()
+            .and_then(|text| text.to_str().ok())
+            .unwrap_or_default()
+            .to_owned(),
     };
     let plan = service!(state, "longitudinalPlan", LongitudinalPlan);
     let longitudinal = LongPlan {
@@ -165,6 +171,8 @@ pub fn decode_with_model(state: &State, now: f64, model: Model) -> Result<Inputs
             == Ok(log_capnp::longitudinal_plan::LongitudinalPlanSource::Cruise),
         fcw: plan.get_fcw(),
         cruise_target: f64::from(plan.get_cruise_target()),
+        traffic_state: plan.get_traffic_state(),
+        desired_distance: f64::from(plan.get_desired_distance()),
     };
     let lateral = service!(state, "lateralPlan", LateralPlan);
     let lateral = LateralPlan {

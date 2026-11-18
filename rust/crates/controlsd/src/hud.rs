@@ -58,6 +58,13 @@ pub(crate) fn write(
     );
     hud.set_visual_alert(input.selfdrive.visual_alert.try_into()?);
     hud.set_driver_monitoring_alert(input.driver_monitoring_alert);
+    // Read only by the Hyundai CAN-FD CCNC cluster (CcncClusterDisplay /
+    // CcncTrafficBackground): traffic-light background, lane highlight,
+    // target ring at the kept gap, and stock texts for openpilot alerts.
+    hud.set_traffic_state(i16::try_from(input.longitudinal.traffic_state).unwrap_or_default());
+    hud.set_lat_hud_state(lat_hud_state(controls, command));
+    hud.set_desired_distance(input.longitudinal.desired_distance as f32);
+    hud.set_alert_type(input.selfdrive.alert_type.as_str());
     let lead = &input.radar.lead;
     hud.set_lead_distance(if lead.status {
         lead.distance as f32
@@ -107,6 +114,34 @@ pub(crate) fn write(
     }
     Ok(())
 }
+/// carrot controlsd `lat_hud_state`: 0 lat off, 1 laneless, 2 lane mode,
+/// 3 angle error over the 3 deg saturation threshold for 0.3 s, 4 saturated.
+fn lat_hud_state(controls: &mut Controls, command: &Command) -> u8 {
+    let log = &command.log;
+    // Only the angle and PID states carry steering angles.
+    let error = if controls.lateral.torque.is_some() && !controls.config.angle {
+        0.
+    } else {
+        (log.desired - log.angle).abs()
+    };
+    controls.lat_err_frames = if command.lateral && error > 3. {
+        controls.lat_err_frames.saturating_add(1)
+    } else {
+        0
+    };
+    if !command.lateral {
+        0
+    } else if log.saturated {
+        4
+    } else if controls.lat_err_frames >= 30 {
+        3
+    } else if controls.lane_lines {
+        2
+    } else {
+        1
+    }
+}
+
 fn navigation(
     controls: &mut Controls,
     input: &Inputs,

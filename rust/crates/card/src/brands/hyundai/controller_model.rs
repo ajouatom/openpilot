@@ -12,6 +12,8 @@ pub struct Model {
     pub changing: u8,
     pub desire: u16,
     pub lane_pair: Option<[f64; 2]>,
+    /// laneLineProbs[1], [2] (CcncClusterDisplay).
+    pub lane_probs: Option<[f64; 2]>,
     pub blinker_hold: u8,
 }
 
@@ -47,6 +49,10 @@ impl Model {
                 if !left.is_empty() && !right.is_empty() {
                     ret.lane_pair = Some([f64::from(left.get(0)), f64::from(right.get(0))]);
                 }
+            }
+            let probs = model.get_lane_line_probs()?;
+            if probs.len() >= 3 {
+                ret.lane_probs = Some([f64::from(probs.get(1)), f64::from(probs.get(2))]);
             }
             let desire = meta.get_desire_state()?;
             if desire.len() > 4 {

@@ -22,6 +22,13 @@ pub struct ClusterMessages<'a> {
     pub scc: Option<&'a Values>,
 }
 
+/// Cluster state carrot keeps on `create_ccnc_messages`.
+#[derive(Default)]
+pub struct ClusterState {
+    pub sync: CameraSync,
+    pub display: super::ccnc_display::CcncDisplay,
+}
+
 pub struct ClusterInput<'a> {
     pub bus: CanBus,
     pub flags: u32,
@@ -62,7 +69,7 @@ pub use super::cluster_buttons::alt2_request;
 
 pub fn messages(
     writer: &mut CanWriter,
-    sync: &mut CameraSync,
+    state: &mut ClusterState,
     i: &ClusterInput<'_>,
     source: &ClusterMessages<'_>,
 ) -> Result<Vec<Frame>, Error> {
@@ -97,7 +104,7 @@ pub fn messages(
                     .unwrap_or(0.)
                     != 0.;
             data.insert("NORMAL_CRUISE_MAIN_BTN".into(), 0.);
-            sync.note_driver(frame, driver_pressed);
+            state.sync.note_driver(frame, driver_pressed);
             if keep_stock_scc_main(i, source)
                 && !i.hud.enabled
                 && !i.main_mode
@@ -129,7 +136,7 @@ pub fn messages(
                 } else if let Some(button) = source
                     .scc
                     .map(|scc| {
-                        Ok::<_, Error>(sync.button(
+                        Ok::<_, Error>(state.sync.button(
                             &SyncInput {
                                 camera_set: get(scc, "VSetDis")?,
                                 camera_gap: get(scc, "DISTANCE_SETTING")?,
@@ -166,7 +173,7 @@ pub fn messages(
         if let Some(original) = source.adrv161 {
             let mut data = original.clone();
             let counter = remove_counter(&mut data)?;
-            cluster_hud::hud(&mut data, &i.hud)?;
+            cluster_hud::hud(&mut data, &i.hud, &mut state.display)?;
             result.push(writer.frame("ADRV_0x161", i.bus.ecan, &data, counter)?);
         }
         if let Some(original) = source.adrv200 {
@@ -216,7 +223,17 @@ pub fn messages(
             if i.debug > 0 {
                 set(&mut data, &[("FAULT_LSS", 0.), ("FAULT_DAS", 0.)]);
             }
-            result.push(writer.frame("CCNC_0x162", i.bus.ecan, &data, counter)?);
+            let mut message = writer.frame("CCNC_0x162", i.bus.ecan, &data, counter)?;
+            // CcncClusterDisplay: HDP icon while cruise or steering is engaged;
+            // bit 188 has no DBC name, so checked clusters only.
+            if i.hud.ccnc.display && i.hud.ccnc.non_dbc_car && (i.hud.enabled || i.hud.active) {
+                super::ccnc_display::set_raw_bits(
+                    &mut message,
+                    &[super::ccnc_display::HDP_ICON_BIT],
+                    1,
+                );
+            }
+            result.push(message);
         }
     }
     if i.corner_radar > 0 && hda == 0. {

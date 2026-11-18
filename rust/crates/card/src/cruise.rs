@@ -218,6 +218,22 @@ impl CruiseCarrot {
                 self.s._lat_enabled = true;
                 speed = Number::int(self.s.v_ego_kph_set);
             }
+            // carrot PR580 `_adopt_stock_cruise`: the device restarted while
+            // the camera's stock SCC cruised; take it over at the stock set
+            // speed. Interlocks and the cancel latch still apply; re-request
+            // every 0.5 s since engage needs a rising edge.
+            if self.s.stock_adopt_kph > 0. && !cc.get_enabled() {
+                if self.s.frame.is_multiple_of(50) {
+                    self.control(
+                        1,
+                        pedals::CancelTimer::Bypass,
+                        "Cruise on (stock SCC)",
+                        false,
+                        true,
+                    );
+                }
+                speed = Number::float(self.s.stock_adopt_kph);
+            }
             if !self.pcm_cruise {
                 self.s.v_cruise_kph =
                     speed.clip(self.s._cruise_speed_min, self.s._cruise_speed_max);
@@ -358,6 +374,9 @@ impl StateTail for CruiseCarrot {
     }
     fn set_speedcam_gas_tok_consumed(&mut self, consumed: bool) {
         self.s.speedcam_gas_tok_consumed = consumed;
+    }
+    fn set_stock_adopt_kph(&mut self, kph: f64) {
+        self.s.stock_adopt_kph = kph;
     }
     fn update(
         &mut self,

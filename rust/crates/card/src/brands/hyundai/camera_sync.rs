@@ -161,11 +161,7 @@ impl CameraSync {
         }
         let recent = now - self.last_frame <= SWITCH_FRAMES;
         if !(recent && self.last_button == GAP_DIST) {
-            let unit = if i.metric {
-                1.
-            } else {
-                1. / 1.609_344
-            };
+            let unit = if i.metric { 1. } else { 1. / 1.609_344 };
             let button = self.speed.button(
                 i.set_kph * unit,
                 i.camera_set,

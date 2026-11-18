@@ -76,6 +76,7 @@ impl Card {
         }
         let tail_now = io.now();
         tail.set_speedcam_gas_tok_consumed(vehicle.speedcam_gas_tok_consumed());
+        tail.set_stock_adopt_kph(vehicle.stock_adopt_kph());
         tail.update(state.reborrow(), io.subscribers(), self.metric, tail_now)?;
         for (key, bytes) in tail.take_param_writes() {
             io.put_nonblocking(&key, &bytes)?;

@@ -20,6 +20,13 @@ impl Vehicle for Interface {
             false
         }
     }
+    fn stock_adopt_kph(&self) -> f64 {
+        if let Self::Hyundai(vehicle) = self {
+            vehicle.state.stock_adopt.kph
+        } else {
+            0.
+        }
+    }
     fn take_param_writes(&mut self) -> Vec<(String, Vec<u8>)> {
         if let Self::Gm(vehicle) = self {
             vehicle.take_param_writes()

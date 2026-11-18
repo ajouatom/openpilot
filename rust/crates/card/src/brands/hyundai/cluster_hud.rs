@@ -1,4 +1,5 @@
 use super::{
+    ccnc_display::{self, CcncDisplay, CcncInput, LANE_LINE_UNSEEN},
     cluster_fields,
     wire::{set, Values},
     Error,
@@ -32,14 +33,26 @@ pub struct HudInput {
     pub blindspot: [bool; 2],
     pub blinker: [bool; 2],
     pub desire: u16,
+    pub standstill: bool,
+    /// CcncClusterDisplay / CcncTrafficBackground inputs (carrot PR580).
+    pub ccnc: CcncInput,
 }
 
-pub fn hud(data: &mut Values, i: &HudInput) -> Result<(), Error> {
+pub fn hud(data: &mut Values, i: &HudInput, display: &mut CcncDisplay) -> Result<(), Error> {
     let stock = data.clone();
     let hdp = match i.hdp_use {
         1 => i.enabled && i.nav_active,
         2 => i.enabled,
         _ => false,
+    };
+    let ccnc = &i.ccnc;
+    // Steering pauses at standstill; keep the steering/lane-change icons as if
+    // it were active.
+    let lat_icon = i.active || (i.enabled && i.lat_enabled && i.standstill);
+    let traffic_state = if ccnc.traffic_background {
+        display.traffic_state(ccnc.traffic_state, i.frame)
+    } else {
+        0
     };
     set(
         data,
@@ -73,13 +86,14 @@ pub fn hud(data: &mut Values, i: &HudInput) -> Result<(), Error> {
                 },
             ),
             ("vSetDis", (i.set_speed + 0.5).trunc()),
-            ("DISTANCE", if hdp { 4. } else { i.gap }),
+            // Real gap bars under the HDP colors too.
+            ("DISTANCE", i.gap),
             (
                 "DISTANCE_LEAD",
                 if i.lead_visible {
                     if i.enabled {
                         2.
-                    } else if i.main_enabled {
+                    } else if i.main_enabled || ccnc.display {
                         1.
                     } else {
                         0.
@@ -102,7 +116,10 @@ pub fn hud(data: &mut Values, i: &HudInput) -> Result<(), Error> {
             ),
             (
                 "DISTANCE_SPACING",
-                if hdp {
+                if hdp && i.gap != 4. {
+                    // HDP spacing style for gaps 1-3.
+                    3.
+                } else if hdp {
                     5.
                 } else if i.enabled {
                     1.
@@ -110,17 +127,17 @@ pub fn hud(data: &mut Values, i: &HudInput) -> Result<(), Error> {
                     0.
                 },
             ),
-            ("TARGET", if i.lead_visible && i.enabled { 1. } else { 0. }),
-            ("TARGET_DISTANCE", i.lead_distance),
             (
                 "BACKGROUND",
-                background(
-                    i.enabled,
-                    i.active,
-                    i.paddle,
-                    i.paddle_mode,
-                    [1, 2].contains(&i.desire),
-                ),
+                ccnc_display::traffic_background(traffic_state).unwrap_or_else(|| {
+                    background(
+                        i.enabled,
+                        i.active,
+                        i.paddle,
+                        i.paddle_mode,
+                        [1, 2].contains(&i.desire),
+                    )
+                }),
             ),
             ("CENTERLINE", if i.hda_mode > 0. { 1. } else { 0. }),
             (
@@ -163,7 +180,7 @@ pub fn hud(data: &mut Values, i: &HudInput) -> Result<(), Error> {
                 "LFA_ICON",
                 if hdp {
                     5.
-                } else if i.active {
+                } else if lat_icon {
                     2.
                 } else if i.lat_enabled {
                     1.
@@ -173,7 +190,7 @@ pub fn hud(data: &mut Values, i: &HudInput) -> Result<(), Error> {
             ),
             (
                 "LKA_ICON",
-                if i.active {
+                if lat_icon {
                     4.
                 } else if i.lat_enabled {
                     3.
@@ -184,8 +201,53 @@ pub fn hud(data: &mut Values, i: &HudInput) -> Result<(), Error> {
             ("FCA_ALT_ICON", 0.),
         ],
     );
+    if ccnc.display {
+        // Blue when engaged, white otherwise; the ring marks the gap
+        // openpilot keeps while engaged, else the stock value stays.
+        data.insert(
+            "TARGET".into(),
+            if i.lead_visible {
+                if i.enabled {
+                    1.
+                } else {
+                    3.
+                }
+            } else {
+                0.
+            },
+        );
+        if i.enabled && ccnc.desired_distance > 0. {
+            data.insert(
+                "TARGET_DISTANCE".into(),
+                ccnc.desired_distance.clamp(0.1, 204.5),
+            );
+        }
+    } else {
+        data.insert(
+            "TARGET".into(),
+            if i.lead_visible && i.enabled { 1. } else { 0. },
+        );
+        data.insert("TARGET_DISTANCE".into(), i.lead_distance);
+    }
     cluster_fields::hide_alerts(data, true, i.soft_hold, i.trailer)?;
+    if ccnc.display {
+        display.alerts(data, ccnc, i.enabled, i.frame)?;
+    }
+    display.gap_popup(data, hdp, i.gap, i.frame)?;
     cluster_fields::driver_monitoring_alert(data, i.dm_alert, &stock)?;
+    // An unseen line is drawn as nothing (14), a dashed camera line dashed.
+    let lane_display = ccnc.display && !ccnc.lane_wip_car;
+    let mut seen = i.lane_visible;
+    if lane_display {
+        for (index, seen) in seen.iter_mut().enumerate() {
+            // Hide only when both miss: the model drops all lines for 2-3 s
+            // mid lane change, the camera drops them in 26% of stops.
+            let unseen = ccnc
+                .lane_probs
+                .is_some_and(|probs| display.lane_unseen(index, probs[index], i.frame));
+            *seen = *seen && (!unseen || i.lane_lines[index].div_euclid(10) > 0);
+        }
+    }
     cluster_fields::lane_lines(data, (i.steering_angle, i.active, 0));
     for (side, index) in [("LEFT", 0), ("RIGHT", 1)] {
         let color = if i.change_available[index] { 6. } else { 2. };
@@ -211,6 +273,13 @@ pub fn hud(data: &mut Values, i: &HudInput) -> Result<(), Error> {
             } else {
                 1.
             }
+        } else if lane_display {
+            // An orange warning line stays.
+            if seen[index] || color == 4. {
+                ccnc_display::dashed_lane_line(color, i.lane_lines[index], ccnc.non_dbc_car)
+            } else {
+                LANE_LINE_UNSEEN
+            }
         } else if i.lane_visible[index] {
             color
         } else {
@@ -226,7 +295,7 @@ pub fn hud(data: &mut Values, i: &HudInput) -> Result<(), Error> {
         );
         data.insert(
             std::sync::Arc::<str>::from(format!("LCA_{side}_ICON")),
-            if i.active {
+            if lat_icon {
                 if i.trailer || i.blindspot[index] {
                     1.
                 } else {
@@ -245,6 +314,9 @@ pub fn hud(data: &mut Values, i: &HudInput) -> Result<(), Error> {
             std::sync::Arc::<str>::from(format!("LANE_{side}")),
             if !i.trailer && desire { 1. } else { 0. },
         );
+    }
+    if ccnc.display {
+        ccnc_display::highlight(data, ccnc.lat_hud, i.desire)?;
     }
     Ok(())
 }
