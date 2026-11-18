@@ -48,6 +48,10 @@ pub(super) struct CruiseState {
     pub _v_cruise_kph_at_brake: Number,
     pub cruise_state_available_last: bool,
     pub _paddle_decel_active: bool,
+    /// PaddleMode 2: set speed to restore after a rolling hand-off to a stop
+    /// (0 = none) and frames without a stop request since (carrot PR580).
+    pub _paddle_resume_kph: f64,
+    pub _paddle_resume_cnt: u32,
     pub carrot_cruise_active: bool,
     #[serde(rename = "xState")]
     pub x_state: i32,
@@ -154,6 +158,8 @@ impl CruiseState {
             _v_cruise_kph_at_brake: Number::int(0.),
             cruise_state_available_last: false,
             _paddle_decel_active: false,
+            _paddle_resume_kph: 0.,
+            _paddle_resume_cnt: 0,
             carrot_cruise_active: false,
             x_state: 0,
             traffic_state: 0,

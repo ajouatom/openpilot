@@ -320,6 +320,7 @@ impl CruiseCarrot {
         .contains(&button)
         {
             self.s._paddle_decel_active = false;
+            self.s._paddle_resume_kph = 0.;
             if self.s.auto_cruise_control_cancel_timer > 0 {
                 self.add_log(&format!(
                     "AutoCruiseControl cancel timer RESET {}",
