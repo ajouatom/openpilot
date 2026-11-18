@@ -1152,7 +1152,14 @@ def get_onnx_ops() -> dict[str, types.FunctionType|dict[OpSetId, types.FunctionT
       indices_shape = () if isinstance(indices, int) else (len(indices_list),)
       ret_shape = x.shape[:axis] + indices_shape + x.shape[axis+1:]
       index_consts = [x.shape[axis]+i if i<0 else i for i in indices_list]
-      args = [[(0,s) if j != axis else (i,i+1) for j, s in enumerate(x.shape)] for i in index_consts]
+      # Keep consecutive selections as slices instead of expanding every row
+      # into a separate padded cat input. Overlapping history windows otherwise
+      # produce an oversized QCOM shader (225 rows in Cheddar's desire Gather).
+      runs: list[tuple[int, int]] = []
+      for i in index_consts:
+        if runs and runs[-1][1] == i: runs[-1] = (runs[-1][0], i+1)
+        else: runs.append((i, i+1))
+      args = [[(0,s) if j != axis else run for j, s in enumerate(x.shape)] for run in runs]
       return x.shrink(arg=tuple(args[0])).cat(*[x.shrink(arg=tuple(arg)) for arg in args[1:]], dim=axis).reshape(ret_shape)
     return x[tuple([slice(None) if i != axis else indices for i in range(x.ndim)])]
   def Scatter(*args, **kwargs): return ScatterElements(*args, **kwargs) # deprecated

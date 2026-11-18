@@ -2,7 +2,7 @@
 
 ## Decision
 
-Hold the internal-model replacement. The current compilation entry point rejects the Cheddar input contract. An isolated adapter reaches the installed QCOM backend, but the first native attempt fails during kernel preparation and trial execution. Cheddar has no valid steady-state latency measurement from this review.
+Apply the constant-Gather compilation fix, but hold the internal-model replacement. The GPU preparation failure is now reproduced and corrected on the installed tinygrad. Cheddar also runs with its exact upstream tinygrad/compiler pair. The current production entry point still needs stateful integration, and the tested upstream image-transfer/warp/policy path has less deadline margin than CD210. The model file, selection catalog and isolated external runtime pins remain unchanged.
 
 ## Artifacts
 
@@ -31,11 +31,11 @@ Cheddar receives `new_img`, a current `desire`, and three recurrent state inputs
 
 Calling the current production `get_policy_npy_shapes()` with Cheddar metadata reproduces `KeyError: 'desire_pulse'`. The current warp queue builder also requires `img`. Runtime vision-stream naming, state feedback, reset, standby warmup, and recovery must accommodate the new contract before installation.
 
-Both files pass the ONNX checker. An isolated ONNX Runtime CPU sequence runs 140 frames per model with recurrent feedback and finite outputs. Frames 0, 4, 39, and 139 pass the production `Parser`, `fill_model_msg`, and real cereal serialization. This verifies prediction layout compatibility. The native Cheddar execution failed before numerical comparison against the CPU reference was possible.
+Both files pass the ONNX checker. An isolated ONNX Runtime CPU sequence runs 140 frames per model with recurrent feedback and finite outputs. Frames 0, 4, 39, and 139 pass the production `Parser`, `fill_model_msg`, and real cereal serialization. This verifies prediction layout compatibility. The initial native attempt failed before numerical comparison; the follow-up below supplies successful native results.
 
 Cheddar includes direct lateral-acceleration and acceleration outputs. The current action consumer already supports that path for other models. CD210 derives actions from the predicted plan, so changing the internal model also changes the action source.
 
-## Native timing and failure
+## Initial native timing and failure
 
 The owner's TICI device was reachable and reported offroad throughout testing. Tests used its installed code `b5df7d4d3` and tinygrad tree `2c7501785916e365318c31976d4aef5b6e44a332`, which matches the reviewed workspace runtime tree. Online CPUs were 0–3. The observed GPU clock was 675 MHz, with a reported ceiling of 710 MHz.
 
@@ -49,12 +49,43 @@ The benchmark uses fixed prewarped images, recurrent updates, and synchronous pr
 | Cheddar | Unavailable | Unavailable | Unavailable | Unavailable | Unavailable |
 | CD210 after Cheddar failure | 25.25 ms | 25.15 ms | 29.03 ms | 35.02 ms | 0 / 140 |
 
-The temporary Cheddar adapter executes the official ONNX graph and feeds its next-state outputs back into device buffers. It fails on its first call while realizing the graph, before recurrent-state assignment and before a completed warmup call. The retained traceback reaches `compile_linear`, then `optimize_local_size`, and reports `AssertionError: all optimize_local_size exec failed`. QCOM synchronization reports a 30,000 ms wait timeout, with expected signal 7181 and observed 7180. This timeout is a kernel-preparation failure and provides no steady-state inference-time value. The underlying kernel/driver cause remains unresolved.
+The temporary Cheddar adapter executes the official ONNX graph and feeds its next-state outputs back into device buffers. It fails on its first call while realizing the graph, before recurrent-state assignment and before a completed warmup call. The retained traceback reaches `compile_linear`, then `optimize_local_size`, and reports `AssertionError: all optimize_local_size exec failed`. QCOM synchronization reports a 30,000 ms wait timeout, with expected signal 7181 and observed 7180. This timeout is a kernel-preparation failure and provides no steady-state inference-time value. The underlying cause was unresolved at this stage; see the follow-up.
 
 A bounded diagnostic retry retained a log and reached its 150-second process limit during preparation (exit 124). It did not produce a completed inference or a second independently reproduced kernel failure. The first attempt's tool output truncated repetitive cleanup exceptions, so the private evidence explicitly identifies its retained traceback as a summary.
 
 The failure-after-CD210 sequence and successful subsequent CD210 run establish that this candidate does not pass the installed execution path. They do not establish that Cheddar fails with every tinygrad version or on every comma device. The upstream snapshot pins tinygrad `ec91b74b5b6b0fc924b72d3f27689679ca2438b9` and uses a different generic compilation and state-buffer integration.
 
+## Follow-up: first failure and correction
+
+The diagnostic retry records the first exception before the optimizer can suppress it. Cheddar's `node_index_select` gathers nine overlapping 25-row windows from `[1, 33, 8]` desire history: 225 selections. The old constant-Gather implementation expands these into 225 individual slices and padded concatenations. The resulting `E_9_25_2_4` shader has 388,368 bytes.
+
+QCOM encodes its shader load length in 128-byte units. This shader needs 3,035 units, but `CP_LOAD_STATE6_0_NUM_UNIT` is a 10-bit field with a maximum of 1,023. The generated command word is `0x2f6f60000`, exceeding uint32. `array.array('I', self._q)` raises `OverflowError` before submission. HCQ has already advanced its timeline; after the optimizer swallows the exception, subsequent trials wait for a signal that the rejected command never submitted. This explains the later timeout. Replaying the retained program alone reproduces the same first exception.
+
+Coalesce consecutive constant indices into contiguous slices, preserving ordering, repeats, negative-index normalization and output shape. For this node, nine slices represent the same 225 selections. Its generated source shrinks from 26,822 to 1,549 characters, and its shader from 388,368 to 3,064 bytes (24 load units). No command truncation, timeout relaxation, omitted model input or changed history is used. CD210's only constant Gather is scalar, so its selection expression is unchanged.
+
+The corrected installed-runtime adapter completes warmup and 180 recurrent frames, all finite. Tests compare selection against NumPy on all positive/negative axes, overlapping windows, repeated/reversed/negative indices, scalar selection, noncontiguous input and changed inputs after JIT capture. All 32 pass using the desktop Python backend; the compatibility workflow also runs them on native CPU. This fixes the reproduced history-selection failure, not every possible oversized shader.
+
+## Follow-up: matching runtime and execution
+
+The exact upstream tinygrad is `ec91b74b5b6b0fc924b72d3f27689679ca2438b9`. Its `examples/openpilot/compile_onnx.py` and compiler flags from the reviewed openpilot snapshot compile Cheddar successfully. Initial execution, JIT replay, changed-input checking and the saved-artifact round trip pass. This is an isolated runtime; the production tinygrad is not replaced wholesale.
+
+The upstream contract supplies named output buffers and aliases `next_state_*` outputs to the corresponding state inputs. A 540-frame sequence (40 settling, 500 measured) with separate state copies and one with those aliases produce exactly equal prediction captures at frames 0, 4, 39, 139 and 539. Separate copies cost 56.06 ms on average; aliases cost 32.97 ms. Compiling output transfer once, as upstream does, also preserves those captures exactly; that run averages 33.39 ms, p95 37.54 ms, maximum 42.00 ms, with 0/500 over 50 ms.
+
+The corrected old runtime's captured predictions differ from matching-upstream predictions by at most 0.123 across the four common capture frames, with maximum frame mean absolute difference 0.0011. Against ONNX Runtime CPU, matching-upstream recurrent outputs have maximum absolute difference 4.472 and mean 0.0549 at the settled frame; these are mixed prediction fields, not one physical quantity. Supplying the same GPU state to a single CPU inference reduces these to 0.998 and 0.0226; the first two action differences are approximately 0.00038 and 0.00101. This characterizes precision and recurrence differences; it does not establish a general numerical acceptance threshold or driving equivalence.
+
+## Follow-up: image preparation comparison
+
+Both following measurements use the same offroad TICI, online CPUs 0–3, two synthetic 1928×1208 NV12 images, warp, recurrent policy and synchronous prediction readback. Each has five warmup calls, 40 settling calls and 500 measurements. CD210 uses its resident camera-buffer path. The upstream Cheddar candidate packs/copies both full NV12 images into its shared input buffer each frame, then performs its compiled upload, warp, policy and download. These are the respective execution paths, so the difference includes input handling as well as model computation.
+
+| Path | Mean | Median | p95 | Maximum | Above 50 ms |
+| --- | --- | --- | --- | --- | --- |
+| Installed CD210 | 28.70 ms | 28.38 ms | 34.61 ms | 51.90 ms | 1 / 500 |
+| Cheddar, matching upstream runtime | 41.26 ms | 40.43 ms | 49.60 ms | 65.74 ms | 22 / 500 |
+
+Cheddar is about 44% slower in this comparison. The CD210 repeat starts after the corrected Cheddar process has exited. Neither measurement includes real camera synchronization, publication, competing onroad processes or sustained thermal testing. The upstream full-image packing cost is an additional optimization target before production integration; policy-only timing must not be presented as whole-frame timing.
+
+Model integration still needs explicit state-buffer, reset, standby warmup and recovery handling, plus representative end-to-end deadline validation. This review does not change the internal default model or install a candidate runtime on the vehicle.
+
 ## Evidence
 
-Private artifacts, metadata, reference outputs, native scripts, timings and diagnostics are under `.analysis/scratch/2026-11-18-cheddar-review`. The test adapter is an evaluation artifact. Installation remains blocked on stateful runtime integration, successful native execution and numerical comparison, followed by representative end-to-end latency validation.
+Initial private artifacts are under `.analysis/scratch/2026-11-18-cheddar-review`; follow-up programs, first-error records, generated shader sources, reference comparisons and full timing samples are under `.analysis/scratch/2026-11-18-cheddar-runtime`. Tests used temporary models/scripts rather than installed model artifacts. Diagnostic imports also populated the existing content-addressed compiler cache; no Params, vehicle control or installed source/model files were changed.
