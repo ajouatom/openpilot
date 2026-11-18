@@ -151,7 +151,8 @@ impl Controls {
         let always = cs.driving_gear && params.boolean("AlwaysLateral")? && !jetlink_lost;
         let below = cs.speed.abs() <= maximum(self.config.min_steer_speed, 0.3);
         let standstill = self.config.brand == "tesla" && self.config.standstill_steering;
-        let lateral = (input.selfdrive.active || always)
+        let lateral = input.selfdrive.current
+            && (input.selfdrive.active || always)
             && cs.lat_enabled
             && !cs.fault_temporary
             && !cs.fault_permanent
@@ -280,8 +281,9 @@ impl Controls {
         )?;
         let route = input.model.assistant_route.as_str();
         let native_voice = route == "native" && !input.model.assistant_id.is_empty() && lateral;
-        let lane_lamps =
-            input.model.lane_change && (matches!(route, "" | "ordinary") || native_voice);
+        let lane_lamps = input.selfdrive.current
+            && input.model.lane_change
+            && (matches!(route, "" | "ordinary") || native_voice);
         let mut command = Command {
             enabled: input.selfdrive.enabled && !impact_reboot,
             lateral,

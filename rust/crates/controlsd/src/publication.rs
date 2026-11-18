@@ -31,7 +31,7 @@ pub fn publish(
     let mut car = Builder::new_default();
     {
         let mut event = car.init_root::<event::Builder<'_>>();
-        event.set_valid(input.car.can_valid);
+        event.set_valid(input.car.can_valid && input.selfdrive.current);
 
         let mut cc = event.init_car_control();
         cc.set_enabled(command.enabled);

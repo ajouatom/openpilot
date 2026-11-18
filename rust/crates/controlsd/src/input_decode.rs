@@ -23,7 +23,64 @@ fn ordinal<T: Into<u16>>(value: Result<T, capnp::NotInSchema>) -> u16 {
     }
 }
 
+pub fn decode_model(state: &State, centering: bool) -> Result<Model, Error> {
+    let model = service!(state, "modelV2", ModelV2);
+    let meta = model.get_meta()?;
+    let jetlink = model.get_jetlink()?;
+    let mut value = Model {
+        desired_curvature: f64::from(model.get_action()?.get_desired_curvature()),
+        jetlink_latched: jetlink.get_loss_latched(),
+        jetlink: jetlink.get_source() == Ok(log_capnp::jetlink_frame_status::Source::Jetlink),
+        lane_change: meta.get_lane_change_state() != Ok(log_capnp::LaneChangeState::Off),
+        lane_left: meta.get_lane_change_direction() == Ok(log_capnp::LaneChangeDirection::Left),
+        lane_right: meta.get_lane_change_direction() == Ok(log_capnp::LaneChangeDirection::Right),
+        assistant_id: meta
+            .get_assistant_lane_signal_id()
+            .ok()
+            .and_then(|t| t.to_str().ok())
+            .unwrap_or_default()
+            .to_owned(),
+        assistant_route: meta
+            .get_assistant_lane_signal_route()
+            .ok()
+            .and_then(|t| t.to_str().ok())
+            .unwrap_or_default()
+            .to_owned(),
+        desire: floats(meta.get_desire_state()?),
+        orientation_x: floats(model.get_orientation()?.get_x()?),
+        orientation_y: floats(model.get_orientation()?.get_y()?),
+        acceleration_y: floats(model.get_acceleration()?.get_y()?),
+        ..Model::default()
+    };
+    if centering {
+        let lines = model.get_lane_lines()?;
+        if lines.len() > 1 {
+            let left = lines.get(1);
+            value.lane_x = floats(left.get_x()?);
+            value.left_y = floats(left.get_y()?);
+        }
+        if lines.len() > 2 {
+            value.right_y = floats(lines.get(2).get_y()?);
+        }
+        let probs = model.get_lane_line_probs()?;
+        if probs.len() > 1 {
+            value.left_prob = f64::from(probs.get(1));
+        }
+        if probs.len() > 2 {
+            value.right_prob = f64::from(probs.get(2));
+        }
+        let position = model.get_position()?;
+        value.path_x = floats(position.get_x()?);
+        value.path_y = floats(position.get_y()?);
+    }
+    Ok(value)
+}
+
 pub fn decode(state: &State, now: f64) -> Result<Inputs, Error> {
+    decode_with_model(state, now, decode_model(state, true)?)
+}
+
+pub fn decode_with_model(state: &State, now: f64, model: Model) -> Result<Inputs, Error> {
     let car = service!(state, "carState", CarState);
     let cruise = car.get_cruise_state()?;
     let car = CarState {
@@ -79,59 +136,19 @@ pub fn decode(state: &State, now: f64) -> Result<Inputs, Error> {
         friction: torque.get_friction_coefficient_filtered(),
     };
     let driving = service!(state, "selfdriveState", SelfdriveState);
+    let topic = state.topic("selfdriveState")?;
+    // Use the service's ordinary ten-period liveness window, including during replay.
+    let current = topic.seen
+        && topic.valid
+        && (0. ..10. / topic.service.frequency).contains(&(now - topic.receive_time));
     let selfdrive = Selfdrive {
-        enabled: driving.get_enabled(),
-        active: driving.get_active(),
+        current,
+        enabled: current && driving.get_enabled(),
+        active: current && driving.get_active(),
         soft_disabling: driving.get_state()
             == Ok(log_capnp::selfdrive_state::OpenpilotState::SoftDisabling),
         personality: ordinal(driving.get_personality()),
         visual_alert: ordinal(driving.get_alert_hud_visual()),
-    };
-    let model = service!(state, "modelV2", ModelV2);
-    let meta = model.get_meta()?;
-    let jetlink = model.get_jetlink()?;
-    let lines = model.get_lane_lines()?;
-    let probs = floats(model.get_lane_line_probs()?);
-    let line = |index: u32| -> Result<(Vec<f64>, Vec<f64>), capnp::Error> {
-        if index >= lines.len() {
-            return Ok((Vec::new(), Vec::new()));
-        }
-        let line = lines.get(index);
-        Ok((floats(line.get_x()?), floats(line.get_y()?)))
-    };
-    let (lane_x, left_y) = line(1)?;
-    let (_, right_y) = line(2)?;
-    let position = model.get_position()?;
-    let model = Model {
-        lane_x,
-        left_y,
-        right_y,
-        left_prob: probs.get(1).copied().unwrap_or(0.),
-        right_prob: probs.get(2).copied().unwrap_or(0.),
-        path_x: floats(position.get_x()?),
-        path_y: floats(position.get_y()?),
-        desired_curvature: f64::from(model.get_action()?.get_desired_curvature()),
-        jetlink_latched: jetlink.get_loss_latched(),
-        jetlink: jetlink.get_source() == Ok(log_capnp::jetlink_frame_status::Source::Jetlink),
-        lane_change: meta.get_lane_change_state() != Ok(log_capnp::LaneChangeState::Off),
-        lane_left: meta.get_lane_change_direction() == Ok(log_capnp::LaneChangeDirection::Left),
-        lane_right: meta.get_lane_change_direction() == Ok(log_capnp::LaneChangeDirection::Right),
-        assistant_id: meta
-            .get_assistant_lane_signal_id()
-            .ok()
-            .and_then(|t| t.to_str().ok())
-            .unwrap_or_default()
-            .to_owned(),
-        assistant_route: meta
-            .get_assistant_lane_signal_route()
-            .ok()
-            .and_then(|t| t.to_str().ok())
-            .unwrap_or_default()
-            .to_owned(),
-        desire: floats(meta.get_desire_state()?),
-        orientation_x: floats(model.get_orientation()?.get_x()?),
-        orientation_y: floats(model.get_orientation()?.get_y()?),
-        acceleration_y: floats(model.get_acceleration()?.get_y()?),
     };
     let plan = service!(state, "longitudinalPlan", LongitudinalPlan);
     let longitudinal = LongPlan {
@@ -283,4 +300,35 @@ pub fn decode(state: &State, now: f64) -> Result<Inputs, Error> {
         });
     }
     Ok(input)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn engagement_expires_between_publications_and_returns_with_a_valid_state() {
+        let mut state = State::new(&crate::SERVICES, Default::default()).unwrap();
+        let mut message = capnp::message::Builder::new_default();
+        let mut event = message.init_root::<event::Builder>();
+        event.set_valid(true);
+        let mut driving = event.init_selfdrive_state();
+        driving.set_active(true);
+        driving.set_enabled(true);
+        let bytes = capnp::serialize::write_message_to_words(&message);
+        state.update(1., std::slice::from_ref(&bytes)).unwrap();
+        assert!(decode(&state, 1.02).unwrap().selfdrive.enabled);
+        let expired = decode(&state, 1.11).unwrap().selfdrive;
+        assert!(!expired.current && !expired.active && !expired.enabled);
+        state.update(1.12, &[bytes]).unwrap();
+        assert!(decode(&state, 1.13).unwrap().selfdrive.active);
+        message
+            .get_root::<event::Builder>()
+            .unwrap()
+            .set_valid(false);
+        state
+            .update(1.14, &[capnp::serialize::write_message_to_words(&message)])
+            .unwrap();
+        assert!(!decode(&state, 1.14).unwrap().selfdrive.enabled);
+    }
 }

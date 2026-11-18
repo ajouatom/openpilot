@@ -37,6 +37,7 @@ pub struct TorqueParameters {
 }
 #[derive(Default)]
 pub struct Selfdrive {
+    pub current: bool,
     pub enabled: bool,
     pub active: bool,
     pub soft_disabling: bool,
