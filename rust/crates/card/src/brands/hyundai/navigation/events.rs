@@ -16,7 +16,9 @@ impl Navigation {
         if self.wrapped {
             self.pv5_section(input)?;
         }
-        self.available = self.available || input.profile_timestamp > 0 || self.speed_zone_active;
+        let hda = self.ev4 && input.hda_timestamp > 0;
+        self.available =
+            self.available || input.profile_timestamp > 0 || hda || self.speed_zone_active;
         output.available = self.available;
         self.camera_target = None;
         let camera_speed = if camera { output.speed_limit } else { 0. };

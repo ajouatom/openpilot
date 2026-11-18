@@ -52,7 +52,11 @@ pub struct Input<'a> {
 
 pub struct Navigation {
     pub camera_policy: speedcam::SpeedcamPolicy,
+    /// KIA_PV5: wrapped 0x364/0x093 with the 0x380 section status.
     pub wrapped: bool,
+    /// KIA_EV4 (carrot 693efb885/e48fff204): wrapped 0x364/0x099/0x093;
+    /// position stays on 0x4B4.
+    pub ev4: bool,
     pub total_distance: f64,
     pub speed_limit_distance: f64,
     pub distance_time: f64,
@@ -82,17 +86,27 @@ pub struct Navigation {
 }
 
 impl Navigation {
-    pub fn new(wrapped: bool, settings: &Params) -> Result<Self, Error> {
-        Ok(Self {
+    pub fn new(wrapped: bool, ev4: bool, settings: &Params) -> Result<Self, Error> {
+        Ok(Self::with(
+            wrapped,
+            ev4,
+            f64::from(setting_int(settings, "VehicleSpeedCameraDistanceTime")?.clamp(10, 200))
+                / 10.,
+            setting_int(settings, "VehicleNaviCanControl")?.clamp(0, 3),
+            settings.get_bool("VehicleNaviSchoolZoneControl")?,
+        ))
+    }
+
+    fn with(wrapped: bool, ev4: bool, distance_time: f64, mode: i32, school_control: bool) -> Self {
+        Self {
             camera_policy: speedcam::SpeedcamPolicy::default(),
             wrapped,
+            ev4,
             total_distance: 0.,
             speed_limit_distance: 0.,
-            distance_time: f64::from(
-                setting_int(settings, "VehicleSpeedCameraDistanceTime")?.clamp(10, 200),
-            ) / 10.,
-            mode: setting_int(settings, "VehicleNaviCanControl")?.clamp(0, 3),
-            school_control: settings.get_bool("VehicleNaviSchoolZoneControl")?,
+            distance_time,
+            mode,
+            school_control,
             params_counter: 0,
             events: Vec::with_capacity(32),
             segment_timestamp: 0,
@@ -114,7 +128,7 @@ impl Navigation {
             pv5_section_previous: false,
             pv5_completed_speed: 0.,
             next_event: 0,
-        })
+        }
     }
 
     pub fn controlled_access(&self, input: &Input<'_>) -> bool {
@@ -196,5 +210,67 @@ impl Navigation {
             }
         }
         Ok(changed)
+    }
+}
+
+#[cfg(test)]
+mod ev4_tests {
+    use super::{Input, Navigation, Output, Values};
+
+    fn input<'a>(segment: Option<&'a Values>, segment_ts: u64, hda_ts: u64) -> Input<'a> {
+        Input {
+            hda: None,
+            position: None,
+            segment,
+            profile: None,
+            status: None,
+            profile_timestamp: 0,
+            position_timestamp: 0,
+            segment_timestamp: segment_ts,
+            hda_timestamp: hda_ts,
+            status_timestamp: 0,
+            last_update: segment_ts.max(hda_ts),
+            pt_timeout: false,
+            alt_timeout: false,
+            hda_size: 0,
+            status_size: 0,
+            metric: true,
+        }
+    }
+
+    fn segment(bytes: [u8; 8]) -> Values {
+        (1..=8)
+            .map(|i| (format!("BYTE_{i}").into(), f64::from(bytes[i - 1])))
+            .collect()
+    }
+
+    #[test]
+    fn ev4_stock_navigation_is_available_from_its_hda_info() {
+        for (ev4, expected) in [(true, true), (false, false)] {
+            let mut navigation = Navigation::with(false, ev4, 3., 1, false);
+            let mut output = Output::default();
+            navigation
+                .update_events(&input(None, 0, 1_000), &mut output, false)
+                .expect("update");
+            assert_eq!(output.available, expected, "ev4 {ev4}");
+        }
+    }
+
+    #[test]
+    fn ev4_padding_does_not_renew_the_route() {
+        // BYTE_3 bit 6 is route state 1 (on route).
+        let route = segment([0, 0, 0x40, 0, 0, 0, 0, 0]);
+        let padding = segment([0xff; 8]);
+        for (ev4, expected) in [(true, 100), (false, 200)] {
+            let mut navigation = Navigation::with(false, ev4, 3., 1, false);
+            navigation
+                .update_route(&input(Some(&route), 100, 0))
+                .expect("route");
+            assert_eq!(navigation.route_state, 1);
+            navigation
+                .update_route(&input(Some(&padding), 200, 0))
+                .expect("padding");
+            assert_eq!(navigation.segment_timestamp, expected, "ev4 {ev4}");
+        }
     }
 }

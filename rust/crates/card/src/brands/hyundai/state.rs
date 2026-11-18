@@ -96,7 +96,11 @@ impl State {
         let mut inputs = Inputs::new(path, &config, now_ns)?;
         super::diagnostics::constructor(&mut inputs, config.flags & f::CANFD != 0);
         let monitor = Monitor::new(&config, &settings)?;
-        let mut navigation = Navigation::new(config.candidate == "KIA_PV5", &settings)?;
+        let mut navigation = Navigation::new(
+            config.candidate == "KIA_PV5",
+            config.candidate == "KIA_EV4",
+            &settings,
+        )?;
         let main_enabled = setting_int(&settings, "AutoEngage")? == 2;
         let (gear_message, gear_signal) = if config.flags & f::CANFD != 0 {
             (config.gear_message(), "GEAR")
