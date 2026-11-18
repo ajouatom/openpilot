@@ -442,10 +442,11 @@ class CarController(CarControllerBase):
     later; panda's 0x3C1 shape check allows both. Each frame is the stock frame with that bit and COUNTER_ALT +1 per
     lever change (stalk_blinkers). Possibly ignored: our turn-signal replay on this id reached the bus but not the BCM
     (05_can/blinker_route19_20261026.md)."""
-    elapsed = self.highbeam_elapsed(CS.blinker_stalks is not None)
-    if elapsed not in (0, HIGHBEAM_PRESS_FRAMES) or CS.blinker_stalks is None:
+    stalks = getattr(CS, "blinker_stalks", None)  # CAN-FD CarState sets it (None until 0x3C1 is seen)
+    elapsed = self.highbeam_elapsed(stalks is not None)
+    if elapsed not in (0, HIGHBEAM_PRESS_FRAMES) or stalks is None:
       return []
-    values = dict(CS.blinker_stalks)
+    values = dict(stalks)
     source_counter = int(values.pop("COUNTER_ALT"))
     values.pop("CHECKSUM_MAYBE", None)
     signal = "HIGHBEAM_BACKWARD" if self.highbeam_kind == 2 else "HIGHBEAM_FORWARD"
