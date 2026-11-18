@@ -73,7 +73,14 @@ impl Movement {
         let done = if turn {
             let signed = angle * if self.direction == 1 { 1. } else { -1. };
             self.peak_angle = self.peak_angle.max(signed);
-            self.peak_angle >= 30. && angle.abs() <= 10. && car.v_ego > 1. / 3.6
+            // carrot f89f40a37: a turn desire the model withdrew also ends it.
+            let probability = model
+                .desire_state
+                .get(usize::from(self.direction))
+                .copied()
+                .unwrap_or(f64::NAN);
+            let withdrawn = probability.is_finite() && probability < 0.3;
+            (self.peak_angle >= 30. || withdrawn) && angle.abs() <= 10. && car.v_ego > 1. / 3.6
         } else {
             let selected = if self.direction == 1 { -left } else { right };
             let old_selected = if self.direction == 1 {
@@ -365,8 +372,27 @@ impl ModelIndicator {
             && (car.blinker_lever == 0 || echo)
             && car.v_ego.is_finite()
             && car.steering_torque.is_finite();
-        if let Some(a) = &mut self.active {
+        let mut promoted = false;
+        if let Some(manual) = self.active.as_ref().filter(|a| a.source() == "manual") {
+            // carrot f89f40a37: a manual lane request that turns into a driver
+            // turn becomes that turn, keeping the original request identity and
+            // its acknowledged lamp lease (request_time is not renewed).
+            let direction = manual.direction();
+            let curve = following_road_curve(model, car.v_ego, i.yaw_rate);
+            let allowed = i.manual_turn_enabled && common && !i.busy;
+            if let Some(turn) =
+                self.manual_turn
+                    .update(now, car, model.frame_id, i.yaw_rate, allowed, curve)
+            {
+                if turn.direction == direction {
+                    self.active = Some(Active::ManualTurn(turn));
+                    promoted = true;
+                }
+            }
+        } else if self.active.is_some() {
             self.manual_turn.reset("busy");
+        }
+        if let Some(a) = &mut self.active {
             let source = a.source();
             let allowed = if source == "manual_turn" {
                 i.manual_turn_enabled
@@ -384,7 +410,12 @@ impl ModelIndicator {
             } else {
                 car.left_blinker
             };
-            if !common || i.busy || !allowed || opposite || !a.update(now, car, model, i.yaw_rate) {
+            if !common
+                || i.busy
+                || !allowed
+                || opposite
+                || (!promoted && !a.update(now, car, model, i.yaw_rate))
+            {
                 self.reason = if common && allowed && !i.busy && !opposite {
                     a.reason()
                 } else {
@@ -402,7 +433,8 @@ impl ModelIndicator {
             return Some(());
         }
         if i.manual_edge != 0 && common && isolation.request_time != self.manual_seen {
-            self.manual_turn.reset("busy");
+            // The manual turn tracker keeps observing so the request can be
+            // promoted to a driver turn (carrot f89f40a37).
             self.manual_seen = isolation.request_time;
             self.active = Some(Active::Lane(Movement::new(
                 now,
@@ -515,9 +547,18 @@ impl ModelIndicator {
                 } else {
                     probs[1].max(probs[3])
                 };
+                // carrot f89f40a37: a turn desire needs the car turning that way.
+                let sign = if direction == 1 { 1. } else { -1. };
+                let turn_motion = i.yaw_rate.is_some_and(|yaw| {
+                    yaw.is_finite()
+                        && car.steering_angle_deg.is_finite()
+                        && car.steering_angle_deg * sign >= 15.
+                        && -yaw * sign >= 3f64.to_radians()
+                });
                 if probs[index] >= 0.5
                     && probs[index] >= probs[0]
                     && probs[index] - opposite >= 0.3
+                    && (index >= 3 || turn_motion)
                     && (index < 3 || car.v_ego >= 30. / 3.6)
                 {
                     candidate = Some((

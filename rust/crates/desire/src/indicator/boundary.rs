@@ -21,6 +21,8 @@ pub struct Episode {
     initial: f64,
     minimum: f64,
     approach: f64,
+    /// When the boundary began moving back (carrot f89f40a37).
+    retreat_since: Option<f64>,
 }
 
 #[derive(Clone, Debug)]
@@ -232,9 +234,21 @@ impl BoundaryIndicator {
             return Some(());
         }
         if (0..2).map(|i| (y[i] - prev_y[i]).abs()).fold(0., f64::max) > 0.4 {
-            self.relabel_until = now + 2.;
-            self.reset_geometry();
-            return Some(());
+            // During an established driver approach both boundaries can advance
+            // together as markings reappear beyond an intersection.
+            let paired_approach = self.episode.as_ref().is_some_and(|episode| {
+                let side = usize::from(episode.direction - 1);
+                now - episode.intent <= 0.5
+                    && admission(car, model, episode.direction, now)
+                    && 0. < prev_y[side] - y[side]
+                    && prev_y[side] - y[side] <= 0.8
+                    && ((y[0] + y[1]) - (prev_y[0] + prev_y[1])).abs() < 0.2
+            });
+            if !paired_approach {
+                self.relabel_until = now + 2.;
+                self.reset_geometry();
+                return Some(());
+            }
         }
         for i in 0..2 {
             self.rates[i] = 0.5 * self.rates[i] + 0.5 * (prev_y[i] - y[i]) / dt;
@@ -281,6 +295,7 @@ impl BoundaryIndicator {
                     initial: y[c],
                     minimum: y[c],
                     approach: now,
+                    retreat_since: None,
                 });
             }
         }
@@ -296,16 +311,28 @@ impl BoundaryIndicator {
             episode.approach = now;
         }
         episode.minimum = episode.minimum.min(y[i]);
+        let retreating = y[i] - episode.minimum > 0.15;
+        episode.retreat_since = if retreating {
+            Some(episode.retreat_since.unwrap_or(now))
+        } else {
+            None
+        };
         // A brief release or countersteer does not erase continued approach;
-        // retreat, stalled approach, stale intent or a lost lane does.
+        // retreat held for 0.15 s, stalled approach, stale intent or a lost
+        // lane does.
         if self.lane_since[i].is_none()
             || now - episode.intent > 1.5
             || now - episode.start > 4.
             || now - episode.approach > 0.3
-            || y[i] - episode.minimum > 0.15
+            || episode
+                .retreat_since
+                .is_some_and(|since| now - since >= 0.15)
         {
             self.episode = None;
             self.relabel_until = now + 0.2;
+            return Some(());
+        }
+        if retreating {
             return Some(());
         }
         if self.confident[i].is_none() {
