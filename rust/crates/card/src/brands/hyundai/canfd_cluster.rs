@@ -1,5 +1,6 @@
 use super::{
     bus::CanBus,
+    camera_sync::{CameraSync, SyncInput},
     cluster_fields,
     cluster_hud::{self, HudInput},
     flags as f,
@@ -39,6 +40,10 @@ pub struct ClusterInput<'a> {
     pub hud_lateral: Option<f64>,
     pub lane_warnings: [bool; 2],
     pub scc_main_ready: bool,
+    /// For the camera set-speed/gap sync (carrot PR580).
+    pub set_kph: f64,
+    pub v_ego_cluster: f64,
+    pub metric: bool,
 }
 
 /// The camera's SCC output is replaced only with openpilot longitudinal control.
@@ -57,6 +62,7 @@ pub use super::cluster_buttons::alt2_request;
 
 pub fn messages(
     writer: &mut CanWriter,
+    sync: &mut CameraSync,
     i: &ClusterInput<'_>,
     source: &ClusterMessages<'_>,
 ) -> Result<Vec<Frame>, Error> {
@@ -91,6 +97,7 @@ pub fn messages(
                     .unwrap_or(0.)
                     != 0.;
             data.insert("NORMAL_CRUISE_MAIN_BTN".into(), 0.);
+            sync.note_driver(frame, driver_pressed);
             if keep_stock_scc_main(i, source)
                 && !i.hud.enabled
                 && !i.main_mode
@@ -119,6 +126,29 @@ pub fn messages(
                     if frame % 30 > 10 && frame % 30 <= 16 && !i.stopping {
                         data.insert("CRUISE_BUTTONS".into(), 2.);
                     }
+                } else if let Some(button) = source
+                    .scc
+                    .map(|scc| {
+                        Ok::<_, Error>(sync.button(
+                            &SyncInput {
+                                camera_set: get(scc, "VSetDis")?,
+                                camera_gap: get(scc, "DISTANCE_SETTING")?,
+                                acc_mode: i.acc_mode,
+                                set_kph: i.set_kph,
+                                v_ego: i.speed,
+                                v_ego_cluster: i.v_ego_cluster,
+                                metric: i.metric,
+                                bars: i.hud.gap,
+                            },
+                            frame,
+                        ))
+                    })
+                    .transpose()?
+                    .filter(|button| *button != 0)
+                {
+                    // carrot PR580: keep the camera's stock SCC set speed and
+                    // gap in step for a drop-out hand-over.
+                    data.insert("CRUISE_BUTTONS".into(), f64::from(button));
                 } else if source
                     .adrv1ea
                     .is_some_and(|data| data.get("HDA_MODE2") == Some(&0.))

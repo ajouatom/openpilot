@@ -163,6 +163,9 @@ pub fn messages(
             path: (&model.x, &model.y),
             hud_lateral: Some(lateral),
             lane_warnings: [command.lane_warning[0] != 0., command.lane_warning[1] != 0.],
+            set_kph: f64::from(cs.get_v_cruise_cluster()),
+            v_ego_cluster: f64::from(cs.get_v_ego_cluster()),
+            metric: state.metric,
         };
         let source = ClusterMessages {
             lfahda: captures.get("lfahda_cluster"),
@@ -174,7 +177,12 @@ pub fn messages(
             buttons_alt2: captures.get("cruise_buttons_alt2"),
             scc: captures.get("scc_control"),
         };
-        result.extend(canfd_cluster::messages(&mut c.writer, &cluster, &source)?);
+        result.extend(canfd_cluster::messages(
+            &mut c.writer,
+            &mut c.camera_sync,
+            &cluster,
+            &source,
+        )?);
         result.extend(if hda2 {
             canfd_maintenance::adrv(&mut c.writer, (config.bus, config.flags, c.frame))?
         } else {

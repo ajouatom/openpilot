@@ -1,6 +1,7 @@
 pub mod authority;
 pub mod blink_hold;
 pub mod bus;
+pub mod camera_sync;
 pub mod canfd_acc;
 pub mod canfd_buttons;
 pub mod canfd_cluster;
