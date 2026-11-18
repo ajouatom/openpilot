@@ -95,7 +95,8 @@ def enable_xiaoge_data(started, params, CP: car.CarParams) -> bool:
   return started and params.get_bool("ShareData")
 
 def enable_ccnc_lane_type(started, params, CP: car.CarParams) -> bool:
-  # Display-only lane type recogniser for HDA1 CCNC cameras, which send no lane type (Tucson, Sonata); any other car
+  # Lane type recogniser for HDA1 CCNC cameras, which send no lane type (Tucson, Sonata): cluster painting, and its yellow
+  # blocks lane changes with LaneLineCheck 0 (DesireHelper). Any other car
   # never starts it. CcncLaneTypeDetection > 0 picks its rate (lane_type.marking.RATES); 0 does not start it at all.
   if not started:
     return False

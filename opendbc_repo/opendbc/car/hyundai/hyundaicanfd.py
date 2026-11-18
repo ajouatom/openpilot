@@ -1142,10 +1142,11 @@ def _dashed_lane_line(color, lane_line, car=None):
 
 def _vision_lane_line(color, side, lane_line, CS, md, desire, prob, frame):
   # HDA1 CCNC cameras send no lane type/colour (no CAM_0x2a4/0x362: Tucson rlogs 11-16, Sonata per Qualified4), so the
-  # camera dashed codes above never fire there. With CcncLaneTypeDetection on, the display-only StripNet recogniser
+  # camera dashed codes above never fire there. With CcncLaneTypeDetection on, the StripNet recogniser
   # (lane_type, from Qualified4 ccnc-hda1) paints white/green as dashed 8/10 and yellow as orange 4; SideDisplay holds a
   # result through gaps, greys a lapsed one (0) and hides a line until a colour is first confirmed (14). A camera colour
-  # (HDA2) wins, so cars that have one are unchanged. Display only: lane-change permission is not read or written.
+  # (HDA2) wins, so cars that have one are unchanged. Painting only here; its yellow also blocks lane changes with
+  # LaneLineCheck 0 in DesireHelper (modeld), not through this code.
   if create_ccnc_messages._lane_type_mode not in (1, 2, 3) or lane_line // 10 > 0:  # lane_type.marking.RATES: 5/10/20 Hz
     return color
   marking = getattr(CS, 'ccnc_lane_marking', None)

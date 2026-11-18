@@ -1,11 +1,12 @@
-"""CCNC lane line colour/shape from the display-only lane marking recogniser (Scanner/StripNet).
+"""CCNC lane line colour/shape from the lane marking recogniser (Scanner/StripNet).
 
 Applied per side to the existing lane code only where the existing policy shows a normal line (white 2 or
 lane-change-available green 6). Priority: recognised yellow -> orange solid 4 (also over green);
 otherwise the existing green condition keeps green with the recognised shape (solid 6 / dashed 10);
 otherwise white with the recognised shape (solid 2 / dashed 8). UNKNOWN, expired or disabled leaves the
 existing code untouched (SideDisplay's lapsed grey and start-up hide aside), as do grey 0 (low confidence), hidden lines,
-departure blinking and the existing warning orange, which are decided outside this function. Display only: lane-change permission is not read or changed.
+departure blinking and the existing warning orange, which are decided outside this function. This module only paints;
+lane-change permission uses the recogniser's yellow separately (desire_helper._recognised_yellow, LaneLineCheck 0).
 
 ``marking`` is card's latest parsed packet: {'left': {'type': (value, expires_ns)|None, 'color': ...}, ...}.
 """

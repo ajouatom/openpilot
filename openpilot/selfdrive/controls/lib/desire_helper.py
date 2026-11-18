@@ -7,6 +7,7 @@ from openpilot.common.realtime import DT_MDL
 from openpilot.common.params import Params
 from openpilot.selfdrive.carrot.bluetooth.model import CommandReader, RUNTIME, read_json
 from openpilot.selfdrive.carrot.bluetooth.physical import HOLD_PATH
+from openpilot.selfdrive.carrot.lane_type import marking as lane_marking
 from openpilot.selfdrive.controls.lib.desire_lib.boundary_indicator import BoundaryIndicator
 from openpilot.selfdrive.controls.lib.desire_lib.boundary_lane import MANUAL_INDICATOR_MIN_SPEED
 from openpilot.selfdrive.controls.lib.desire_lib.indicator_observer import ModelIndicator
@@ -22,6 +23,11 @@ from openpilot.selfdrive.controls.lib.desire_lib.constants import (
 from openpilot.selfdrive.controls.lib.desire_lib.side_state import SideState
 from openpilot.selfdrive.controls.lib.desire_lib.maneuver_classifier import classify_maneuver_type
 from openpilot.selfdrive.controls.lib.desire_lib.lever import LEVER_LATCHED, LEVER_REQUEST_WAIT_S, LaneCrossing, LeverForcedTurn, LeverRequestWait, lever_maneuver
+
+# CcncLaneTypeDetection (HDA1 CCNC, user 11-18): a yellow the display recogniser confirmed this recently counts as the
+# camera's yellow for LaneLineCheck 0. 5 s = the cluster's driving hold (ccnc_lane_marking.HOLD_S), but not the
+# cluster's unlimited hold while a blinker is on: that restores a yellow seen any time before and would block the change.
+RECOGNISED_YELLOW_HOLD_NS = 5_000_000_000
 
 # Without a model-detected crossing, a lever press this early in laneChangeFinishing is still the driver
 # re-lighting the lamp of the change that just crossed, not a request for the next one.
@@ -127,6 +133,9 @@ class DesireHelper:
     self.laneChangeNeedTorque = 0
     self.laneChangeBsd = 0
     self.laneLineCheck = 0
+    self.lane_type_on = False   # CcncLaneTypeDetection 1..3
+    self.lane_marking = None    # modeld: latest parsed recogniser packet (customReservedRawData2)
+    self.recognised_yellow_ns = {'left': None, 'right': None}
     self.laneChangeDelay = 0.0
     self.blinkerLatchedTurn = 0.0  # m/s, 0 = off
     self.laneChangeLeverWait = False
@@ -165,6 +174,7 @@ class DesireHelper:
       self.laneChangeNeedTorque = self.params.get_int("LaneChangeNeedTorque")
       self.laneChangeBsd = self.params.get_int("LaneChangeBsd")
       self.laneLineCheck = self.params.get_int("LaneLineCheck")
+      self.lane_type_on = lane_marking.rate_of(self.params) > 0
       self.laneChangeDelay = self.params.get_float("LaneChangeDelay") * 0.1
       self.blinkerLatchedTurn = self.params.get_int("BlinkerLatchedTurn") * CV.KPH_TO_MS
       self.laneChangeLeverWait = self.params.get_bool("LaneChangeLeverWait")
@@ -344,6 +354,25 @@ class DesireHelper:
   # ─────────────────────────────────────────────
   # per-side processing (핵심: 좌/우 모두 매 프레임 계산)
   # ─────────────────────────────────────────────
+  def _recognised_yellow(self, side, camera_raw, now_ns, changing=False):
+    """HDA1 CCNC cameras send no lane colour (camera_raw // 10 == 0: 'no info', which LaneLineCheck 0 allows). With
+    CcncLaneTypeDetection on, a yellow the recogniser confirmed in the last RECOGNISED_YELLOW_HOLD_NS blocks like the
+    camera's yellow; a fresh white clears it. A camera colour (HDA2) always wins. Only the colour is used: feeding the
+    recogniser's solid/dashed into lane_line_info would fire lane_line_info_edge_detect, a lane-change start trigger.
+    While a blinker is on or a change is pending (``changing``) a live hold is kept alive, like the cluster's: the
+    recogniser drops heads under 0.9 confidence then, and letting the hold run out would start the waiting change over
+    the yellow line (review 11-18). An expired hold is never brought back."""
+    _, color = lane_marking.current(self.lane_marking, side, now_ns)
+    if color == 'yellow':
+      self.recognised_yellow_ns[side] = now_ns
+    elif color == 'white':
+      self.recognised_yellow_ns[side] = None
+    seen = self.recognised_yellow_ns[side]
+    if changing and seen is not None and 0 <= now_ns - seen <= RECOGNISED_YELLOW_HOLD_NS:
+      seen = self.recognised_yellow_ns[side] = now_ns
+    return (self.lane_type_on and camera_raw // 10 == 0 and seen is not None and
+            0 <= now_ns - seen <= RECOGNISED_YELLOW_HOLD_NS)
+
   def _process_sides(self, carstate, modeldata, radarState):
     # geometry (좌/우)
     # left: outer laneLines[0], current laneLines[1], edge[0], cur_prob laneLineProbs[1]
@@ -378,13 +407,20 @@ class DesireHelper:
                                 bsd_hold_sec=2.0, radar_objects=radarState.leadsRight, rear_dist=right_rear)
 
     # compute available (include BSD+object)
+    if self.crossing.since >= 0.0:  # crossed: left/right now name other lines, a held yellow belonged to the old one
+      self.recognised_yellow_ns = {'left': None, 'right': None}
+    now_ns = time.monotonic_ns()
+    changing = bool(getattr(carstate, 'leftBlinker', False) or getattr(carstate, 'rightBlinker', False) or
+                    self.lane_change_state != LaneChangeState.off)
+    left_yellow = self._recognised_yellow('left', self.left.lane_line_info_raw, now_ns, changing)
+    right_yellow = self._recognised_yellow('right', self.right.lane_line_info_raw, now_ns, changing)
     if self.laneLineCheck >= 1:
       left_line_ok = self.left.lane_line_info_mod in (0, 5)
       right_line_ok = self.right.lane_line_info_mod in (0, 5)
     else:
       # Hyundai lane color: 0 none, 1 white, 2 yellow, 3 blue. Only yellow blocks a lane change.
-      left_line_ok = self.left.lane_line_info_raw // 10 != 2
-      right_line_ok = self.right.lane_line_info_raw // 10 != 2
+      left_line_ok = self.left.lane_line_info_raw // 10 != 2 and not left_yellow
+      right_line_ok = self.right.lane_line_info_raw // 10 != 2 and not right_yellow
     self.left.compute_lane_change_available(lane_line_info_lt_20=left_line_ok, ignore_bsd=ignore_bsd)
     self.right.compute_lane_change_available(lane_line_info_lt_20=right_line_ok, ignore_bsd=ignore_bsd)
 

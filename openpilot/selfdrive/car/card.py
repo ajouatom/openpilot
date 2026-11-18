@@ -215,7 +215,7 @@ class Car:
     self.card_diag_can_timeouts = 0
     self.can_parser_result = ""
     self.xiaoge_vision_result: XiaogeVisionResult | None = None
-    self.lane_marking = None  # latest display-only lane marking packet (customReservedRawData2), parsed
+    self.lane_marking = None  # latest lane marking packet (customReservedRawData2), parsed; cluster painting only here
     self.xiaoge_blindspot_sources = (False, False, False, False)
     self.xiaoge_blindspot_sources_published = None
     self.xiaoge_blindspot_sources_published_ns = 0

@@ -158,7 +158,7 @@ The BSD classifier preserves the annotated area's aspect ratio by padding it to 
 
 | Value | Behavior |
 |---:|---|
-| `0` | Use lane-color information supplied by the vehicle and block yellow markings |
+| `0` | Use lane-color information supplied by the vehicle and block yellow markings. HDA1 CCNC cars with `CcncLaneTypeDetection` on also block a recognised yellow line |
 | `1` | Judge using broken/solid marking types |
 | `2` | Judge using marking types, but allow driver steering torque to override a solid-line block |
 

@@ -21,6 +21,7 @@ from openpilot.common.transformations.camera import DEVICE_CAMERAS
 from openpilot.system.camerad.cameras.nv12_info import get_nv12_info
 from openpilot.common.transformations.model import get_warp_matrix
 from openpilot.selfdrive.controls.lib.desire_helper import DesireHelper
+from openpilot.selfdrive.carrot.lane_type import marking as lane_marking
 from openpilot.selfdrive.controls.lib.desire_lib.boundary_observer import BoundaryObserver
 from openpilot.selfdrive.controls.lib.desire_lib.tesla_turn import turn_signal_context
 from openpilot.selfdrive.controls.lib.drive_helpers import get_accel_from_plan, smooth_value, get_curvature_from_plan
@@ -384,7 +385,8 @@ def main(demo=False):
   # messaging
   pm = PubMaster(["modelV2", "drivingModelData", "cameraOdometry"])
   sm = SubMaster(["deviceState", "carState", "roadCameraState", "liveCalibration", "driverMonitoringState", "carControl",
-                  "selfdriveState", "livePose", "liveDelay", "carrotMan", "radarState", "navInstructionCarrot", "navRoute"])
+                  "selfdriveState", "livePose", "liveDelay", "carrotMan", "radarState", "navInstructionCarrot", "navRoute",
+                  "customReservedRawData2"])
 
   publish_state = PublishState()
   params = Params()
@@ -457,6 +459,12 @@ def main(demo=False):
 
     camera_ready = time.monotonic()
     sm.update(0)
+    if sm.updated['customReservedRawData2']:
+      # CcncLaneTypeDetection recogniser (HDA1 CCNC): its yellow blocks lane changes like the camera's (DesireHelper)
+      try:
+        DH.lane_marking = lane_marking.parse(bytes(sm['customReservedRawData2']), time.monotonic_ns())
+      except Exception:  # an optional display input must never stop modeld
+        DH.lane_marking = None
     if hasattr(model, 'update'):
       model.update(sm, meta_main)
     desire = DH.desire

@@ -1,12 +1,14 @@
 """Light helpers shared by the lane marking process and card (no OpenCV/numpy import).
 
-CcncLaneTypeDetection turns the display-only recogniser on and picks how often it runs (joongyu01 11-16, HDA1 CCNC cars
+CcncLaneTypeDetection turns the recogniser on and picks how often it runs (joongyu01 11-16, HDA1 CCNC cars
 only; the owner chooses by CPU): 0 off (existing CCNC lane display unchanged), 1/2/3 StripNet at RATES 5/10/20 Hz
 (20 Hz = every modelV2 frame, Qualified4's setting). The profile Scanner is no longer run on the car (2026-10-21); MODES
 keeps its name for offline replays (tools/lane_profile/replay_marking.py builds marking_daemon.Recogniser(1) itself).
 The StripNet model is assets/lane_strip_v4.* (strip_model.MODEL_NAME); the model choice setting was removed (DaBin 10-26).
 The recogniser publishes the display-filtered (two identical results within 0.4 s, 0.5 s expiry) left/right type and
 colour on customReservedRawData2; card keeps only the latest packet and the CCNC sender applies it without waiting.
+modeld parses the same packet for DesireHelper: a recognised yellow blocks lane changes like the camera's yellow
+(LaneLineCheck 0, desire_helper._recognised_yellow; user 11-18).
 """
 import json
 
