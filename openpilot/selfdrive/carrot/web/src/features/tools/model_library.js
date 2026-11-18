@@ -2,6 +2,7 @@
 const EN = {
   title: "External driving model", internal: "Internal model: CD210 (fixed)",
   help: "One choice for eGPU and Jetlink hosts. eGPU applies it after the next reboot. A Jetlink App (phone, tablet, Mac) or Jetson switches to it while parked, at its next connection; if the host lacks the model, the comma downloads it and sends it over the cable. A model chosen later in the App wins over this one.",
+  change: "Change model", close: "Close", pending_apply: "Apply after restart",
   current: "eGPU this boot", next: "Model", saved: "Saved. eGPU: reboot to apply. Jetlink host: switches while parked.",
   host_running: "Jetlink host running", host_preparing: "Jetlink host preparing", app_pick: "Sent to Jetlink host",
   app_pick_failed: "download or preparation failed; choose it again to retry",
@@ -32,19 +33,60 @@ function progressText(preparation) {
   const fraction = Number(preparation.fraction);
   return `${preparation.message || preparation.stage}${Number.isFinite(fraction) && fraction > 0 ? ` · ${(fraction * 100).toFixed(0)}%` : ""}`;
 }
+// The Jetlink host's running or preparing model, shown both in the summary
+// and in the dialog: a phone or tablet switches while parked, so its state
+// matters without opening the dialog.
+function hostLine(library, host) {
+  const running = hostModel(library, host);
+  if (!running) return "";
+  const preparing = progressText(host.preparation);
+  return `${t(preparing ? "host_preparing" : "host_running")}: ${running}${preparing ? ` · ${preparing}` : ""}`;
+}
 export function renderLibrary(library, force = false, host = null) {
   if (!library?.models) return;
   const root = document.getElementById("externalModelLibrary");
   if (!root) return;
   root.hidden = false;
-  const signature = JSON.stringify([library, host?.sha256, host?.preparation, t("title")]);
-  if (!force && root.dataset.signature === signature) return;
-  // Do not replace an in-flight selection with an older status poll.
-  if (!force && root.querySelector("select")?.disabled) return;
-  root.dataset.signature = signature;
-  root.replaceChildren(text("h3", t("title")), text("p", t("internal")), text("p", t("help")));
+  const dialog = document.getElementById("modelLibraryDialog");
+  const editor = document.getElementById("modelLibraryEditor");
+  // Keep the submitted choice stable until its response arrives.
+  if (!force && editor.querySelector("select")?.disabled) return;
   const effective = library.models.find(m => m.id === library.effective);
-  root.append(text("p", `${t("current")}: ${effective?.name || library.effective_name || library.effective} · ${t((effective?.noo ?? library.effective_noo) ? "noo" : "no_noo")}`));
+  const selected = library.models.find(m => m.id === library.selected);
+  const effectiveName = effective?.name || library.effective_name || library.effective;
+  const hostText = hostLine(library, host);
+  if (!root.querySelector("button")) {
+    const summary = text("div", "");
+    summary.className = "model-library__summary";
+    summary.append(text("strong", ""), text("p", ""));
+    const button = text("button", "");
+    button.id = "btnChangeModel";
+    button.type = "button";
+    button.className = "btn";
+    button.setAttribute("aria-haspopup", "dialog");
+    button.setAttribute("aria-controls", "modelLibraryDialog");
+    button.addEventListener("click", () => dialog.showModal());
+    root.append(summary, button);
+    document.getElementById("btnCloseModelLibrary").addEventListener("click", () => dialog.close());
+  }
+  root.querySelector("strong").textContent = selected?.name || library.selected;
+  const card = document.getElementById("egpuModelCard");
+  const state = card && !card.hidden ? document.getElementById("egpuModelState").textContent : t("internal");
+  const amount = card && !card.hidden ? document.getElementById("egpuModelAmount").textContent : "";
+  root.querySelector("p").textContent = library.reboot_required
+    ? `${t("pending_apply")} · ${t("current")} ${effectiveName} · ${state}`
+    : [state, amount, hostText].filter(Boolean).join(" · ");
+  root.dataset.state = card?.dataset.state || "";
+  root.querySelector("button").textContent = t("change");
+  document.getElementById("modelLibraryTitle").textContent = t("title");
+  document.getElementById("btnCloseModelLibrary").textContent = t("close");
+  const signature = JSON.stringify([library.models, library.selected, library.effective,
+    library.effective_name, library.effective_noo, library.reboot_required, library.app_pick,
+    host?.sha256, host?.preparation, t("title")]);
+  if (!force && editor.dataset.signature === signature) return;
+  editor.dataset.signature = signature;
+  editor.replaceChildren(text("p", t("internal")), text("p", t("help")));
+  editor.append(text("p", `${t("current")} ${effectiveName} · ${t((effective?.noo ?? library.effective_noo) ? "noo" : "no_noo")}`));
   const label = text("label", t("next"));
   const select = document.createElement("select");
   select.setAttribute("aria-label", t("next"));
@@ -57,17 +99,13 @@ export function renderLibrary(library, force = false, host = null) {
   label.append(select);
   select.addEventListener("change", async () => {
     select.disabled = true;
-    if (!await action("select", select.value)) renderLibrary(library, true);
+    if (!await action("select", select.value)) renderLibrary(library, true, host);
     select.disabled = false;
   });
-  root.append(label);
-  const running = hostModel(library, host);
-  if (running) {
-    const preparing = progressText(host.preparation);
-    root.append(text("p", `${t(preparing ? "host_preparing" : "host_running")}: ${running}${preparing ? ` · ${preparing}` : ""}`));
-  }
+  editor.append(label);
+  if (hostText) editor.append(text("p", hostText));
   const picked = library.models.find(m => m.id === library.app_pick?.model);
-  if (picked) root.append(text("p", `${t("app_pick")}: ${picked.name}${library.app_pick.failed ? ` · ${t("app_pick_failed")}` : ""}`));
-  root.append(text("p", t("shared")));
-  if (library.reboot_required) root.append(text("p", t("saved")));
+  if (picked) editor.append(text("p", `${t("app_pick")}: ${picked.name}${library.app_pick.failed ? ` · ${t("app_pick_failed")}` : ""}`));
+  editor.append(text("p", t("shared")));
+  if (library.reboot_required) editor.append(text("p", t("saved")));
 }
