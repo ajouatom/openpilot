@@ -498,9 +498,9 @@
       "groups": [
         {
           "id": "LAB_BLINKER_TEST",
-          "ko": "램프 테스트 (방향지시등·비상등·상향등)",
-          "en": "Lamp Tests (Turnlight·Hazard·High Beam)",
-          "zh": "灯光测试 (转向灯·危险警示灯·远光灯)",
+          "ko": "램프 테스트",
+          "en": "Lamp Tests",
+          "zh": "灯光测试",
           "groups": [
             {
               "id": "LAB_BLINKER_TEST_SPAS",
