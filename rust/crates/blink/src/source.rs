@@ -29,7 +29,6 @@ use std::path::Path;
 
 const HOLD_PATH: &str = "/dev/shm/carrot-bluetooth/physical-hold.json";
 const ASSISTANT_LANE_ROOT: &str = "/dev/shm/carrot-assistant-lane";
-const PE: &str = "HYUNDAI_IONIQ_5_PE";
 
 /// What the worker hands the transport each cycle (`encode(...)`).
 #[derive(Clone, Debug, Default)]
@@ -60,18 +59,24 @@ pub struct Feedback {
     pub state: &'static str,
     /// B1 boards' own lamp sample (1 left, 2 right), when reported.
     pub lamps: Option<u8>,
+    /// Kick: when card first put this request's SPAS frame on the bus.
+    pub first_sent: Option<f64>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Mode {
     Spas,
     Ble,
+    /// carrot `blink_source.py kick`: card's panda Kick output.
+    Kick,
 }
 
 pub struct Worker {
     mode: Mode,
     fingerprint: String,
     front_radar: bool,
+    /// carrot `native_hold_supported(cp) and not (spas or kick)`.
+    native_hold: bool,
     policy: Policy,
     automatic: AutomaticSignals,
     travel: Travel,
@@ -175,14 +180,18 @@ pub fn record_ownership(now: f64, value: &Value) -> std::io::Result<()> {
 
 impl Default for Worker {
     fn default() -> Self {
-        Self::new(Mode::Spas, String::new(), false)
+        Self::new(Mode::Spas, String::new(), false, false)
     }
 }
 
 impl Worker {
-    pub fn new(mode: Mode, fingerprint: String, front_radar: bool) -> Self {
+    /// `native_hold`: carrot `native_hold_supported(cp)` (a Hyundai CAN-FD
+    /// car with openpilot longitudinal whose camera 0x1EA can carry a hold);
+    /// ignored for the SPAS and Kick workers.
+    pub fn new(mode: Mode, fingerprint: String, front_radar: bool, native_hold: bool) -> Self {
         let journal = read_json(&Path::new(RUNTIME).join("boundary-indicator.json"));
         Self {
+            native_hold: native_hold && mode == Mode::Ble,
             mode,
             fingerprint,
             front_radar,
@@ -233,6 +242,8 @@ impl Worker {
         self.next = now + 0.05;
         let spas = self.mode == Mode::Spas;
         let ble = self.mode == Mode::Ble;
+        let kick = self.mode == Mode::Kick;
+        let native_hold = self.native_hold;
         let topic = |name: &str| subs.topic(name).ok();
         let control = event_of(topic("carControl")).and_then(|e| match e.which().ok()? {
             event::Which::CarControl(v) => v.ok(),
@@ -255,8 +266,8 @@ impl Worker {
         let (car, tbt_car) = snapshot::car(cs);
         // vehicle_ready: manual indicators work while driving or engaged;
         // unknown or stale CAN never does.
-        let mut ok = (spas || self.fingerprint == PE)
-            && car_fresh
+        // carrot 6af3073e3: no vehicle-name allowlist.
+        let mut ok = car_fresh
             && ["carControl", "selfdriveState"]
                 .iter()
                 .all(|name| topic(name).is_some_and(|t| fresh_topic(t, now, 0.35)))
@@ -282,7 +293,12 @@ impl Worker {
         let model_topic = topic("modelV2").filter(|t| fresh_topic(t, now, 0.35));
         let carrot_topic = topic("carrotMan").filter(|t| fresh_topic(t, now, carrot_limit));
         let auto_fresh = model_topic.is_some() && carrot_topic.is_some();
-        let travelled = self.travel.update(now, f64::from(cs.get_v_ego()), ok);
+        let travelled = self.travel.update_stopped(
+            now,
+            f64::from(cs.get_v_ego()),
+            ok,
+            cs.get_standstill() && gear == "drive",
+        );
         let always_lateral = flag("AlwaysLateral");
         let lateral_allowed = gear == "drive"
             && (lat_active
@@ -593,8 +609,10 @@ impl Worker {
             .prepare_tap(now, voice_hold.as_ref(), 0., &car);
         self.observation_feedback
             .prepare(now, hold.as_ref(), meta, &car);
-        let native_hold = !ble || self.fingerprint == PE;
+        // Kick reports a verified physical lever override; external receiver
+        // echoes retain their existing confirmed-turn exception.
         let tbt_turn_hold = !spas
+            && !kick
             && native_hold
             && hold.as_ref().is_some_and(|h| h.source == "turn")
             && self.automatic.journey.active.is_some();
@@ -790,7 +808,7 @@ impl Worker {
             devices,
             activated: self.activated_id.is_some(),
             relights: self.policy.relights,
-            b1_hold: ble && self.fingerprint != PE,
+            b1_hold: ble && !native_hold,
             turn_position: false,
             tbt_phase: self.tbt.reason,
             observation_phase: observed_source,
@@ -825,13 +843,28 @@ impl Worker {
                 .filter(|h| self.activated_id.as_deref() == Some(&h.id))
                 .map(|h| h.direction.name());
             let tap = self.observation_feedback.sent(now, feedback, ok);
-            let _ = atomic_json(
-                Path::new(HOLD_PATH),
-                &json!({"stamp": now, "mode": mode, "fingerprint": self.fingerprint,
-                    "direction": direction, "tap": tap,
-                    "override": self.activated_id.is_some() || now < self.release_until
-                        || (self.policy.suppressed && self.release_until > 0.)}),
-            );
+            let mut value = json!({"stamp": now, "mode": mode, "fingerprint": self.fingerprint,
+                "direction": direction, "tap": tap,
+                "override": native_hold && (self.activated_id.is_some() || now < self.release_until
+                    || (self.policy.suppressed && self.release_until > 0.))});
+            // carrot a31a59ca2: when the Kick first sent this observed
+            // request, so the observer's 2 s minimum starts at the lamp.
+            if let (true, true, Some(h), Some(first)) =
+                (kick, ok, hold.as_ref(), feedback.first_sent)
+            {
+                if h.source == "observation"
+                    && fresh(feedback.stamp, now, 0.15)
+                    && feedback.accepted_id.as_deref() == Some(h.id.as_str())
+                    && fresh(first, now, 30.)
+                {
+                    value["native_start"] = json!({
+                        "request": meta.map_or(0., |m| m.observed_mono_time),
+                        "direction": h.direction.name(),
+                        "time": first,
+                    });
+                }
+            }
+            let _ = atomic_json(Path::new(HOLD_PATH), &value);
         }
         Ok(())
     }

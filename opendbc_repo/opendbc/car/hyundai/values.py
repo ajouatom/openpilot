@@ -83,6 +83,11 @@ class HyundaiSafetyFlags(IntFlag):
   CANFD_LKA_STEERING_ALT = 128
   FCEV_GAS = 256
   ALT_LIMITS_2 = 512
+  CANFD_CLUSTER_DIRECT_TX = 2048
+  CANFD_SPAS_BLINKERS = 4096
+  PEDAL_INTERCEPTOR = 8192
+  PEDAL_INTERCEPTOR_RAY = 16384
+  CANFD_BLINKER_KICK = 32768  # Observed SPAS + stalk contract on the camera-SCC harness
 
 
 class HyundaiFlags(IntFlag):

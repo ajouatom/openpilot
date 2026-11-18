@@ -482,15 +482,15 @@ impl Monitor {
             self.proven_at = now;
         }
         let authenticated = now - self.proven_at < 1.;
-        // The SPAS option owns its own output; offroad has no control lease.
+        // carrot `external_output_allowed`: the SPAS option and the panda
+        // Kick own their own output; offroad has no control lease.
         let onroad = self
             .params
             .as_ref()
             .is_some_and(|p| params_flag(p, "IsOnroad"));
-        let spas = self
-            .params
-            .as_ref()
-            .is_some_and(|p| params_flag(p, "CanfdBlinkerControl"));
+        let spas = self.params.as_ref().is_some_and(|p| {
+            params_flag(p, "CanfdBlinkerControl") || params_flag(p, "CanfdBlinkerKick")
+        });
         let available = authenticated && !matches!(state, "missing" | "error") && onroad && !spas;
         let ready = available && (self.owner.held || (state == "ready" && report.lamps == 0));
         let available = self.owner.acquire(ready, now);
@@ -525,6 +525,7 @@ impl Monitor {
                 available: false,
                 state,
                 lamps: Some(report.lamps),
+                first_sent: None,
             });
             if let Some(latest) = worker.latest() {
                 self.source = Some(latest);

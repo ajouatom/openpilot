@@ -95,9 +95,21 @@ pub fn run(frames: Option<u64>, assets: &Path, numerics: &Path) -> Result<(), Er
     let mut publisher = PubMaster::for_runtime(&["carControl", "controlsState"])?;
     let mut controls = Controls::new(config, interface, &mut params)?;
     let mut monitor = Monitor::default();
+    let mut model = crate::inputs::Model::default();
     while !stop.load(Ordering::Relaxed) {
         subscriber.update(Duration::from_millis(15))?;
-        let input = crate::input_decode::decode(&subscriber.state, platform::monotonic())?;
+        if subscriber.state.topic("modelV2")?.updated {
+            use crate::parameters::Parameters;
+            model = crate::input_decode::decode_model(
+                &subscriber.state,
+                params.integer("LanelessCentering")? > 0,
+            )?;
+        }
+        let input = crate::input_decode::decode_with_model(
+            &subscriber.state,
+            platform::monotonic(),
+            model,
+        )?;
         let command = controls.control(&input, &mut params)?;
         for error in &command.errors {
             logger.emit(log_site!(), Record::text(Level::Error, error.clone()))?;
@@ -108,6 +120,7 @@ pub fn run(frames: Option<u64>, assets: &Path, numerics: &Path) -> Result<(), Er
             })?;
         publisher.send("controlsState", &packets[0])?;
         publisher.send("carControl", &packets[1])?;
+        model = input.model;
         monitor.monitor(platform::monotonic);
         if frames.is_some_and(|limit| monitor.frames >= limit) {
             break;

@@ -38,6 +38,12 @@ impl Inputs {
             }
             let names = if config.candidate == "KIA_PV5" {
                 &["CANFD_HDA_INFO_364", "CANFD_NAVI_PROFILE_093"][..]
+            } else if config.candidate == "KIA_EV4" {
+                &[
+                    "CANFD_HDA_INFO_364",
+                    "CANFD_NAVI_SEGMENT_099",
+                    "CANFD_NAVI_PROFILE_093",
+                ][..]
             } else {
                 &["NEW_MSG_4B4", "NEW_MSG_4B9", "NEW_MSG_4BE"][..]
             };

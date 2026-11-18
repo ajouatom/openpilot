@@ -25,6 +25,8 @@ pub struct Config {
     pub fingerprint: String,
     pub brand: String,
     pub flags: u32,
+    pub ext_flags: u32,
+    pub passive: bool,
     pub firmware: String,
     pub physical: Physical,
     pub angle: bool,
@@ -87,6 +89,8 @@ impl Config {
             fingerprint: text(cp.get_car_fingerprint()?)?,
             brand: text(cp.get_brand()?)?,
             flags: cp.get_flags(),
+            ext_flags: cp.get_ext_flags(),
+            passive: cp.get_passive(),
             firmware,
             physical: Physical {
                 mass: f64::from(cp.get_mass()),

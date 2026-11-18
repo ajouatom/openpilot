@@ -1,7 +1,10 @@
 //! Inputs of the lamp-only physical-indicator observers, gathered the way
 //! carrot's `modeld.py` passes them to `DesireHelper.update`.
 use crate::{parameters, Error};
-use openpilot_cereal::{car_capnp::car_control, log_capnp::event};
+use openpilot_cereal::{
+    car_capnp::{car_control, car_params},
+    log_capnp::event,
+};
 use openpilot_desire::{
     helper::DesireHelper,
     types::{Indicator, IndicatorConfig},
@@ -20,9 +23,37 @@ fn read(name: &str) -> Value {
         .unwrap_or(Value::Null)
 }
 
-/// `boundary_indicator_supported`: carrot runs the observers on this car only.
-pub fn supported(fingerprint: &str) -> bool {
-    fingerprint == "HYUNDAI_IONIQ_5_PE"
+/// `HyundaiSafetyFlags.CANFD_BLINKER_KICK`.
+const CANFD_BLINKER_KICK: u16 = 32768;
+
+/// Which observer paths this car runs (carrot modeld.py, 6af3073e3): the
+/// external receivers on any non-passive car, the Kick on a Hyundai whose
+/// safety config carries the Kick flag. Selected by protocol, not by model.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Support {
+    pub external: bool,
+    pub kick: bool,
+}
+
+impl Support {
+    pub fn read(cp: car_params::Reader<'_>) -> Result<Self, Error> {
+        let passive = cp.get_passive();
+        let kick = !passive
+            && cp.get_brand()?.to_str()? == "hyundai"
+            && cp
+                .get_safety_configs()?
+                .iter()
+                .any(|config| config.get_safety_param() & CANFD_BLINKER_KICK != 0);
+        Ok(Self {
+            external: !passive,
+            kick,
+        })
+    }
+
+    /// carrot `boundary_indicator_supported`.
+    pub fn any(self) -> bool {
+        self.external || self.kick
+    }
 }
 
 /// `boundary-indicator.json` as `(time, direction, mask)` for a restart.
@@ -45,10 +76,13 @@ fn flag(params: &Params, key: &str) -> Result<bool, Error> {
     Ok(params.get(key)?.is_some_and(|value| value == b"1"))
 }
 
-fn config(params: &Params) -> Result<IndicatorConfig, Error> {
+fn config(params: &Params, support: Support) -> Result<IndicatorConfig, Error> {
     let mode = parameters::integer(params, "AutoBlinkerControl")?;
-    let lamp = matches!(mode, 1 | 2) && !flag(params, "CanfdBlinkerControl")?;
+    let kick = flag(params, "CanfdBlinkerKick")?;
+    let supported = if kick { support.kick } else { support.external };
+    let lamp = supported && matches!(mode, 1 | 2) && !flag(params, "CanfdBlinkerControl")?;
     Ok(IndicatorConfig {
+        manual_minimum: if support.kick && kick { 2. } else { 0. },
         boundary: lamp && flag(params, "ManualLaneChangeIndicator")?,
         manual_turn: lamp && flag(params, "ManualTurnIndicator")?,
         model_desire: lamp && flag(params, "ModelDesireIndicator")?,
@@ -176,7 +210,14 @@ pub fn inputs(
             .then(|| read("physical-hold.json")),
         journal: if periodic { periodic_journal() } else { None },
         config: if periodic {
-            Some(config(params)?)
+            // A Kick car is never passive, so `external` equals "any".
+            Some(config(
+                params,
+                Support {
+                    external: helper.indicator_supported,
+                    kick: helper.kick_supported,
+                },
+            )?)
         } else {
             None
         },

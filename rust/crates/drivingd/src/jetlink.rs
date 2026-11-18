@@ -5,7 +5,6 @@ use openpilot_jetlink::{
     transition::{Phase, Source},
 };
 use openpilot_params::Params;
-use std::io::Cursor;
 pub fn raw_predictions(
     requested: bool,
     source: Source,
@@ -54,17 +53,11 @@ fn fill(mut builder: jetlink_frame_status::Builder<'_>, status: &Status) {
     builder.set_validated(status.validated);
 }
 pub fn publication(messages: &mut Messages, status: &Status, fresh: bool) -> Result<(), Error> {
-    for bytes in [
+    for message in [
         &mut messages.model,
         &mut messages.driving,
         &mut messages.pose,
     ] {
-        let reader = capnp::serialize::read_message(
-            Cursor::new(&*bytes),
-            capnp::message::ReaderOptions::new(),
-        )?;
-        let mut message = capnp::message::Builder::new_default();
-        message.set_root(reader.get_root::<event::Reader>()?)?;
         let mut root = message.get_root::<event::Builder>()?;
         if !fresh {
             root.set_valid(false);
@@ -75,7 +68,6 @@ pub fn publication(messages: &mut Messages, status: &Status, fresh: bool) -> Res
             event::CameraOdometry(_) => {}
             _ => return Err(Error::Contract("Jetlink publication topic")),
         }
-        *bytes = capnp::serialize::write_message_to_words(&message);
     }
     Ok(())
 }

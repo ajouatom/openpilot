@@ -40,6 +40,22 @@ impl Card {
             }
         }
         let mut state = message.get_root::<car_state::Builder>()?;
+        // carrot card.py: canError alert text2 names the timed-out messages
+        // (at most two, one line).
+        let can_result = if state.reborrow_as_reader().get_can_valid() {
+            String::new()
+        } else {
+            vehicle
+                .invalid_can_messages()
+                .into_iter()
+                .take(2)
+                .collect::<Vec<_>>()
+                .join(", ")
+        };
+        if can_result != self.can_parser_result {
+            io.put_nonblocking("CanParserResult", can_result.as_bytes())?;
+            self.can_parser_result = can_result;
+        }
         self.vision_sources =
             xiaoge::record_sources(state.reborrow(), self.vision.as_ref(), subscribed);
         xiaoge::apply(state.reborrow(), self.vision.as_ref(), subscribed);
@@ -76,6 +92,7 @@ impl Card {
         }
         let tail_now = io.now();
         tail.set_speedcam_gas_tok_consumed(vehicle.speedcam_gas_tok_consumed());
+        tail.set_stock_adopt_kph(vehicle.stock_adopt_kph());
         tail.update(state.reborrow(), io.subscribers(), self.metric, tail_now)?;
         for (key, bytes) in tail.take_param_writes() {
             io.put_nonblocking(&key, &bytes)?;

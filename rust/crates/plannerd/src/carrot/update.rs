@@ -106,6 +106,11 @@ impl CarrotPlanner {
         self.stop_x_rate_limited = Some(stop_rl);
         let mut stop_model = stop_rl;
         let previous_traffic = self.traffic_state;
+        // carrot 00d9cae3b red-light slow-roll hold: while a red stop rolls
+        // to the line below 3 m/s, a green/off frame does not end it (the
+        // model planned "go" 2 m before a red line and the car accelerated
+        // 1.4 -> 10 km/h). Once stopped, a green starts the car as before.
+        let stop_hold = self.x_state == XState::E2eStop && input.car.v_ego < 3.;
         if self.signal_detection_suspended {
             self.traffic_state = TrafficState::Off;
             self.stop_sign_count = 0;
@@ -143,11 +148,13 @@ impl CarrotPlanner {
                 &mut cruise,
                 [stop_raw, stop_rl],
                 &mut stop_model,
-                previous_traffic,
+                (previous_traffic, stop_hold),
                 clock,
             )?;
         }
-        if matches!(self.traffic_state, TrafficState::Off | TrafficState::Green) || !self.stopping()
+        // The slow-roll hold keeps its stop target through off/green frames.
+        if (matches!(self.traffic_state, TrafficState::Off | TrafficState::Green) && !stop_hold)
+            || !self.stopping()
         {
             stop_model = 1000.;
         }

@@ -127,11 +127,33 @@ impl Monitor {
                         now,
                     )?;
                 } else {
+                    let ev4 = config.candidate == "KIA_EV4";
                     for (name, key) in [
-                        ("HDA_INFO_4A3", "hda_info_4a3"),
+                        (
+                            if ev4 {
+                                "CANFD_HDA_INFO_364"
+                            } else {
+                                "HDA_INFO_4A3"
+                            },
+                            "hda_info_4a3",
+                        ),
                         ("NEW_MSG_4B4", "navi_position_4b4"),
-                        ("NEW_MSG_4B9", "navi_segment_4b9"),
-                        ("NEW_MSG_4BE", "navi_profile_4be"),
+                        (
+                            if ev4 {
+                                "CANFD_NAVI_SEGMENT_099"
+                            } else {
+                                "NEW_MSG_4B9"
+                            },
+                            "navi_segment_4b9",
+                        ),
+                        (
+                            if ev4 {
+                                "CANFD_NAVI_PROFILE_093"
+                            } else {
+                                "NEW_MSG_4BE"
+                            },
+                            "navi_profile_4be",
+                        ),
                     ] {
                         inputs.capture((Channel::Pt, name, key), false, now)?;
                     }

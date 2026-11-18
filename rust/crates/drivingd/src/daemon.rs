@@ -97,6 +97,7 @@ pub fn run(
             )?;
         }
     }
+    let mut usb_first_publication = runtime.uses_usb();
     let mut recovery = if runtime.uses_usb() {
         openpilot_usbgpu::model::compiled_path(&usb_config.paths).and_then(|path| {
             openpilot_driving_modeld::recovery_prepare::Preparation::capture(
@@ -151,14 +152,17 @@ pub fn run(
         .get_car_fingerprint()?
         .to_str()?
         .to_owned();
-    let supported = indicator::supported(&fingerprint);
+    let support = indicator::Support::read(car_params.get_root::<car_params::Reader>()?)?;
+    let supported = support.any();
     let (tesla_signals, native_voice) = {
         let cp = car_params.get_root::<car_params::Reader>()?;
         let brand = cp.get_brand()?.to_str()?;
         let flags = cp.get_flags();
         // carrot voice_indicator.native_indicator: EA_02 or Hyundai SPAS2.
         const HYUNDAI_NATIVE: u32 = (1 << 13) | 1 | (1 << 5); // CANFD | CANFD_HDA2 | ENABLE_BLINKERS
+                                                              // carrot 2accb1fa3: a Kick car has no native voice route.
         let native = !cp.get_passive()
+            && !support.kick
             && ((brand == "volkswagen" && flags & 16384 != 0)
                 || (brand == "hyundai" && flags & HYUNDAI_NATIVE == HYUNDAI_NATIVE));
         (brand == "tesla" && flags & 32 != 0, native) // TeslaFlags.AUTO_TURN_SIGNALS
@@ -172,6 +176,7 @@ pub fn run(
                 None
             },
         )
+        .with_kick(support.kick)
         .with_tesla(tesla_signals, (process::monotonic() * 1e9) as u64)
         .with_assistant(&fingerprint, native_voice),
     );
@@ -304,7 +309,6 @@ pub fn run(
                     .update(
                         external.navigation_model(),
                         f64::from(sources.car.get_v_ego()),
-                        process::monotonic(),
                     )
                     .unwrap_or([0.; openpilot_modeld::navigation::NAVIGATION_LEN]),
             },
@@ -446,11 +450,21 @@ pub fn run(
             let fresh = external.valid_at_publish();
             jetlink::persist(&params, &mut external_stored, &external.status)?;
             jetlink::publication(&mut messages, &external.status, fresh)?;
-            publishers.send("modelV2", &messages.model)?;
-            publishers.send("drivingModelData", &messages.driving)?;
-            publishers.send("cameraOdometry", &messages.pose)?;
-            if runtime.uses_usb() {
+            publishers.send(
+                "modelV2",
+                &capnp::serialize::write_message_to_words(&messages.model),
+            )?;
+            publishers.send(
+                "drivingModelData",
+                &capnp::serialize::write_message_to_words(&messages.driving),
+            )?;
+            publishers.send(
+                "cameraOdometry",
+                &capnp::serialize::write_message_to_words(&messages.pose),
+            )?;
+            if usb_first_publication && runtime.uses_usb() {
                 usb_selection::published(&params)?;
+                usb_first_publication = false;
             }
         }
         if !runtime.uses_usb() {
@@ -482,6 +496,7 @@ pub fn run(
                 match recovered {
                     Ok(Some(model)) => {
                         runtime.enable_usb(model);
+                        usb_first_publication = true;
                         params.put_bool("UsbGpuStartupFailed", false)?;
                         params.put_bool("UsbGpuActive", true)?;
                         params.put_bool("UsbGpuLoading", true)?;

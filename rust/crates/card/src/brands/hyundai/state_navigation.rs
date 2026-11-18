@@ -60,7 +60,7 @@ pub fn data(state: &State) -> Result<NavigationData, Error> {
         profile_timestamp: timestamp(
             state,
             Channel::Pt,
-            if state.navigation.wrapped {
+            if state.navigation.wrapped || state.navigation.ev4 {
                 "CANFD_NAVI_PROFILE_093"
             } else {
                 "NEW_MSG_4BE"
@@ -68,7 +68,16 @@ pub fn data(state: &State) -> Result<NavigationData, Error> {
             None,
         ),
         position_timestamp: timestamp(state, Channel::Pt, "NEW_MSG_4B4", None),
-        segment_timestamp: timestamp(state, Channel::Pt, "NEW_MSG_4B9", None),
+        segment_timestamp: timestamp(
+            state,
+            Channel::Pt,
+            if state.navigation.ev4 {
+                "CANFD_NAVI_SEGMENT_099"
+            } else {
+                "NEW_MSG_4B9"
+            },
+            None,
+        ),
         hda_timestamp: timestamp(state, Channel::Pt, "CANFD_HDA_INFO_364", None),
         status_timestamp: timestamp(state, Channel::Alt, "CANFD_NAVI_STATUS_380", None),
         last_update: state.inputs.pt.last_update,

@@ -2,7 +2,6 @@ use openpilot_logging::{native::Logger, rate::RateLimit, record::Level, site::Si
 use std::sync::{Mutex, OnceLock};
 
 static LOGGER: OnceLock<Logger> = OnceLock::new();
-pub static AUDIO_QUEUE: Mutex<RateLimit> = Mutex::new(RateLimit::new(2, 100));
 pub static SEGMENT_QUEUE: Mutex<RateLimit> = Mutex::new(RateLimit::new(2, 100));
 
 pub fn initialize(device: &str) {

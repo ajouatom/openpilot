@@ -17,22 +17,6 @@ pub fn cumulative_distance(route: &[[f64; 2]]) -> Vec<f64> {
     out
 }
 
-fn interp(x: f64, xs: &[f64], ys: &[f64]) -> f64 {
-    if x <= xs[0] {
-        return ys[0];
-    }
-    let last = xs.len() - 1;
-    if x >= xs[last] {
-        return ys[last];
-    }
-    let i = xs.partition_point(|&v| v <= x).max(1);
-    let (x0, x1) = (xs[i - 1], xs[i]);
-    if x1 == x0 {
-        return ys[i];
-    }
-    ys[i - 1] + (ys[i] - ys[i - 1]) * (x - x0) / (x1 - x0)
-}
-
 pub struct RouteTracker {
     route: Vec<[f64; 2]>,
     distance: Vec<f64>,
@@ -50,25 +34,13 @@ impl RouteTracker {
             })
     }
 
-    fn project(&mut self, longitude: f64, latitude: f64) -> f64 {
+    fn project(&self, longitude: f64, latitude: f64, segments: std::ops::Range<usize>) -> f64 {
         let origin = self.route[0];
         let scale = [111_320. * origin[1].to_radians().cos(), 110_540.];
         let to = |p: [f64; 2]| [(p[0] - origin[0]) * scale[0], (p[1] - origin[1]) * scale[1]];
         let point = to([longitude, latitude]);
-        let n = self.route.len() - 1;
-        let near: Vec<usize> = (0..n)
-            .filter(|&i| {
-                self.distance[i + 1] >= self.progress + WINDOW.0
-                    && self.distance[i] <= self.progress + WINDOW.1
-            })
-            .collect();
-        let near = if near.is_empty() {
-            (0..n).collect()
-        } else {
-            near
-        };
-        let mut best = (f64::INFINITY, near[0], 0.);
-        for &i in &near {
+        let mut best = (f64::INFINITY, segments.start, 0.);
+        for i in segments {
             let (a, b) = (to(self.route[i]), to(self.route[i + 1]));
             let ab = [b[0] - a[0], b[1] - a[1]];
             let along = (((point[0] - a[0]) * ab[0] + (point[1] - a[1]) * ab[1])
@@ -83,8 +55,7 @@ impl RouteTracker {
         let (_, segment, along) = best;
         let reached =
             self.distance[segment] + along * (self.distance[segment + 1] - self.distance[segment]);
-        self.progress = self.progress.max(reached);
-        self.progress
+        self.progress.max(reached)
     }
 
     /// (longitude, latitude, bearing) on the route at `progress`.
@@ -96,15 +67,27 @@ impl RouteTracker {
             progress + HEADING_HALF_WINDOW,
         ]
         .map(|v| v.clamp(0., end));
-        let lon: Vec<f64> = self.route.iter().map(|p| p[0]).collect();
-        let lat: Vec<f64> = self.route.iter().map(|p| p[1]).collect();
-        let lons = ends.map(|e| interp(e, &self.distance, &lon));
-        let lats = ends.map(|e| interp(e, &self.distance, &lat));
-        let bearing = ((lons[2] - lons[0]) * lats[0].to_radians().cos())
-            .atan2(lats[2] - lats[0])
+        let [behind, center, ahead] = ends.map(|distance| {
+            let right = self.distance.partition_point(|&v| v <= distance);
+            if right == self.route.len() {
+                return self.route[right - 1];
+            }
+            if right == 0 {
+                return self.route[0];
+            }
+            let left = right - 1;
+            let fraction =
+                (distance - self.distance[left]) / (self.distance[right] - self.distance[left]);
+            std::array::from_fn(|axis| {
+                self.route[left][axis]
+                    + fraction * (self.route[right][axis] - self.route[left][axis])
+            })
+        });
+        let bearing = ((ahead[0] - behind[0]) * behind[1].to_radians().cos())
+            .atan2(ahead[1] - behind[1])
             .to_degrees()
             .rem_euclid(360.);
-        (lons[1], lats[1], bearing)
+        (center[0], center[1], bearing)
     }
 
     /// Commit progress only when the pose stays within `max_distance` m of the fix.
@@ -115,16 +98,29 @@ impl RouteTracker {
         advance: f64,
         max_distance: f64,
     ) -> Option<(f64, f64, f64)> {
-        let previous = self.progress;
-        let progress = self.project(longitude, latitude);
-        let pose = self.pose(progress + advance);
-        let distance = ((pose.0 - longitude) * 111_320. * pose.1.to_radians().cos())
-            .hypot((pose.1 - latitude) * 110_540.);
-        if !distance.is_finite() || distance > max_distance {
-            self.progress = previous;
+        if !longitude.is_finite() || !latitude.is_finite() || !advance.is_finite() {
             return None;
         }
-        Some(pose)
+        let end = self.route.len() - 1;
+        let start = self.distance[1..].partition_point(|d| *d < self.progress + WINDOW.0);
+        let stop = self.distance[..end].partition_point(|d| *d <= self.progress + WINDOW.1);
+        let nearby = start..stop;
+        // Prefer the local road at crossings. Reacquire further along the same route
+        // after a gap, applying the same 50 m caller limit to both candidates.
+        for segments in [nearby, start..end] {
+            if segments.is_empty() {
+                continue;
+            }
+            let progress = self.project(longitude, latitude, segments);
+            let pose = self.pose(progress + advance);
+            let distance = ((pose.0 - longitude) * 111_320. * pose.1.to_radians().cos())
+                .hypot((pose.1 - latitude) * 110_540.);
+            if distance <= max_distance {
+                self.progress = progress;
+                return Some(pose);
+            }
+        }
+        None
     }
 }
 
@@ -210,6 +206,18 @@ mod tests {
         assert!(selection.update(8, &[]).unwrap().1.is_empty());
         // Once stamped, unstamped messages do not take over.
         assert!(selection.update(0, &a).is_none());
+    }
+
+    #[test]
+    fn reacquires_after_a_gap_on_the_same_route() {
+        let route = (0..100)
+            .map(|i| [127., 37. + f64::from(i) * 0.0001])
+            .collect();
+        let mut tracker = RouteTracker::new(route).unwrap();
+        tracker.update_pose(127., 37.001, 0., 50.).unwrap();
+        assert!(tracker.update_pose(128., 37.004, 0., 50.).is_none());
+        let (_, lat, _) = tracker.update_pose(127., 37.004, 0., 50.).unwrap();
+        assert!((lat - 37.004).abs() < 1e-6);
     }
 
     #[test]

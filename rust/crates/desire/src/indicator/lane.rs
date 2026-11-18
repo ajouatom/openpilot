@@ -104,7 +104,12 @@ pub fn following_road_curve(model: &Model, speed: f64, yaw_rate: Option<f64>) ->
     let Some(yaw_rate) = yaw_rate else {
         return false;
     };
-    if speed < 1. || model.lane_line_probs[1].min(model.lane_line_probs[2]) < 0.5 {
+    // carrot 9eb26059a: a NaN probability fails too.
+    if speed < 1.
+        || ![1, 2]
+            .iter()
+            .all(|&i| (0.5..=1.).contains(&model.lane_line_probs[i]))
+    {
         return false;
     }
     let curvature = yaw_rate / speed;
@@ -123,24 +128,36 @@ pub type Sample = (f64, f64, f64, f64, f64);
 
 /// Confirms the two nearest forecast rows against measured motion of both
 /// lane boundaries.
+/// carrot `boundary_approach` (569f3191e): both measured boundaries moved at
+/// least `minimum` toward the indicated crossing over 0.30..0.55 s, the near
+/// boundary is within 1.5 m and that line was seen with confidence.
+pub fn boundary_approach(samples: &[Sample], direction: u8, minimum: f64) -> bool {
+    let (Some(first), Some(last)) = (samples.first(), samples.last()) else {
+        return false;
+    };
+    if samples.len() < 2 {
+        return false;
+    }
+    let (old_t, old_l, old_r, _, _) = *first;
+    let (t, left, right, _, _) = *last;
+    let sign = if direction == 1 { -1. } else { 1. };
+    let near = if direction == 1 { -left } else { right };
+    (0.30..=0.55).contains(&(t - old_t))
+        && 0. < near
+        && near <= 1.5
+        && (sign * (old_l - left)).min(sign * (old_r - right)) >= minimum
+        && samples
+            .iter()
+            .any(|s| (if direction == 1 { s.3 } else { s.4 }) >= LINE_CONFIDENCE)
+}
+
 pub fn anticipated_lane(model: &Model, samples: &[Sample]) -> u8 {
     let forecast = &model.desire_prediction;
-    if forecast.len() != 32 || samples.len() < 2 {
+    if forecast.len() != 32 {
         return 0;
     }
-    let (old_t, old_l, old_r, _, _) = samples[0];
-    let (t, left, right, _, _) = samples[samples.len() - 1];
-    if !(0.30..=0.55).contains(&(t - old_t)) {
-        return 0;
-    }
-    for (side, index, sign) in [(1u8, 3usize, -1.), (2, 4, 1.)] {
-        let near = if side == 1 { -left } else { right };
-        let probability = |s: &Sample| if side == 1 { s.3 } else { s.4 };
-        if 0. < near
-            && near <= 1.5
-            && (sign * (old_l - left)).min(sign * (old_r - right)) >= 0.06
-            && samples.iter().any(|s| probability(s) >= LINE_CONFIDENCE)
-        {
+    for (side, index) in [(1u8, 3usize), (2, 4)] {
+        if boundary_approach(samples, side, 0.06) {
             let rows_ok = [0, 8].iter().all(|&j| {
                 let row = &forecast[j..j + 8];
                 let max = row.iter().copied().fold(f64::NEG_INFINITY, f64::max);

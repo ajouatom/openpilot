@@ -22,7 +22,7 @@ use std::collections::BTreeMap;
 
 const LEVER: u32 = 0x3c1;
 
-fn lever_crc(body: &[u8]) -> u8 {
+pub(super) fn lever_crc(body: &[u8]) -> u8 {
     let mut value = 0u8;
     for &byte in body {
         value ^= byte;
@@ -437,6 +437,7 @@ impl SpasSignals {
                 crate::blink::source::Mode::Spas,
                 String::new(),
                 false,
+                false,
             ));
         }
         if let Some(worker) = &mut self.worker {
@@ -760,6 +761,7 @@ impl SpasSignals {
             let active = self.session.state == spas::State::Active;
             self.feedback = crate::blink::source::Feedback {
                 lamps: None,
+                first_sent: None,
                 stamp: now,
                 accepted_id: if active {
                     self.session.request().map(str::to_owned)

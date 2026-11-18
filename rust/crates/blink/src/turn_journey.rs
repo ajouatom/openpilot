@@ -11,6 +11,24 @@ pub struct Travel {
 impl Travel {
     /// `(epoch, distance)`; a new epoch starts after any gap or invalid speed.
     pub fn update(&mut self, now: f64, speed: f64, valid: bool) -> Option<(u64, f64)> {
+        self.update_stopped(now, speed, valid, false)
+    }
+
+    /// carrot `Travel.update(standstill=..., gear=...)`: the filtered
+    /// estimate can cross zero while the wheels confirm a D stop; keep the
+    /// distance anchor through that noise, including a long red light.
+    pub fn update_stopped(
+        &mut self,
+        now: f64,
+        speed: f64,
+        valid: bool,
+        stopped_in_drive: bool,
+    ) -> Option<(u64, f64)> {
+        let speed = if stopped_in_drive && -0.1 < speed && speed < 0. {
+            0.
+        } else {
+            speed
+        };
         let old = self.previous;
         self.previous = (valid && speed.is_finite() && speed >= 0.).then_some((now, speed));
         let Some(current) = self.previous else {

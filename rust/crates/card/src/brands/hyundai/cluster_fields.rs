@@ -56,6 +56,10 @@ pub fn normalize_corner(data: &mut Values, ccnc: bool) -> Result<(), Error> {
                 std::sync::Arc::<str>::from(detect),
                 if ccnc { 3. } else { 1. },
             );
+        } else if ccnc && matches!(get(data, &detect)?, 1. | 2.) {
+            // carrot PR580: stock flicks a box with distance 0 between car
+            // frames; keep the grey car.
+            data.insert(std::sync::Arc::<str>::from(detect), 3.);
         }
     }
     Ok(())

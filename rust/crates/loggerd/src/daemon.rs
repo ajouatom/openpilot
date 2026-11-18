@@ -138,13 +138,15 @@ pub fn run(environment: Environment) -> Result<(), Error> {
                     for state in &mut states {
                         if let Some(encoder) = &mut state.encoder {
                             if encoder.include_audio {
+                                if data.get_sample_rate() > 0 {
+                                    encoder.audio_rate = data.get_sample_rate();
+                                }
                                 if let Some(writer) = &mut encoder.writer {
                                     writer.write_audio(
                                         data.get_data()?,
                                         event.get_log_mono_time() / 1000,
                                         data.get_sample_rate(),
                                     )?;
-                                    encoder.audio_initialized = true;
                                 }
                             }
                         }
@@ -157,11 +159,10 @@ pub fn run(environment: Environment) -> Result<(), Error> {
                     Some(encoder) => {
                         rotation.last_camera_ns = clock::now()?;
                         rotation.stream_seen_ns[encoder.stream.index()] = rotation.last_camera_ns;
-                        let outcome =
-                            encoder.handle(&mut logger, std::mem::take(bytes), rotation.ready)?;
+                        let outcome = encoder.handle(&mut logger, std::mem::take(bytes))?;
                         byte_count = byte_count.wrapping_add(u64::try_from(outcome.bytes)?);
-                        if outcome.ready_part.is_some() {
-                            rotation.ready += 1;
+                        if let Some(part) = outcome.part {
+                            rotation.encoder_part[encoder.stream.index()] = Some(part);
                         }
                     }
                     None => {
@@ -177,8 +178,15 @@ pub fn run(environment: Environment) -> Result<(), Error> {
                 if let Some(reason) = rotation.timeout_reason(now) {
                     diagnostics::emit(log_site!(), Level::Error, reason.into());
                 }
-                if rotation.due(now) {
+                if rotation.due(now, logger.part) {
                     rotate(&mut logger, &mut rotation)?;
+                    for state in &mut states {
+                        if let Some(encoder) = &mut state.encoder {
+                            encoder.close()?;
+                            byte_count = byte_count
+                                .wrapping_add(u64::try_from(encoder.flush_current(&mut logger)?)?);
+                        }
+                    }
                 }
                 message_count = message_count.wrapping_add(1);
                 if message_count.is_multiple_of(10000) {
@@ -229,7 +237,6 @@ fn rotate_with_clock(
     mut now: impl FnMut() -> Result<u64, Error>,
 ) -> Result<(), Error> {
     logger.next(now()?)?;
-    rotation.ready = 0;
     rotation.last_rotation_ns = now()?;
     diagnostics::emit(
         log_site!(),
@@ -269,8 +276,8 @@ mod tests {
         })
         .unwrap();
         assert_eq!(calls, 2);
-        assert!(!rotation.due(61_000_000_001));
-        assert!(rotation.due(69_000_000_001));
+        assert!(!rotation.due(61_000_000_001, logger.part));
+        assert!(rotation.due(69_000_000_001, logger.part));
         logger.close(0, 70_000_000_000).unwrap();
     }
 }

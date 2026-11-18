@@ -68,6 +68,7 @@ impl CruiseCarrot {
             let start = self.s._gas_pressed_count <= 0;
             let cancel = start && self.s._soft_hold_active > 0 && self.s._cruise_cancel_state;
             self.s._paddle_decel_active = false;
+            self.s._paddle_resume_kph = 0.;
             self.s._gas_pressed_count = (self.s._gas_pressed_count + 1).max(1);
             self.s._gas_pressed_count_last = self.s._gas_pressed_count;
             self.s._gas_pressed_value = if self.s._gas_pressed_count > 1 {
@@ -111,6 +112,7 @@ impl CruiseCarrot {
         if cs.get_brake_pressed() {
             self.s._cruise_ready = false;
             self.s._paddle_decel_active = false;
+            self.s._paddle_resume_kph = 0.;
             self.s._brake_pressed_count = (self.s._brake_pressed_count + 1).max(1);
             if self.s._brake_pressed_count == 1 && self.s.enabled_last {
                 self.s._v_cruise_kph_at_brake = self.s.v_cruise_kph;
@@ -148,6 +150,9 @@ impl CruiseCarrot {
     ) -> Result<Number, Error> {
         let ego = Number::int(self.s.v_ego_kph_set);
         let v = f64::from(cs.get_v_ego());
+        if !enabled {
+            self.s._paddle_resume_kph = 0.;
+        }
         if !enabled {
             if self.s._brake_pressed_count == -1 && self.s._soft_hold_active > 0 {
                 self.s._soft_hold_active = 2;
@@ -331,9 +336,39 @@ impl CruiseCarrot {
                         }
                     }
                 }
+            } else if self.s._paddle_decel_active && self.s._paddle_mode == 2 {
+                // PaddleMode 2: hand the paddle stop to the traffic-light
+                // stop (xState 3 slowing, 5 stopped) or to a (nearly) stopped
+                // lead and keep the driver's set speed; a hand-off at a stop
+                // otherwise left the 5 km/h floor, and any moving lead
+                // cancelled the stop request.
+                if matches!(self.s.x_state, 3 | 5) || (self.s.d_rel > 0. && v + self.s.v_rel < 1.) {
+                    self.s._paddle_decel_active = false;
+                    if v > 0.5 {
+                        // Still rolling: hold the current speed into the
+                        // stop; the set speed returns once stopped.
+                        self.s._paddle_resume_kph = speed.value;
+                        self.s._paddle_resume_cnt = 0;
+                        speed = ego;
+                    }
+                }
             } else if self.s._paddle_decel_active && (self.s.x_state == 3 || self.s.d_rel > 0.) {
                 self.s._paddle_decel_active = false;
                 speed = ego;
+            } else if self.s._paddle_resume_kph > 0. {
+                // Give the set speed back once stopped, or when the light has
+                // not asked for a stop for 1 s (green before we stopped).
+                self.s._paddle_resume_cnt = if matches!(self.s.x_state, 3 | 5) {
+                    0
+                } else {
+                    self.s._paddle_resume_cnt + 1
+                };
+                if v < 0.1 || self.s._paddle_resume_cnt > 100 {
+                    if self.s._paddle_resume_kph > speed.value {
+                        speed = Number::int(self.s._paddle_resume_kph);
+                    }
+                    self.s._paddle_resume_kph = 0.;
+                }
             }
         }
         if self.s._gas_pressed_count > self.s._gas_tok_timer {
@@ -461,7 +496,9 @@ impl CruiseCarrot {
 
 #[cfg(test)]
 pub(super) mod tests {
-    use super::super::{assistant_speed::AssistantSpeed, number::Number, state::CruiseState, CruiseCarrot};
+    use super::super::{
+        assistant_speed::AssistantSpeed, number::Number, state::CruiseState, CruiseCarrot,
+    };
     use openpilot_desire::command::CommandReader;
 
     pub(in crate::cruise) fn cruise() -> CruiseCarrot {

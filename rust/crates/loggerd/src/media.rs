@@ -14,6 +14,7 @@ pub struct VideoSpec {
     pub width: u32,
     pub height: u32,
     pub fps: i32,
+    pub audio_rate: Option<u32>,
     pub codec: Type,
 }
 
@@ -99,11 +100,26 @@ impl VideoWriter {
                     context
                 };
                 output.add_stream(encoder)?;
+                // Declare the audio stream before the video header. Video can start
+                // at its first keyframe even if the microphone is late or absent.
+                let audio = spec
+                    .audio_rate
+                    .and_then(|rate| match Audio::new(&mut output, rate) {
+                        Ok(audio) => Some(audio),
+                        Err(error) => {
+                            diagnostics::emit(
+                                log_site!(),
+                                Level::Warning,
+                                format!("recording video without audio: {error}"),
+                            );
+                            None
+                        }
+                    });
                 Destination::Mux(Muxer {
                     output,
                     context,
                     header_written: false,
-                    audio: None,
+                    audio,
                 })
             }
         };
@@ -132,7 +148,14 @@ impl VideoWriter {
                         .stream_mut(0)
                         .ok_or(Error::Invalid("missing video stream"))?
                         .set_parameters(&muxer.context);
-                    muxer.output.write_header()?;
+                    if muxer.audio.is_some() {
+                        // Bound libavformat's own video packet queue during a microphone outage.
+                        let mut options = av::Dictionary::new();
+                        options.set("max_interleave_delta", "250000");
+                        muxer.output.write_header_with(options)?;
+                    } else {
+                        muxer.output.write_header()?;
+                    }
                     muxer.header_written = true;
                 } else {
                     let mut encoded = av::Packet::copy(packet.data);
@@ -179,9 +202,6 @@ impl VideoWriter {
         match &mut self.destination {
             Destination::Raw(_) => Ok(()),
             Destination::Mux(muxer) => {
-                if muxer.audio.is_none() {
-                    muxer.audio = Some(Audio::new(&mut muxer.output, sample_rate)?);
-                }
                 if let Some(audio) = &mut muxer.audio {
                     audio.push(data, timestamp_us, sample_rate)?;
                     if muxer.header_written {

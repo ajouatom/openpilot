@@ -133,7 +133,16 @@ impl Navigation {
 
     pub fn update_route(&mut self, input: &Input<'_>) -> Result<(), Error> {
         if let Some(data) = input.segment {
-            if input.segment_timestamp > self.segment_timestamp {
+            // EV4 wraps padding after sparse route updates. Padding supplies no
+            // new route evidence and must not renew the existing route timeout.
+            let padding = self.ev4
+                && (1..=8).all(|index| {
+                    data.get(format!("BYTE_{index}").as_str())
+                        .copied()
+                        .unwrap_or(0.)
+                        == 255.
+                });
+            if input.segment_timestamp > self.segment_timestamp && !padding {
                 self.segment_timestamp = input.segment_timestamp;
                 let segment = Segment::decode(data)?;
                 let previous = (self.route_state, self.route_path);

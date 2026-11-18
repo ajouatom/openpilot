@@ -58,6 +58,33 @@ pub fn main(state: &mut State, now: u64) -> Result<u8, Error> {
             state
                 .inputs
                 .signal(Channel::Cam, "LFAHDA_CLUSTER", "HDA_LFA_SymSta", now)?;
+        let seen = state.inputs.cam.seen_addresses.contains(&0x1a0);
+        let set_speed = state
+            .inputs
+            .signal(Channel::Cam, "SCC_CONTROL", "VSetDis", now)?
+            * if state.metric { 1. / 3.6 } else { 0.44704 };
+        // Any cancel or MAIN activity, or a cancel/off request inside
+        // openpilot from the previous frame, ends the wait.
+        let off_requested = {
+            let out = state
+                .out
+                .get_root_as_reader::<openpilot_cereal::car_capnp::car_state::Reader<'_>>()?;
+            cruise == 4.
+                || current != 0
+                || released
+                || out.get_cruise_cancel_state()
+                || out.get_activate_cruise() < 0
+        };
+        if state.stock_adopt.update(
+            seen,
+            set_speed,
+            off_requested,
+            state.main_mode,
+            state.acc_mode,
+        ) {
+            state.main_enabled = true;
+            state.manual_main_off = false;
+        }
     }
     if [1., 2.].contains(&cruise) && state.config.longitudinal {
         state.main_enabled = true;
@@ -154,5 +181,12 @@ pub fn events(state: &mut State, previous_main: u8, now: u64) -> Result<Vec<(boo
         &[(1, Type::MainCruise)],
     ));
     state.paddle = paddle;
+    // carrot PR580: a held paddle reads 0 for 0.1-0.2 s every few frames;
+    // bridge 0.3 s so SCC does not re-engage under the still-held paddle.
+    state.paddle_hold = if paddle > 0 {
+        30
+    } else {
+        state.paddle_hold.saturating_sub(1)
+    };
     Ok(events)
 }

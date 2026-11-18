@@ -144,6 +144,17 @@ impl Parser {
         self.invalid_count < 5 && counters_valid
     }
 
+    /// Timed-out messages as `NAME 0xADDR` (carrot `invalid_can_messages`,
+    /// for the canError alert text2). Counter faults are not named.
+    pub fn invalid_messages(&self) -> Vec<String> {
+        self.order
+            .iter()
+            .filter_map(|address| self.states.get(address))
+            .filter(|state| !state.valid(self.last_update))
+            .map(|state| format!("{} 0x{:X}", state.name, state.address))
+            .collect()
+    }
+
     pub fn successful_addresses(&self) -> &[u32] {
         &self.successful_order
     }

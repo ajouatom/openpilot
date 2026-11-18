@@ -5,7 +5,7 @@ use super::{
 };
 use openpilot_can::Frame;
 
-fn checksum(address: u32, data: &[u8]) -> u16 {
+pub(super) fn checksum(address: u32, data: &[u8]) -> u16 {
     let mut crc = 0u16;
     for byte in data
         .iter()

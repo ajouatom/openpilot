@@ -28,6 +28,17 @@ pub fn native(cp: car_params::Reader<'_>) -> Option<Output> {
     if brand == "volkswagen" && flags & 16384 != 0 {
         return Some(Output::Ea02);
     }
+    // carrot 2accb1fa3: on a Kick car the common policy worker advertises
+    // and binds the Kick output route instead.
+    if brand == "hyundai"
+        && cp.get_safety_configs().is_ok_and(|configs| {
+            configs
+                .iter()
+                .any(|config| config.get_safety_param() & 32768 != 0)
+        })
+    {
+        return None;
+    }
     const REQUIRED: u32 = (1 << 13) | 1 | (1 << 5); // CANFD | CANFD_HDA2 | ENABLE_BLINKERS
     (brand == "hyundai" && flags & REQUIRED == REQUIRED).then_some(Output::Spas2)
 }

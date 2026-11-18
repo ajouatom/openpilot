@@ -47,6 +47,8 @@ pub struct Controls {
     pub lateral_startup: openpilot_control_policy::lateral_readiness::Gate,
     pub lateral_started: bool,
     pub lane_lines: bool,
+    /// carrot PR580 `lat_err_frames`: angle error above 3 deg in a row.
+    pub lat_err_frames: u32,
     /// LanelessCentering's state (see `centering.rs`).
     pub centering: Centering,
     pub turn_speed: i32,
@@ -89,7 +91,7 @@ impl Controls {
         let longitudinal = Longitudinal::new(&config, params)?;
         let lateral = Lateral::new(&config, &interface, params)?;
         let vm = VehicleModel::new(config.physical.clone());
-        let physical_hold = crate::physical_hold::HoldReader::new(&config.fingerprint);
+        let physical_hold = crate::physical_hold::HoldReader::new(&config);
         Ok(Self {
             config,
             interface,
@@ -104,6 +106,7 @@ impl Controls {
             lateral_startup: Default::default(),
             lateral_started: false,
             lane_lines: false,
+            lat_err_frames: 0,
             centering: Centering::default(),
             turn_speed,
             calibration: [0.; 3],
@@ -151,7 +154,8 @@ impl Controls {
         let always = cs.driving_gear && params.boolean("AlwaysLateral")? && !jetlink_lost;
         let below = cs.speed.abs() <= maximum(self.config.min_steer_speed, 0.3);
         let standstill = self.config.brand == "tesla" && self.config.standstill_steering;
-        let lateral = (input.selfdrive.active || always)
+        let lateral = input.selfdrive.current
+            && (input.selfdrive.active || always)
             && cs.lat_enabled
             && !cs.fault_temporary
             && !cs.fault_permanent
@@ -280,8 +284,9 @@ impl Controls {
         )?;
         let route = input.model.assistant_route.as_str();
         let native_voice = route == "native" && !input.model.assistant_id.is_empty() && lateral;
-        let lane_lamps =
-            input.model.lane_change && (matches!(route, "" | "ordinary") || native_voice);
+        let lane_lamps = input.selfdrive.current
+            && input.model.lane_change
+            && (matches!(route, "" | "ordinary") || native_voice);
         let mut command = Command {
             enabled: input.selfdrive.enabled && !impact_reboot,
             lateral,

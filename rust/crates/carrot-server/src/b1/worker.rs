@@ -112,7 +112,16 @@ fn run(stop: &AtomicBool, shared: &Shared) -> Result<(), String> {
         .and_then(|t| t.to_str().ok())
         .unwrap_or_default()
         .to_owned();
-    let mut worker = Worker::new(Mode::Ble, fingerprint, !cp.get_radar_unavailable());
+    // carrot `native_hold_supported` (6af3073e3): HyundaiExtFlags.CANFD_INDICATOR_HOLD.
+    let native_hold = cp.get_brand().ok().and_then(|t| t.to_str().ok()) == Some("hyundai")
+        && cp.get_openpilot_longitudinal_control()
+        && cp.get_ext_flags() & (1 << 19) != 0;
+    let mut worker = Worker::new(
+        Mode::Ble,
+        fingerprint,
+        !cp.get_radar_unavailable(),
+        native_hold,
+    );
     let mut sm = SubMaster::for_runtime(TOPICS, Options::default()).map_err(|e| e.to_string())?;
     while !stop.load(Ordering::Relaxed) {
         sm.update(Duration::ZERO).map_err(|e| e.to_string())?;

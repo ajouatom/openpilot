@@ -6,6 +6,8 @@ pub(super) struct CruiseState {
     pub frame: u64,
     pub toyota_pcm_speed_sync: super::toyota_pcm::ToyotaPcmSetSpeedSync,
     pub speedcam_gas_tok_consumed: bool,
+    /// carrot PR580 restart hand-over: stock SCC set speed while it waits.
+    pub stock_adopt_kph: f64,
     pub v_cruise_kph: Number,
     pub v_cruise_cluster_kph: Number,
     pub v_cruise_kph_last: Number,
@@ -46,6 +48,10 @@ pub(super) struct CruiseState {
     pub _v_cruise_kph_at_brake: Number,
     pub cruise_state_available_last: bool,
     pub _paddle_decel_active: bool,
+    /// PaddleMode 2: set speed to restore after a rolling hand-off to a stop
+    /// (0 = none) and frames without a stop request since (carrot PR580).
+    pub _paddle_resume_kph: f64,
+    pub _paddle_resume_cnt: u32,
     pub carrot_cruise_active: bool,
     #[serde(rename = "xState")]
     pub x_state: i32,
@@ -111,6 +117,7 @@ impl CruiseState {
             frame: 0,
             toyota_pcm_speed_sync: super::toyota_pcm::ToyotaPcmSetSpeedSync::default(),
             speedcam_gas_tok_consumed: false,
+            stock_adopt_kph: 0.,
             v_cruise_kph: Number::int(20.),
             v_cruise_cluster_kph: Number::int(20.),
             v_cruise_kph_last: Number::int(20.),
@@ -151,6 +158,8 @@ impl CruiseState {
             _v_cruise_kph_at_brake: Number::int(0.),
             cruise_state_available_last: false,
             _paddle_decel_active: false,
+            _paddle_resume_kph: 0.,
+            _paddle_resume_cnt: 0,
             carrot_cruise_active: false,
             x_state: 0,
             traffic_state: 0,

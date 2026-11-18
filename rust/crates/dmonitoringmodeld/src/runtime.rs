@@ -53,6 +53,7 @@ pub struct DriverRuntime<'a> {
     bundle: &'a Bundle,
     model: Backend,
     frame_bytes: Vec<u8>,
+    bind_frame: bool,
     output_bytes: Vec<u8>,
     output_values: Vec<f32>,
     transform: Vec<u8>,
@@ -90,7 +91,8 @@ impl<'a> DriverRuntime<'a> {
         Ok(Self {
             bundle,
             model,
-            frame_bytes: vec![0; bundle.descriptor.nv12.bytes],
+            frame_bytes: Vec::new(),
+            bind_frame: bundle.backend == "qcom-cl",
             output_bytes: vec![0; output],
             output_values: vec![0.0; output / 4],
             transform,
@@ -111,13 +113,33 @@ impl<'a> DriverRuntime<'a> {
         Ok(())
     }
 
-    pub fn infer(&mut self, frame: &VisionFrame<'_>, calibration: [f32; 3]) -> Result<f32, Error> {
+    /// # Safety
+    /// The frame's VisionIPC generation must stay mapped until this runtime is dropped.
+    pub unsafe fn infer(
+        &mut self,
+        frame: &VisionFrame<'_>,
+        calibration: [f32; 3],
+    ) -> Result<f32, Error> {
         self.validate_frame(frame.metadata())?;
         let calibration: Vec<u8> = calibration.into_iter().flat_map(f32::to_ne_bytes).collect();
         self.model.write("calib", &calibration)?;
         let gpu_start = Instant::now();
-        frame.copy_into(&mut self.frame_bytes)?;
-        self.model.write("frame", &self.frame_bytes)?;
+        let len = frame.metadata().len;
+        let bound = match &mut self.model {
+            // SAFETY: this VisionIPC generation stays mapped through inference.
+            // A lost generation terminates the daemon before another inference.
+            Backend::Qcom(model) if self.bind_frame => {
+                self.bind_frame =
+                    unsafe { model.bind_input("frame", frame.data_address(), len) }.is_ok();
+                self.bind_frame
+            }
+            _ => false,
+        };
+        if !bound {
+            self.frame_bytes.resize(len, 0);
+            frame.copy_into(&mut self.frame_bytes)?;
+            self.model.write("frame", &self.frame_bytes)?;
+        }
         self.model.write("transform", &self.transform)?;
         self.model.execute("prepare")?;
         self.model.execute("model")?;

@@ -13,6 +13,8 @@ pub struct AngleAuthority {
     pub filtered: f64,
     pub filtered_prev: f64,
     pub pre_override_frames: u32,
+    /// Frames the wheel has been held while lateral is active.
+    pub pressed_frames: u32,
 }
 
 #[derive(Clone, Copy, serde::Deserialize)]
@@ -27,11 +29,20 @@ pub struct AuthorityInput {
 impl AngleAuthority {
     pub fn update(&mut self, i: AuthorityInput) -> Result<f64, Error> {
         if i.pressed && !self.steering_pressed_prev {
+            self.recovering = true;
+        }
+        // carrot PR580: a hand-resting torque blip shorter than 0.3 s must not
+        // count as a repeated override or restart the full-recovery timer.
+        self.pressed_frames = if i.pressed && i.active {
+            self.pressed_frames.saturating_add(1)
+        } else {
+            0
+        };
+        if self.pressed_frames == 30 {
             if self.recovery_frames > 0 && self.recovery_frames < 500 {
                 self.override_count = (self.override_count + 1).min(3);
             }
             self.recovery_frames = 0;
-            self.recovering = true;
         }
         let threshold = i.threshold.max(1.);
         if !i.active {

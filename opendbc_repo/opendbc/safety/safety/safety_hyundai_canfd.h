@@ -225,6 +225,10 @@ bool hyundai_canfd_hda2_alt_steering = false;
 bool hyundai_canfd_buffered_fwd = false;
 const int HYUNDAI_PARAM_CANFD_CLUSTER_DIRECT_TX = 2048;
 bool hyundai_canfd_cluster_rx_forwarding = false;
+// CanfdBlinkerKick (HyundaiSafetyFlags.CANFD_BLINKER_KICK, camera-SCC harness only, see hyundai_canfd_init). Without it
+// 0x7B1/0x165/0x16A are handled exactly as in carrot-wip: only through the CANFD_SPAS_BLINKERS lease.
+const int HYUNDAI_PARAM_CANFD_BLINKER_KICK = 32768;
+static bool hyundai_canfd_kick = false;
 
 int hyundai_canfd_hda2_get_lkas_addr(void) {
   return hyundai_canfd_hda2_alt_steering ? 0x110 : 0x50;
@@ -394,6 +398,21 @@ CanfdBufferedFwd canfd_bfwd[] = {
   {.addr = 0x175, .dst_bus = 2, .enabled = true },  // TCS
   { 0 },
 };
+
+// CanfdBlinkerKick: on the Ioniq 5 PE the parking ECU never answered 0x7B1 (0 of ~180 requests, 2026-10-24..11-05
+// drives) and kept its own SPAS1/SPAS2 at 50 Hz on bus 0. A host frame with the same id queued at a random moment can
+// start together with the stock one: error frames in 78 of 111 kicks, bus-off in 33. So while the stock stream is on
+// the bus the newest host frame is held here and sent right behind the next stock frame (rx_tx hook); the ECU has
+// nothing pending for the next 20 ms. Without a stock stream (ECU silenced) frames go out directly. CANFD_BLINKER_KICK only.
+typedef struct {
+  CANPacket_t pkt;
+  bool pending;
+  uint32_t push_us;
+  uint32_t stock_us;
+} HyundaiSpasPiggyback;
+static HyundaiSpasPiggyback hyundai_spas_pb[2];  // 0x165, 0x16A
+#define HYUNDAI_SPAS_PB_STOCK_US 100000U  // stock stream counts as present this long after its last frame
+#define HYUNDAI_SPAS_PB_HOLD_US 50000U    // a held frame older than this is dropped, not sent
 
 static void canfd_copy_packet(CANPacket_t* dst, const CANPacket_t* src) {
   dst->fd = src->fd;
@@ -615,7 +634,9 @@ static bool hyundai_canfd_tx_hook(const CANPacket_t *to_send_const) {
   bool violation = false;
 
   if (addr == 0x3C1) { return hyundai_stalk_tx(to_send, microsecond_timer_get()); }
-  if ((addr == 0x7B1) || (addr == 0x165) || (addr == 0x16A)) {
+  // Without CANFD_BLINKER_KICK these ids take carrot-wip's path: the CANFD_SPAS_BLINKERS lease, which rejects them
+  // unless that flag is set. With it (never together with the lease) the CanfdBlinkerKick checks below apply.
+  if (!hyundai_canfd_kick && ((addr == 0x7B1) || (addr == 0x165) || (addr == 0x16A))) {
     return hyundai_spas_tx(to_send, microsecond_timer_get());
   }
 
@@ -689,6 +710,29 @@ static bool hyundai_canfd_tx_hook(const CANPacket_t *to_send_const) {
     }
   }
 
+  // CanfdBlinkerKick UDS on the parking ECU: extended session, disable rx/tx, default session, tester present only.
+  // The buses (ECAN 0 and ACAN 1 on the camera-SCC harness) are limited by the allowlist added in hyundai_canfd_init.
+  if (hyundai_canfd_kick && (addr == 0x7B1)) {
+    uint32_t uds = GET_BYTES(to_send, 0, 4);
+    bool uds_ok = (uds == 0x00031002U) || (uds == 0x01832803U) || (uds == 0x00011002U) || (uds == 0x00803E02U);
+    if (!uds_ok || (GET_BYTES(to_send, 4, 4) != 0x0U)) {
+      tx = false;
+    }
+  }
+
+  // CanfdBlinkerKick SPAS1/SPAS2: zero apart from checksum/counter and BLINKER_CONTROL (byte 16 bits 5..7: 0 off,
+  // 3 left, 4 right), the zero-filled frame that lit the lamp on the Ioniq 5 PE. Nothing else may be non-zero.
+  if (hyundai_canfd_kick && ((addr == 0x165) || (addr == 0x16A))) {
+    for (uint8_t i = 3U; i < GET_LEN(to_send); i++) {
+      uint8_t b = GET_BYTE(to_send, i);
+      uint8_t blink = b >> 5;
+      bool blinker = (addr == 0x16A) && (i == 16U) && ((b & 0x1FU) == 0U) && ((blink == 0U) || (blink == 3U) || (blink == 4U));
+      if ((b != 0U) && !blinker) {
+        tx = false;
+      }
+    }
+  }
+
   // ACCEL: safety check
   if (addr == 0x1a0) {
     int desired_accel_raw = (((GET_BYTE(to_send, 17) & 0x7U) << 8) | GET_BYTE(to_send, 16)) - 1023U;
@@ -738,7 +782,48 @@ static bool hyundai_canfd_tx_hook(const CANPacket_t *to_send_const) {
                         tx_msg_safety_check(to_send, current_safety_config.tx_msgs, current_safety_config.tx_msgs_len);
   canfd_record_tx_time(GET_BUS(to_send), addr, accepted);
 
+  // Held only once accepted: the rx_tx hook sends a held frame without passing the tx hook or the allowlist again.
+  if (accepted && hyundai_canfd_kick && ((addr == 0x165) || (addr == 0x16A)) && (GET_BUS(to_send) == 0)) {
+    HyundaiSpasPiggyback *pb = &hyundai_spas_pb[(addr == 0x165) ? 0 : 1];
+    uint32_t now = microsecond_timer_get();
+    if (get_ts_elapsed(now, pb->stock_us) < HYUNDAI_SPAS_PB_STOCK_US) {
+      canfd_copy_packet(&pb->pkt, to_send);
+      pb->pending = true;
+      pb->push_us = now;
+      extern bool safety_tx_buffered_for_fwd;
+      safety_tx_buffered_for_fwd = true;
+    }
+  }
+
   return tx;
+}
+
+static bool hyundai_canfd_rx_tx_hook(const CANPacket_t *to_push, CANPacket_t *to_send) {
+  int addr = GET_ADDR(to_push);
+  bool send = false;
+  if (hyundai_canfd_kick && (GET_BUS(to_push) == 0) && ((addr == 0x165) || (addr == 0x16A))) {
+    if ((GET_LEN(to_push) != ((addr == 0x165) ? 24 : 32)) ||
+        (hyundai_canfd_get_checksum(to_push) != hyundai_common_canfd_compute_checksum(to_push))) {
+      return false;
+    }
+    HyundaiSpasPiggyback *pb = &hyundai_spas_pb[(addr == 0x165) ? 0 : 1];
+    uint32_t now = microsecond_timer_get();
+    pb->stock_us = now;
+    if (pb->pending) {
+      pb->pending = false;
+      if (get_ts_elapsed(now, pb->push_us) < HYUNDAI_SPAS_PB_HOLD_US) {
+        canfd_copy_packet(to_send, &pb->pkt);
+        // SPAS2 carries BLINKER_CONTROL: continue the stock counter (stock + 1, CRC redone) so the receiver takes our
+        // frame as the next one and the following stock frame as a repeat. With the host's own counter the two
+        // sequences lined up only every 5.12 s (2026-11-12 test: one 0.4 s flash every ~5.1 s). SPAS1 is left as is.
+        if (addr == 0x16A) {
+          canfd_apply_counter_and_update_checksum(to_send, (uint8_t)(GET_BYTE(to_push, 2) + 1U));
+        }
+        send = true;
+      }
+    }
+  }
+  return send;
 }
 
 static int hyundai_canfd_fwd_hook(CANPacket_t* to_send) {
@@ -852,9 +937,14 @@ static safety_config hyundai_canfd_init(uint16_t param) {
   for (int i = 0; canfd_bfwd[i].addr > 0; i++) {
     canfd_bfwd_reset(&canfd_bfwd[i]);
   }
+  for (int i = 0; i < 2; i++) {
+    hyundai_spas_pb[i] = (HyundaiSpasPiggyback){0};
+  }
 
   hyundai_common_init(param);
   hyundai_spas_init(GET_FLAG(param, 4096), (hyundai_canfd_hda2 && !hyundai_camera_scc) ? 1 : 0);
+  // Kick buses are the camera-SCC harness's; the CANFD_SPAS_BLINKERS lease owns the same ids when it is on
+  hyundai_canfd_kick = GET_FLAG(param, HYUNDAI_PARAM_CANFD_BLINKER_KICK) && hyundai_camera_scc && !hyundai_spas_enabled;
 
   gen_crc_lookup_table_16(0x1021, hyundai_canfd_crc_lut);
   hyundai_canfd_alt_buttons = GET_FLAG(param, HYUNDAI_PARAM_CANFD_ALT_BUTTONS);
@@ -960,6 +1050,19 @@ static safety_config hyundai_canfd_init(uint16_t param) {
     ret.tx_msgs = hyundai_spas_tx_list;
     ret.tx_msgs_len = count;
   }
+  // CanfdBlinkerKick (exclusive with the lease above): APRK UDS on ECAN bus 0 and ACAN bus 1, SPAS1/SPAS2 on ECAN bus 0
+  if (hyundai_canfd_kick && (ret.tx_msgs_len + 4 <= 128)) {
+    int count = ret.tx_msgs_len;
+    for (int i = 0; i < count; i++) {
+      hyundai_spas_tx_list[i] = ret.tx_msgs[i];
+    }
+    hyundai_spas_tx_list[count++] = (CanMsg){0x7B1, 0, 8};
+    hyundai_spas_tx_list[count++] = (CanMsg){0x7B1, 1, 8};
+    hyundai_spas_tx_list[count++] = (CanMsg){0x165, 0, 24};
+    hyundai_spas_tx_list[count++] = (CanMsg){0x16A, 0, 32};
+    ret.tx_msgs = hyundai_spas_tx_list;
+    ret.tx_msgs_len = count;
+  }
   return ret;
 }
 
@@ -968,6 +1071,7 @@ const safety_hooks hyundai_canfd_hooks = {
   .rx = hyundai_canfd_rx_hook,
   .tx = hyundai_canfd_tx_hook,
   .fwd = hyundai_canfd_fwd_hook,
+  .rx_tx = hyundai_canfd_rx_tx_hook,
   .get_counter = hyundai_canfd_get_counter,
   .get_checksum = hyundai_canfd_get_checksum,
   .compute_checksum = hyundai_common_canfd_compute_checksum,

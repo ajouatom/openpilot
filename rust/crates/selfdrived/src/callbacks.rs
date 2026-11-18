@@ -510,6 +510,7 @@ impl Context<'_> {
                 }),
             ),
             Callback::CarParserResult => {
+                let results = self.params.text("CanParserResult")?.unwrap_or_default();
                 let hint = s.brand == "hyundai"
                     && s.flags & 8 == 0
                     && self.params.integer("HyundaiCameraSCC")? == 0
@@ -521,16 +522,17 @@ impl Context<'_> {
                         "CAN Error: Check Connections!!"
                     }
                     .into(),
-                    alert_text_2: Some(if hint {
-                        "SCC detected on camera bus".into()
-                    } else {
-                        self.params.text("CanParserResult")?.unwrap_or_default()
-                    }),
-                    alert_size: if hint {
+                    alert_size: if hint || !results.is_empty() {
+                        // Small alerts never draw text2.
                         AlertSize::Mid
                     } else {
                         AlertSize::Small
                     },
+                    alert_text_2: Some(if hint {
+                        "SCC detected on camera bus".into()
+                    } else {
+                        results
+                    }),
                     priority: Priority::Low,
                     duration: 100,
                     creation_delay: 1.0,

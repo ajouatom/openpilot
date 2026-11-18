@@ -20,6 +20,26 @@ impl Vehicle for Interface {
             false
         }
     }
+    fn invalid_can_messages(&self) -> Vec<String> {
+        if let Self::Hyundai(vehicle) = self {
+            let inputs = &vehicle.state.inputs;
+            let mut names = inputs.pt.invalid_messages();
+            names.extend(inputs.cam.invalid_messages());
+            if let Some(alt) = &inputs.alt {
+                names.extend(alt.invalid_messages());
+            }
+            names
+        } else {
+            Vec::new()
+        }
+    }
+    fn stock_adopt_kph(&self) -> f64 {
+        if let Self::Hyundai(vehicle) = self {
+            vehicle.state.stock_adopt.kph
+        } else {
+            0.
+        }
+    }
     fn take_param_writes(&mut self) -> Vec<(String, Vec<u8>)> {
         if let Self::Gm(vehicle) = self {
             vehicle.take_param_writes()

@@ -1,6 +1,6 @@
 use super::{CarrotPlanner, EventName, Input, TrafficState, XState};
 use crate::{traffic_stop::entry_allowed, Error};
-use openpilot_control_policy::math::{interp, minimum};
+use openpilot_control_policy::math::{interp, maximum, minimum};
 
 /// Frames (20 Hz) a model start sign must last before it releases a stop
 /// that is being approached. carrot released on its first green (0.25 s):
@@ -71,7 +71,7 @@ impl CarrotPlanner {
         cruise: &mut f64,
         stop: [f64; 2],
         stop_model: &mut f64,
-        previous_traffic: TrafficState,
+        (previous_traffic, stop_hold): (TrafficState, bool),
         clock: &mut impl FnMut() -> f64,
     ) -> Result<(), Error> {
         let [stop_raw, stop_rl] = stop;
@@ -116,6 +116,7 @@ impl CarrotPlanner {
                         self.x_state = XState::Lead;
                     } else if self.traffic_state == TrafficState::Green
                         && self.start_sign_count >= GREEN_RELEASE_FRAMES
+                        && !stop_hold
                     {
                         self.add_signal_event(EventName::TrafficSignGreen, clock);
                         self.x_state = XState::E2eCruise;
@@ -123,7 +124,24 @@ impl CarrotPlanner {
                         self.comfort_brake = minimum(self.comfort_brake, 2.4 * 0.9);
                         let ratio = interp(car.v_ego * 3.6, &[0., 100.], &[1., 0.7])?;
                         let stop = stop_rl * interp(stop_rl, &[0., 50.], &[1., ratio])?;
-                        if stop > 10. {
+                        if stop_hold {
+                            // A green/off frame carries the model's go plan
+                            // (~140 m) into the stop filters for ~1 s. Track
+                            // only frames that plan a stop, so the target
+                            // dead-reckons through them onto the line.
+                            let v = &input.model.velocity.x;
+                            let planned_stop = match (v.first(), v.last()) {
+                                (Some(first), Some(last)) => *last < maximum(3., first * 0.7),
+                                _ => false,
+                            };
+                            if self.actual_stop_distance > 10. && planned_stop {
+                                if let Some(&x) = input.model.position.x.get(31) {
+                                    let hold = x * interp(x, &[0., 50.], &[1., ratio])?;
+                                    self.actual_stop_distance +=
+                                        0.1 * (hold - self.actual_stop_distance);
+                                }
+                            }
+                        } else if stop > 10. {
                             self.actual_stop_distance = stop;
                         }
                         *stop_model = 0.;

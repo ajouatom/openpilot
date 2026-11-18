@@ -215,7 +215,8 @@ fn run_loop(options: Options, logger: &mut Logger, stop: &Arc<AtomicBool>) -> Re
         }
         let phase_done = Instant::now();
         let inference_cpu_started = thread_cpu();
-        let gpu_execution_time = runtime.infer(&frame, calibration.values())?;
+        // SAFETY: client owns this mapping, outlives runtime, and never reconnects in this loop.
+        let gpu_execution_time = unsafe { runtime.infer(&frame, calibration.values()) }?;
         let inference_done = Instant::now();
         let inference_cpu_ms = (thread_cpu() - inference_cpu_started) * 1000.0;
         let model_execution_time = inference_done.duration_since(start).as_secs_f32();
