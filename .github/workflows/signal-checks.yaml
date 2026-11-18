@@ -79,6 +79,7 @@ jobs:
             tools/jetlink/test_boundary_recent_intent.py \
             tools/jetlink/test_manual_turn_indicator.py \
             tools/jetlink/test_indicator_reconstruction.py \
+            tools/jetlink/test_indicator_continuity.py \
             openpilot/selfdrive/car/tests/test_card_diagnostics.py \
             opendbc_repo/opendbc/car/hyundai/tests/test_aprk_blinkers.py \
             opendbc_repo/opendbc/car/hyundai/tests/test_camera_set_speed_sync.py \

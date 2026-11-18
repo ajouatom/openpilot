@@ -296,7 +296,7 @@ class CarController(CarControllerBase):
     self.depart_jerk = False
     self.blinker_control = False
     self.blinker_kick_mode = 1  # CanfdBlinkerKickMode: 0 only after an ack, 1 panda piggyback, 2 direct 25 Hz, 3 direct 100 Hz
-    # set by card's KickOutput only on the CANFD_BLINKER_KICK harness (carrot-wip's KICK_CARS); our Kick does not gate on it
+    # set by card's KickOutput only on the CANFD_BLINKER_KICK harness (carrot-wip's kick_compatible); our Kick does not gate on it
     self.kick_output_ready = False
     self.remote_blinker = 0  # card: 3 left / 4 right from a Bluetooth remote blinker press, taken by kick_pulse
     self.remote_pulse = False  # the running pulse is a remote press: any gear, no CanfdBlinkerKick needed

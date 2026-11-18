@@ -147,8 +147,11 @@ class CarInterface(CarInterfaceBase):
         cfgs.insert(0, get_safety_config(structs.CarParams.SafetyModel.noOutput))
       ret.safetyConfigs = cfgs
       from opendbc.car.hyundai.spas import compatible
-      # joongyu01: our CanfdBlinkerKick (carcontroller) and this path both pause APRK and send 0x16A; Kick wins and
-      # switches this one off at boot so the menu shows what is actually running
+      # carrot-wip 6af3073e: an external indicator hold where the camera sends ADRV_0x1EA with DLC 32
+      if ret.flags & HyundaiFlags.CAMERA_SCC and fingerprint[CAN.CAM].get(0x1EA) == 32:
+        ret.extFlags |= HyundaiExtFlags.CANFD_INDICATOR_HOLD.value
+      # joongyu01: our CanfdBlinkerKick (carcontroller) is not limited to carrot-wip's kick_compatible harness; it and this
+      # path both pause APRK and send 0x16A, so Kick wins and switches this one off at boot (the menu shows what runs)
       if not docs and params.get_bool("CanfdBlinkerKick") and params.get_bool("CanfdBlinkerControl"):
         params.put_bool("CanfdBlinkerControl", False)
       if params.get_bool("CanfdBlinkerControl") and compatible(fingerprint, CAN.ECAN) and not ret.flags & HyundaiFlags.ENABLE_BLINKERS:

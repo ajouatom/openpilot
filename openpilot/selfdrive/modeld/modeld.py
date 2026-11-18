@@ -419,9 +419,10 @@ def main(demo=False):
 
   from opendbc.car.tesla.values import TeslaFlags
   from openpilot.selfdrive.car.voice_indicator import native_indicator
+  # kick_supported (carrot-wip's CANFD_BLINKER_KICK lease) is not passed on this branch: our Kick has its own path
   DH = DesireHelper(fingerprint=CP.carFingerprint, native_voice_signal=native_indicator(CP) is not None,
                     tesla_auto_signals=CP.brand == "tesla" and bool(CP.flags & TeslaFlags.AUTO_TURN_SIGNALS),
-                    boundary_indicator_supported=CP.carFingerprint == 'HYUNDAI_IONIQ_5_PE')
+                    boundary_indicator_supported=not CP.passive)
   boundary_observer = BoundaryObserver(cloudlog.event) if DH.boundary_indicator_supported else None
   nav_input = MapInput()
 

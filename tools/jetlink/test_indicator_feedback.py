@@ -146,7 +146,8 @@ def test_actual_source_model_roundtrip_survives_echo_and_waits_for_ack(monkeypat
   fake_params.Params=lambda:N(get=lambda _:b'cp',get_int=lambda k:1 if k=='AutoBlinkerControl' else 0,
     get_bool=lambda k:k=='ManualLaneChangeIndicator')
   fake_cereal=types.ModuleType('openpilot.cereal');fake_cereal.messaging=N(SubMaster=lambda _:sm)
-  fake_cereal.car=N(CarParams=N(from_bytes=lambda _:nullcontext(N(carFingerprint='HYUNDAI_IONIQ_5_PE'))))
+  fake_cereal.car=N(CarParams=N(from_bytes=lambda _:nullcontext(N(carFingerprint='PROTOCOL_MATCHED_CAR',
+      brand='hyundai', passive=False, openpilotLongitudinalControl=True, extFlags=1 << 19))))
   monkeypatch.setitem(sys.modules,'openpilot.common.params',fake_params);monkeypatch.setitem(sys.modules,'openpilot.cereal',fake_cereal)
   fed=[-1]
   def recv(_):

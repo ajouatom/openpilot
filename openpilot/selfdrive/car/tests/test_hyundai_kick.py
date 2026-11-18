@@ -4,6 +4,7 @@ from types import SimpleNamespace as NS
 import pytest
 
 from openpilot.selfdrive.car import hyundai_kick as kick
+from opendbc.car.hyundai.spas import SPAS
 from tools.jetlink.blink_owner import Owner, GRACE, external_output_allowed  # noqa: TID251
 
 # joongyu01/carrot-wip-dev: carrot-wip's KickOutput lease is inert here (HyundaiSafetyFlags.CANFD_BLINKER_KICK = 0, see
@@ -198,11 +199,14 @@ def test_kick_uses_advertised_common_voice_route():
 
 def test_toggle_and_stale_input_release_ownership(output):
   gate, values = output
+  prime_contract(gate)
   assert gate.update(True, 10.)
   values['CanfdBlinkerKick'] = False
   assert not gate.update(True, 10.01)
   assert not gate.owner.held
   values['CanfdBlinkerKick'] = True
+  assert not gate.update(True, 10.1)  # Reacquisition needs fresh stock again.
+  prime_contract(gate, 10.1)
   assert gate.update(True, 10.1)
   assert not gate.update(False, 10.11)
   assert not gate.owner.held
@@ -214,6 +218,7 @@ def test_toggle_and_stale_input_release_ownership(output):
 def test_waits_for_model_lamp_isolation(output, monkeypatch, tmp_path, direction):
   gate, _ = output
   monkeypatch.setattr(kick, 'RUNTIME', tmp_path)
+  prime_contract(gate)
   assert gate.update(True, 10.)
   data = bytearray(32)
   data[16] = (direction + 2) << 5
@@ -414,6 +419,10 @@ def test_native_waits_for_external_release_and_receiver_expiry(output, tmp_path,
   clock[0] += .1
   assert not gate.update(True, clock[0])
   clock[0] += GRACE
+  assert not gate.update(True, clock[0])  # Ownership alone cannot admit CAN output.
+  assert gate.owner.held
+  clock[0] += .18
+  prime_contract(gate, clock[0])
   assert gate.update(True, clock[0])
   assert not external.acquire(True)
   values['CanfdBlinkerKick'] = False
@@ -469,6 +478,7 @@ def test_production_card_send_boundary(output, monkeypatch, tmp_path, blocked):
             card_diag_stage_current=dict.fromkeys(stages, 0), card_diag_stage_sum_us=dict.fromkeys(stages, 0),
             card_diag_stage_max_us=dict.fromkeys(stages, 0), card_diag_process_max_us=0,
             card_diag_slow_process=0, card_diag_frames=0)
+  prime_contract(gate)
   cs = car.CarState.new_message(canValid=blocked != 'invalid_can', gearShifter='drive')
   if blocked == 'driver':
     gate.update(True, 10.)
@@ -476,3 +486,61 @@ def test_production_card_send_boundary(output, monkeypatch, tmp_path, blocked):
   ns['controls_update'](card, cs.as_reader(), car.CarControl.new_message().as_reader())
   with log.Event.from_bytes(sent[-1][1]) as event:
     assert len(event.sendcan) == int(blocked is None)
+
+
+def prime_contract(gate, now=10., fault=None):
+  from opendbc.car.hyundai.spas import frame
+  gate.owner.held = True
+  cs = NS(canValid=True)
+  for counter in range(10):
+    stamp = now - (9-counter)*.02
+    gate.owner.renewed = stamp
+    packets = [frame(addr, counter if fault != 'counter' else 0, None, gate.bus) for addr in SPAS]
+    if fault == 'missing':
+      packets = packets[:1]
+    if fault == 'crc':
+      packets = [(addr, bytes(len(data)), bus) for addr, data, bus in packets]
+    if fault == 'bus':
+      packets = [(addr, data, bus+1) for addr, data, bus in packets]
+    if fault == 'length':
+      packets = [(addr, data[:8], bus) for addr, data, bus in packets]
+    gate.observe_driver([(int(stamp*1e9)-100, packets), lever_frame(0, stamp-1e-7)], cs, stamp)
+
+
+@pytest.mark.parametrize('fault', ['missing', 'crc', 'counter', 'bus', 'length', 'stale', 'driver_stale', None])
+def test_kick_requires_live_protocol_before_any_request(output, fault):
+  gate, _ = output
+  assert not gate.update(True, 10.)
+  prime_contract(gate, fault=fault)
+  if fault == 'driver_stale':
+    gate.driver_stamp = 9.
+  assert bool(gate.update(True, 10.2 if fault == 'stale' else 10.)) == (fault is None)
+
+
+def test_admitted_kick_allows_ecu_silence_but_requires_fresh_driver(output):
+  gate, _ = output
+  prime_contract(gate)
+  assert gate.update(True, 10.)
+  gate.request_id = 'active'
+  gate.owner.renewed = 10.2
+  gate.observe_driver([lever_frame(0, 10.2)], NS(canValid=True), 10.2)
+  assert gate.update(True, 10.2)
+  assert not gate.update(True, 10.6)
+  gate.request_id = None
+  gate.driver_stamp = 10.6
+  assert not gate.update(True, 10.6)  # A new request cannot reuse the old stock admission.
+
+
+@pytest.mark.parametrize('counter,corrupt', [(9, False), (11, False), (10, True)])
+def test_active_kick_stops_on_invalid_stock_contract(output, counter, corrupt):
+  from opendbc.car.hyundai.spas import frame
+  gate, _ = output
+  prime_contract(gate)
+  assert gate.update(True, 10.)
+  gate.request_id = 'active'
+  packet = frame(0x16A, counter, None, gate.bus)
+  if corrupt:
+    packet = (packet[0], bytes(32), packet[2])
+  gate.owner.renewed = 10.02
+  gate.observe_driver([(10_020_000_000, [packet]), lever_frame(0, 10.02)], NS(canValid=True), 10.02)
+  assert not gate.update(True, 10.02)

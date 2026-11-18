@@ -1,5 +1,75 @@
 # Repository memory
 
+- 2026-11-18: Cheddar GPU follow-up isolates the first QCOM failure to constant
+  Gather history expansion: 225 individual selections produce a388368-byte
+  shader, requiring3035 load units in a10-bit field. Command uint32 overflow
+  occurs before submission but after HCQ timeline advancement; optimizer retries
+  then await the missing signal. Coalesce consecutive selections into nine
+  slices without changing order/history; shader3064bytes/24units. Corrected old
+  runtime completes180finite recurrent frames;32 desktop Python selection/JIT
+  checks pass. Exact upstream ec91b74 compiler/runtime also runs and survives
+  saved-artifact checks. State aliases preserve captured outputs and avoid
+  separate-copy56.06ms overhead; compiled-readback policy averages33.39ms.
+  Synthetic full-image paths500calls: CD21028.70ms/p9534.61/max51.90/1over50;
+  Cheddar41.26/p9549.60/max65.74/22over50. Offroad little cores, not road-load
+  validation. CPU numerical differences remain characterized, not certified.
+  Hold model/default/catalog/runtime-pin replacement; production state/reset/
+  recovery integration and representative deadlines remain. No vehicle install
+  or Params/control changes. Native CPU CI follows publication. Review
+  docs/cheddar_model_review_20261118.md; private scratch2026-11-18-cheddar-runtime.
+
+- 2026-11-18: Owner replaces PR582 point shedding with equivalent computation
+  reuse. Decode vision association fields lazily once per lead per detector
+  update; retain original short-circuit reads, precise/normal gates and each
+  radar point's missing-speed fallback. Reuse unchanged paired-front motion
+  metrics and projection. No new setting, input filtering or history/policy
+  change. Baseline446fa79624 versus final code matches all11 controller outputs,
+  estimates, observations, aliases, continuity and timers on107full segments/
+  92routes/128086aligned inputs, both initial sensor preferences256172comparisons.
+  Python fallback8segments/9594inputs also exact. Two full-controller slowing
+  regressions fail on original PR582 and pass here. Local932native-backed and
+  860Python checks pass; desktop timing improves but is not a device latency or
+  commIssue cure measurement. Native/full CI and scheduled NAS deployment follow
+  publication. No vehicle writes. Private evidence
+  .analysis/scratch/2026-11-18-radar-compute/INDEX.md.
+
+- 2026-11-18: Indicator continuity replay now covers467 retained full segments/
+  60routes/523934aligned inputs. Bound early manual near-edge retreat by150ms
+  paired-rebase memory; uncertain near-line retreat requires same-side torque,
+  far-line progress and stable geometry within3s. Opposite driver/input guards
+  remain. Consecutive opposite manual turns bridge only the last250ms before
+  existing2s/1s-dark rearm, at10kmh+, with current growing steering. Independent
+  ordinary detector preserves5kmh admission and survives retained-intent expiry.
+  Native363->365, delayed-first-send410ms362->364, external364->366; no previous
+  request removed, two existing starts~100ms earlier/same ends, five lane ends
+  extended. Video confirms added11d6/0+17.410 and11f5/8+49.368. Todayf5/4 hold
+  .200->2.990s, f5/7 .246->2.446s delayed-native. f5/8 cancels after1.700s on
+  opposite driver, so two physical flashes not guaranteed. Reject broad history
+  causing parking/exit indications and next-signal suppression. Three baseline
+  failure shapes reproduced;1184localpass/9platformskip, Wiki25pass. Unknown
+  marking/narrow-width/source-delivery misses remain; no whole-corpus truth rate
+  or physical lamp proof. No vehicle writes. Native/full CI follows publication.
+  Evidence .analysis/archive/2026-11-18/indicator-continuity-fixes/INDEX.md.
+
+- 2026-11-18: Review PR581 EV4 wrapped navigation and PR582 radar load shedding.
+  Integrate EV4 message selection with the existing navigation policy. Scope
+  empty wrapped-route padding and HDA-only availability to EV4, preserving PV5
+  and legacy route handling. Tests cover real EV4 camera/HDA payloads, both HDA
+  buses, startup caching, mode/route admission and padding timeout. Extended
+  inventory covers104segments/23routes/two EV4s, three incomplete tails retained
+  only through complete messages. PR0x092 legacy mapping yields impossible
+  averages384+ and reproduces false section admission on the recorded payload.
+  Remove that unverified position DBC/registration, retain camera/bump/route
+  support; both-bus regressions fail before/pass after. Local252 checks pass;
+  native/full CI follows publication.
+  Hold PR582: exact contributor controller under smooth0.8m/s2 target slowing
+  reproduces lost leadCutInRisk/leadsCutIn and changed leadTwo once vLead falls
+  through0.5m/s. Existing confirmed holds depend on history beyond common_ok.
+  Two deterministic full-controller cases change14/11 frames; this is not a
+  replay of a captured maneuver. Reporter I9 route4cd/26..27 does confirm low
+  radarState cadence. No vehicle writes or measured physical improvement.
+  Private review and raw-log inventory .analysis/scratch/2026-11-18-pr581-582.
+
 - 2026-11-17: Carnival c4dcf95545dafe68 route299/14 on2b202df126 has
   card state_tail71.409ms and per-frame threadCPUmax13.191ms in the same
   aggregate, bounding at least58ms of that tail outside thread CPU execution.

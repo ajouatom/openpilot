@@ -108,13 +108,17 @@ class Movement:
     self.crossed = False
     self.settled = None
     self.peak_angle = 0.
+    self.return_since = None
+    self.return_anchor = None
+    self.geometry_recovery = None
     self.reason = 'active'
 
   def update(self, now, cs, md):
     try:
       left, right = md.laneLines[1].y[0], md.laneLines[2].y[0]
       angle = cs.steeringAngleDeg
-      if not all(math.isfinite(v) for v in (now, left, right, angle)) or (self.source != 'model_turn' and not 2.5 < right-left < 4.8):
+      if not all(math.isfinite(v) for v in (now, left, right, angle)) or (self.source != 'model_turn' and
+          not (2. < right-left < 6. if self.geometry_recovery is not None else 2.5 < right-left < 4.8)):
         self.reason = 'geometry'
         return False
       stamp, old_left, old_right = self.last
@@ -131,18 +135,58 @@ class Movement:
       else:
         selected = -left if self.direction == 1 else right
         old_selected = -old_left if self.direction == 1 else old_right
+        far = right if self.direction == 1 else -left
+        old_far = old_right if self.direction == 1 else -old_left
+        sign = 1 if self.direction == 1 else -1
+        driver_return = cs.steeringPressed and cs.steeringTorque * sign < 0 and angle * sign < 0
+        # One uncertain crossed boundary moving away while the opposite line
+        # continues the approach is a widening/reassignment, not measured return.
+        if (self.geometry_recovery is None and self.source == 'manual' and not self.crossed and
+            now-self.started <= .35 and cs.steeringPressed and cs.steeringTorque * sign > 0 and
+            self.minimum < 1.2 and selected-self.minimum > .2 and far-old_far > .1 and
+            md.laneLineProbs[self.direction] < .5 and not driver_return):
+          self.geometry_recovery = (now, old_far, far)
+        if self.geometry_recovery is not None:
+          started, anchor_far, peak_far = self.geometry_recovery
+          peak_far = max(peak_far, far)
+          self.geometry_recovery = (started, anchor_far, peak_far)
+          if driver_return or now-started >= 3. or now-started >= .25 and peak_far-anchor_far < .15:
+            self.reason = 'returned' if driver_return else 'geometry'
+            return False
+          centered = (2.5 < right-left < 4.8 and left < -1. and right > 1. and
+                      md.laneLineProbs[1] >= .5 and md.laneLineProbs[2] >= .5 and
+                      max(abs(left-old_left), abs(right-old_right)) < .08)
+          self.settled = (now if self.settled is None else self.settled) if centered else None
+          if self.settled is not None and now-self.settled >= .4:
+            self.reason = 'completed'
+            return False
+          return True
         # A pair shifting one lane after reaching its edge is a completed crossing,
         # not a new request. An arbitrary relabel far from the boundary is invalid.
-        jump = max(abs(left-old_left), abs(right-old_right)) > .5
-        relabel = jump and self.minimum < .9 and selected-old_selected > 1.5 and abs((left-old_left)-(right-old_right)) < .5
-        if jump and not relabel:
+        anchor_left, anchor_right = (self.return_anchor or (old_left, old_right))
+        anchor_selected = -anchor_left if self.direction == 1 else anchor_right
+        jump = max(abs(left-anchor_left), abs(right-anchor_right)) > .5
+        relabel = jump and self.minimum < .9 and selected-anchor_selected > 1.5 and abs((left-anchor_left)-(right-anchor_right)) < .5
+        if jump and not relabel and self.return_anchor is None:
           self.reason = 'relabel'
           return False
         self.crossed |= selected <= 0 or relabel
         self.minimum = min(self.minimum, selected)
         if not self.crossed and selected-self.minimum > .2:
-          self.reason = 'returned'
-          return False
+          # A model boundary can retreat briefly before both lines are assigned
+          # to the next lane. Keep the pre-retreat pair for that bounded rebase.
+          if (self.source != 'manual' or driver_return or self.minimum >= .3 or
+              self.return_since is None and now-self.started > .35):
+            self.reason = 'returned'
+            return False
+          if self.return_since is None:
+            self.return_since, self.return_anchor = now, (old_left, old_right)
+          if now-self.return_since >= .15:
+            self.reason = 'returned'
+            return False
+          self.settled = None
+          return True
+        self.return_since, self.return_anchor = None, None
         done = self.crossed and left < 0 < right and min(-left, right) > 1.0 and abs(selected-old_selected) < .08
       self.settled = (now if self.settled is None else self.settled) if done else None
       if self.settled is not None and now-self.settled >= .4:
@@ -223,12 +267,16 @@ class ModelIndicator:
     self.manual_seen = 0.
     self.tap_echo = TapEcho()
     self.manual_turn = ManualTurnIndicator()
+    self.follow_turn = None
+    self.follow_observer = ManualTurnIndicator()
 
   def update(self, now, cs, md, *, valid, lateral_active, desire_enabled, path_enabled, busy, isolation, manual_edge=0, command_curvature=None,
              feedback=None, manual_turn_enabled=False, yaw_rate=None, manual_minimum=0.):
     self.reason = 'idle'
     if self.active is None and not manual_edge and not (desire_enabled or path_enabled or manual_turn_enabled):
       self.manual_turn.reset('disabled')
+      self.follow_turn = None
+      self.follow_observer.reset('disabled')
       self.evidence.clear()
       self.previous = None
       self.reason = 'disabled'
@@ -270,6 +318,11 @@ class ModelIndicator:
         if (not common or busy or not allowed or opposite_lamp or
             not moving and not minimum):
           self.reason = a.reason if common and allowed and not busy and not opposite_lamp else 'cancelled'
+          # Only an independently recognized manual turn can seed its successor.
+          # A lane crossing/avoidance or an input/driver-lever cancellation cannot.
+          self.follow_turn = ((now, 3-a.direction)
+                              if a.source == 'manual_turn' and self.reason == 'driver_opposite' else None)
+          self.follow_observer.reset('previous_turn')
           self.active = None
         else:
           # Keep ownership throughout the hold, including a stopped/long turn.
@@ -288,14 +341,29 @@ class ModelIndicator:
       # A new driver turn may be observed before other automatic sources rearm.
       # Lamp masking and the uninterrupted dark interval still apply.
       manual_turn_after = isolation.block_until - QUIET_SEC + MANUAL_TURN_QUIET_SEC
+      turn_ready = (not cs.leftBlinker and not cs.rightBlinker and now >= manual_turn_after and
+                    isolation.dark_since is not None and now-isolation.dark_since >= 1.)
+      if self.follow_turn is not None:
+        ended, required_side = self.follow_turn
+        direction = (1 if cs.steeringTorque > 0 else 2 if cs.steeringTorque < 0 else 0) if cs.steeringPressed else 0
+        if (not common or busy or not manual_turn_enabled or cs.vEgo < 10/3.6 or not 0 <= now-ended <= 3. or
+            required_side and direction and direction != required_side):
+          self.follow_turn = None
+          self.follow_observer.reset('admission')
       # Junction lane relabels must not erase the steering onset. Manual turns
       # have independent torque, angle-growth, yaw and road-curve checks.
       turn = self.manual_turn.update(now, cs, md.frameId, yaw_rate,
-        allowed=(manual_turn_enabled and common and not busy and not cs.leftBlinker and not cs.rightBlinker and
-                 now >= manual_turn_after and
-                 isolation.dark_since is not None and now - isolation.dark_since >= 1.),
+        allowed=manual_turn_enabled and common and not busy and turn_ready,
         following_curve=manual_turn_enabled and following_road_curve(md, cs.vEgo, yaw_rate))
+      # Keep ordinary fresh-steering detection independent: expiry of retained
+      # intent must never erase a turn it would otherwise recognize.
+      follow = self.follow_observer.update(now, cs, md.frameId, yaw_rate,
+        allowed=self.follow_turn is not None,
+        following_curve=manual_turn_enabled and following_road_curve(md, cs.vEgo, yaw_rate),
+        emit_allowed=turn_ready, require_growth=True)
+      turn = turn or follow
       if turn is not None:
+        self.follow_turn = None
         self.active, self.request_time, self.reason = turn, now, turn.source
         isolation.own(now, turn.direction)
         self.candidate, self.previous = None, None

@@ -48,6 +48,7 @@ SPEEDCAM_GAS_TOK_FRAMES = 40   # matches cruise.py _gas_tok_timer (0.4 s at 100 
 VEHICLE_NAVI_ROUTE_TIMEOUT_NS = 2_000_000_000
 CANFD_HDA_INFO_MSG = "CANFD_HDA_INFO_364"
 CANFD_NAVI_PROFILE_MSG = "CANFD_NAVI_PROFILE_093"
+CANFD_NAVI_SEGMENT_MSG = "CANFD_NAVI_SEGMENT_099"
 CANFD_NAVI_STATUS_MSG = "CANFD_NAVI_STATUS_380"
 CANFD_NAVI_CAMERA_ACTIVE_BIT = 0x40
 CANFD_NAVI_STATUS_TIMEOUT_NS = 1_000_000_000
@@ -218,7 +219,10 @@ class CarState(CarStateBase):
     self.tunnel_notice_frames, self.tunnel_banned = 0, False
     self.motorway_frames = 0
     self.canfd_wrapped_navi = CP.carFingerprint == CAR.KIA_PV5
-    self.navi_profile_msg = CANFD_NAVI_PROFILE_MSG if self.canfd_wrapped_navi else "NEW_MSG_4BE"
+    self.canfd_ev4_navi = CP.carFingerprint == CAR.KIA_EV4
+    self.hda_info_msg = CANFD_HDA_INFO_MSG if (self.canfd_wrapped_navi or self.canfd_ev4_navi) else "HDA_INFO_4A3"
+    self.navi_segment_msg = CANFD_NAVI_SEGMENT_MSG if self.canfd_ev4_navi else "NEW_MSG_4B9"
+    self.navi_profile_msg = CANFD_NAVI_PROFILE_MSG if (self.canfd_wrapped_navi or self.canfd_ev4_navi) else "NEW_MSG_4BE"
     self.vehicleNaviZoneControlSupported = not self.canfd_wrapped_navi  # Legacy kind-7 profile zones only
     self.hda_info_4a3 = None
     self.navi_position_4b4 = None
@@ -538,10 +542,10 @@ class CarState(CarStateBase):
             if self.cp_alt is not None:
               add_and_cache(self.cp_alt, CANFD_NAVI_STATUS_MSG, "navi_status_380")
           else:
-            add_and_cache(self.cp, "HDA_INFO_4A3", "hda_info_4a3")
+            add_and_cache(self.cp, self.hda_info_msg, "hda_info_4a3")
             add_and_cache(self.cp, "NEW_MSG_4B4", "navi_position_4b4")
-            add_and_cache(self.cp, "NEW_MSG_4B9", "navi_segment_4b9")
-            add_and_cache(self.cp, "NEW_MSG_4BE", "navi_profile_4be")
+            add_and_cache(self.cp, self.navi_segment_msg, "navi_segment_4b9")
+            add_and_cache(self.cp, self.navi_profile_msg, "navi_profile_4be")
           add_and_cache(self.cp, "STEER_TOUCH_2AF", "steer_touch_2af")
         elif self.controls_ready_count == 124:
           add_and_cache(self.cp, self.cruise_btns_msg_canfd, "cruise_buttons_msg")
@@ -1233,7 +1237,8 @@ class CarState(CarStateBase):
     if self.canfd_wrapped_navi:
       self._update_pv5_navi_section(cp, cp_alt)
     profile_timestamp = self._vehicle_navi_message_timestamp(cp, self.navi_profile_msg)
-    self.vehicleNaviAvailable = self.vehicleNaviAvailable or profile_timestamp > 0 or self.vehicleNaviSpeedZoneActive
+    hda_timestamp = self._vehicle_navi_message_timestamp(cp, self.hda_info_msg) if self.canfd_ev4_navi else 0
+    self.vehicleNaviAvailable = self.vehicleNaviAvailable or profile_timestamp > 0 or hda_timestamp > 0 or self.vehicleNaviSpeedZoneActive
     ret.vehicleNaviAvailable = self.vehicleNaviAvailable
     self._update_tunnel(ret)
     self._update_roundabout(ret)
@@ -1261,8 +1266,12 @@ class CarState(CarStateBase):
     range_section_active = 0 < range_avg_speed < 511
 
     if self.navi_segment_4b9 is not None:
-      timestamp = self._vehicle_navi_message_timestamp(cp, "NEW_MSG_4B9")
-      if timestamp > self.vehicleNaviSegmentTimestamp:
+      timestamp = self._vehicle_navi_message_timestamp(cp, self.navi_segment_msg)
+      # EV4 wraps padding after sparse route updates. Padding supplies no new
+      # route evidence and must not renew the existing route timeout.
+      empty_wrapped_segment = self.canfd_ev4_navi and all(
+        int(self.navi_segment_4b9.get(f"BYTE_{i + 1}", 0)) == 0xff for i in range(8))
+      if timestamp > self.vehicleNaviSegmentTimestamp and not empty_wrapped_segment:
         self.vehicleNaviSegmentTimestamp = timestamp
         segment = self._decode_vehicle_navi_segment(self.navi_segment_4b9)
         previous_route_state = self.vehicleNaviRouteState
@@ -1799,9 +1808,16 @@ class CarState(CarStateBase):
     # Register stock-navigation position/route/profile messages as optional
     # from startup so dynamic fingerprint timing cannot miss sparse profiles.
     wrapped_navi = CP.carFingerprint == CAR.KIA_PV5
-    msgs = ([(CANFD_HDA_INFO_MSG, math.nan), (CANFD_NAVI_PROFILE_MSG, math.nan)] if wrapped_navi else
-            [("NEW_MSG_4B4", math.nan), ("NEW_MSG_4B9", math.nan), ("NEW_MSG_4BE", math.nan)])
-    alt_msgs = [(CANFD_NAVI_STATUS_MSG, math.nan)] if wrapped_navi else []
+    ev4_navi = CP.carFingerprint == CAR.KIA_EV4
+    if wrapped_navi:
+      msgs = [(CANFD_HDA_INFO_MSG, math.nan), (CANFD_NAVI_PROFILE_MSG, math.nan)]
+      alt_msgs = [(CANFD_NAVI_STATUS_MSG, math.nan)]
+    elif ev4_navi:
+      msgs = [(CANFD_HDA_INFO_MSG, math.nan), (CANFD_NAVI_SEGMENT_MSG, math.nan), (CANFD_NAVI_PROFILE_MSG, math.nan)]
+      alt_msgs = []
+    else:
+      msgs = [("NEW_MSG_4B4", math.nan), ("NEW_MSG_4B9", math.nan), ("NEW_MSG_4BE", math.nan)]
+      alt_msgs = []
     if CP.carFingerprint == CAR.GENESIS_GV80:
       msgs += [("SPAS2", math.nan)]
     if not (CP.flags & HyundaiFlags.CANFD_ALT_BUTTONS):
