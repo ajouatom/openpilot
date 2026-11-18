@@ -558,11 +558,11 @@ impl Kick {
             return frames;
         }
         if self.owner.held {
-            if direction != self.journal_direction || now - self.last_journal >= 0.1 {
-                if record_ownership(now, &json!({"time": now, "direction": direction})).is_ok() {
-                    self.journal_direction = direction;
-                    self.last_journal = now;
-                }
+            if (direction != self.journal_direction || now - self.last_journal >= 0.1)
+                && record_ownership(now, &json!({"time": now, "direction": direction})).is_ok()
+            {
+                self.journal_direction = direction;
+                self.last_journal = now;
             }
             if isolation_mask.is_some_and(|mask| mask & direction != 0) {
                 return frames;
