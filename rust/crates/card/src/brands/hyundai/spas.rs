@@ -196,6 +196,17 @@ pub fn compatible(fingerprint: &BTreeMap<u8, BTreeMap<u32, usize>>, bus: u8) -> 
     })
 }
 
+/// carrot `kick_compatible`: panda's Kick output uses ECAN0/ACAN1 on the
+/// camera-SCC harness, and the independent classic stalk (0x3C1, DLC 8) is
+/// required for driver priority.
+pub fn kick_compatible_with(
+    size: impl Fn(u32) -> Option<usize>,
+    bus: u8,
+    camera_scc: bool,
+) -> bool {
+    camera_scc && bus % 4 == 0 && compatible_with(&size) && size(0x3c1) == Some(8)
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Direction {
     Left,
@@ -379,6 +390,18 @@ impl Session {
         self.stock
             .iter()
             .all(|s| !(0. ..1.).contains(&(now - s.stamp)))
+    }
+
+    /// Advancing CRC-valid frames in a row of stock `address`.
+    pub fn stock_consecutive(&self, address: u32) -> u32 {
+        index(address).map_or(0, |i| self.stock[i].consecutive)
+    }
+
+    /// A stale stock frame breaks its run (carrot `stock[address].consecutive = 0`).
+    pub fn break_stock(&mut self, address: u32) {
+        if let Some(i) = index(address) {
+            self.stock[i].consecutive = 0;
+        }
     }
 
     pub fn stock_ready(&self, now: f64) -> bool {

@@ -66,6 +66,11 @@ impl Owner {
         })
     }
 
+    /// When the lease was last written.
+    pub fn renewed(&self) -> f64 {
+        self.renewed
+    }
+
     pub fn release(&mut self, now: f64) {
         if self.held {
             // The last bounded lease expires without a renewal on failure.

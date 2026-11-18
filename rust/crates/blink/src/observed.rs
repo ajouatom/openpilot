@@ -70,7 +70,9 @@ pub fn allowed(
         || car.steer_fault_permanent
         || (car.blinker_lever != 0 && !(holding && tap_echo))
         || !car.v_ego.is_finite()
-        || car.v_ego < 0.
+        // carrot 9eb26059a: a held lamp survives the filtered speed's
+        // small negative swing at a D stop.
+        || (car.v_ego < 0. && !(holding && car.standstill && car.v_ego.abs() < 0.1))
     {
         return false;
     }
@@ -94,7 +96,9 @@ pub fn allowed(
         && !car.right_blinker
         && car.v_ego >= minimum
         && matches!(meta.lane_change_state, "off" | "preLaneChange")
-        && (matches!(source, "model_turn" | "manual_turn")
+        // The manual boundary observer already admitted this exact fresh
+        // crossing; a newer marking label must not drop its one-shot edge.
+        && (matches!(source, "manual" | "model_turn" | "manual_turn")
             || adjacent_lane(car, model, direction, now))
 }
 

@@ -42,6 +42,8 @@ pub struct IndicatorConfig {
     pub manual_turn: bool,
     pub model_desire: bool,
     pub model_path: bool,
+    /// carrot `manual_indicator_minimum`: 2 s with the Kick on, else 0.
+    pub manual_minimum: f64,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

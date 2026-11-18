@@ -383,9 +383,38 @@ pub struct ObserverInput<'a> {
     pub feedback: Option<&'a serde_json::Value>,
     pub manual_turn_enabled: bool,
     pub yaw_rate: Option<f64>,
+    /// carrot a31a59ca2 `manual_minimum`: native Kick has no OEM one-touch
+    /// tail, so a manual request's normal completion waits this long (s).
+    pub manual_minimum: f64,
 }
 
 type Candidate = Option<(u8, &'static str)>;
+
+/// The first Kick frame time the policy worker reports for this very request
+/// (`physical-hold.json` `native_start`), when fresh and consistent.
+fn native_start(
+    feedback: Option<&serde_json::Value>,
+    request_time: f64,
+    direction: u8,
+    now: f64,
+) -> Option<f64> {
+    let feedback = feedback?;
+    let native = feedback.get("native_start")?;
+    let request = native.get("request")?.as_f64()?;
+    let time = native.get("time")?.as_f64()?;
+    let stamp = feedback
+        .get("stamp")
+        .and_then(serde_json::Value::as_f64)
+        .unwrap_or(-1.);
+    let side = if direction == 1 { "left" } else { "right" };
+    ((request - request_time).abs() < 1e-6
+        && native.get("direction")?.as_str()? == side
+        && time.is_finite()
+        && request_time <= time
+        && time <= now
+        && (0. ..0.15).contains(&(now - stamp)))
+    .then_some(time)
+}
 
 #[derive(Clone, Debug)]
 pub struct ModelIndicator {
@@ -517,12 +546,18 @@ impl ModelIndicator {
             } else {
                 car.left_blinker
             };
-            if !common
-                || i.busy
-                || !allowed
-                || opposite
-                || (!promoted && !a.update(now, car, model, i.yaw_rate))
-            {
+            let moving = promoted || a.update(now, car, model, i.yaw_rate);
+            // Delay normal completion only; every input, driver and geometry
+            // cancellation still ends the request.
+            let minimum = i.manual_minimum > 0.
+                && matches!(source, "manual" | "manual_turn")
+                && a.reason() == "completed"
+                && {
+                    let started = native_start(i.feedback, self.request_time, a.direction(), now)
+                        .unwrap_or(self.request_time);
+                    (0. ..i.manual_minimum).contains(&(now - started))
+                };
+            if !common || i.busy || !allowed || opposite || (!moving && !minimum) {
                 self.reason = if common && allowed && !i.busy && !opposite {
                     a.reason()
                 } else {

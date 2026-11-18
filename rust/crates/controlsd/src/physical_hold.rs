@@ -5,19 +5,30 @@ use serde_json::Value;
 use std::path::PathBuf;
 
 pub const HOLD_PATH: &str = "/dev/shm/carrot-bluetooth/physical-hold.json";
-const FINGERPRINT: &str = "HYUNDAI_IONIQ_5_PE";
+/// `HyundaiExtFlags.CANFD_INDICATOR_HOLD`: the camera's ADRV_0x1EA is DLC 32.
+pub const CANFD_INDICATOR_HOLD: u32 = 1 << 19;
+
+/// carrot `native_hold_supported` (6af3073e3): chosen by the observed
+/// protocol, not by the model name.
+pub fn native_hold_supported(config: &crate::config::Config) -> bool {
+    config.brand == "hyundai"
+        && !config.passive
+        && config.openpilot_long
+        && config.ext_flags & CANFD_INDICATOR_HOLD != 0
+}
 
 /// `hudControl.physicalBlinkerHold`: 0 legacy, 1 release, 2 left, 3 right.
-pub fn lease_value(value: &Value, now: f64) -> u8 {
+pub fn lease_value(value: &Value, now: f64, fingerprint: &str) -> u8 {
     let stamp = value.get("stamp").and_then(Value::as_f64);
     let override_ = value.get("override") == Some(&Value::Bool(true));
     let fresh = stamp.is_some_and(|s| s.is_finite() && (0. ..0.35).contains(&(now - s)));
-    let leased = fresh
-        && value.get("fingerprint").and_then(Value::as_str) == Some(FINGERPRINT)
-        && matches!(value.get("mode").and_then(Value::as_i64), Some(1 | 2));
+    let own = value.get("fingerprint").and_then(Value::as_str) == Some(fingerprint);
+    let leased = fresh && own && matches!(value.get("mode").and_then(Value::as_i64), Some(1 | 2));
     if !leased {
         // A just-expired override still releases for one more second.
-        return u8::from(override_ && stamp.is_some_and(|s| (0. ..1.35).contains(&(now - s))));
+        return u8::from(
+            own && override_ && stamp.is_some_and(|s| (0. ..1.35).contains(&(now - s))),
+        );
     }
     if !override_ {
         return 0;
@@ -31,6 +42,7 @@ pub fn lease_value(value: &Value, now: f64) -> u8 {
 
 pub struct HoldReader {
     supported: bool,
+    fingerprint: String,
     path: PathBuf,
     next_mode: f64,
     next_read: f64,
@@ -39,9 +51,10 @@ pub struct HoldReader {
 }
 
 impl HoldReader {
-    pub fn new(fingerprint: &str) -> Self {
+    pub fn new(config: &crate::config::Config) -> Self {
         Self {
-            supported: fingerprint == FINGERPRINT,
+            supported: native_hold_supported(config),
+            fingerprint: config.fingerprint.clone(),
             path: HOLD_PATH.into(),
             next_mode: 0.,
             next_read: 0.,
@@ -81,7 +94,7 @@ impl HoldReader {
             self.next_read = now + 0.05;
         }
         // Recheck age even between reads.
-        Ok(lease_value(&self.value, now))
+        Ok(lease_value(&self.value, now, &self.fingerprint))
     }
 }
 
@@ -92,7 +105,7 @@ mod tests {
 
     #[test]
     fn lease_requires_fresh_matching_override() {
-        let lease = |v: serde_json::Value, now| lease_value(&v, now);
+        let lease = |v: serde_json::Value, now| lease_value(&v, now, "HYUNDAI_IONIQ_5_PE");
         let base = json!({"stamp": 10.0, "fingerprint": "HYUNDAI_IONIQ_5_PE", "mode": 1,
                           "override": true, "direction": "left"});
         assert_eq!(lease(base.clone(), 10.1), 2);
@@ -110,7 +123,7 @@ mod tests {
         assert_eq!(lease(base.clone(), 11.5), 0);
         let mut other = base.clone();
         other["fingerprint"] = json!("KIA_EV6");
-        assert_eq!(lease(other, 10.1), 1);
+        assert_eq!(lease(other, 10.1), 0, "another car's record never releases");
         let mut off = base;
         off["override"] = json!(false);
         assert_eq!(lease(off, 10.1), 0);

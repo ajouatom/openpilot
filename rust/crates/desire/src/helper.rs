@@ -68,9 +68,15 @@ pub struct DesireHelper {
     /// modelV2.meta.leverTurn: the turn desire comes from a latched lever.
     #[serde(skip)]
     pub lever_turn: bool,
-    /// Physical-indicator observers run only on `HYUNDAI_IONIQ_5_PE`.
+    /// Physical-indicator observers (carrot `boundary_indicator_supported`:
+    /// any non-passive car, or a Kick car).
     #[serde(skip)]
     pub indicator_supported: bool,
+    /// carrot `kick_supported`: the panda may kick the lamp itself
+    /// (HyundaiSafetyFlags.CANFD_BLINKER_KICK); the lamp is then read through
+    /// the verified lever while it is masked.
+    #[serde(skip)]
+    pub kick_supported: bool,
     #[serde(skip)]
     pub indicator_config: IndicatorConfig,
     #[serde(skip)]
@@ -155,6 +161,7 @@ impl Default for DesireHelper {
             blinker_hold_direction: 0,
             lever_turn: false,
             indicator_supported: false,
+            kick_supported: false,
             indicator_config: IndicatorConfig::default(),
             boundary_indicator: BoundaryIndicator::new(
                 None,
@@ -186,6 +193,12 @@ impl DesireHelper {
         }
     }
 
+    /// carrot `DesireHelper(kick_supported=...)`: also runs the observers.
+    pub fn with_kick(mut self, kick: bool) -> Self {
+        self.kick_supported = kick;
+        self
+    }
+
     /// carrot `DesireHelper(tesla_auto_signals=...)`; `counter_ns` seeds the
     /// request id as `time.monotonic_ns()` does.
     /// carrot `AssistantLane(fingerprint=..., native_signal=...)`.
@@ -205,7 +218,15 @@ impl DesireHelper {
     }
 
     /// carrot `_update_driver_blinker` Tesla branch: the stalk, not the lamp.
-    fn tesla_driver(&mut self, car: &crate::types::Car, lamp: u8) -> u8 {
+    /// `lamp` is the masked lamp, `driver_lamps` the lamp compared with the
+    /// lever (the raw lamp on a Kick car, carrot 6393f9518).
+    fn tesla_driver(
+        &mut self,
+        car: &crate::types::Car,
+        lamp: u8,
+        driver_lamps: u8,
+        valid: bool,
+    ) -> u8 {
         let t = &mut self.tesla;
         let driver = car.turn_signal_driver_direction;
         let counts = car.stalk_counts;
@@ -220,11 +241,11 @@ impl DesireHelper {
         } else {
             0
         };
-        if lamp == 3 {
+        if driver_lamps == 3 {
             t.manual_direction = 0;
             t.manual_grace = 0.;
             lamp
-        } else if !car.turn_signal_driver_valid {
+        } else if !valid || !car.turn_signal_driver_valid {
             t.manual_direction = 0;
             t.manual_grace = 0.;
             0
@@ -232,9 +253,9 @@ impl DesireHelper {
             t.manual_direction = if driver != 0 { driver } else { press };
             t.manual_grace = 1.;
             t.manual_direction
-        } else if lamp == t.manual_direction && lamp != 0 {
+        } else if driver_lamps == t.manual_direction && driver_lamps != 0 {
             t.manual_grace = 0.5;
-            lamp
+            t.manual_direction
         } else if lamp != 3 && t.manual_grace > DT {
             t.manual_grace -= DT;
             0
@@ -470,6 +491,7 @@ impl DesireHelper {
                     feedback: indicator.feedback.as_ref(),
                     manual_turn_enabled: config.manual_turn,
                     yaw_rate: indicator.yaw_rate,
+                    manual_minimum: config.manual_minimum,
                 },
                 &mut self.boundary_indicator,
             );
@@ -513,14 +535,15 @@ impl DesireHelper {
     }
     /// Side of a lever press since the last update. The lamp cannot show a press while
     /// already flashing; the counters can, and never miss a press between updates.
-    fn stalk_press(&mut self, car: &crate::types::Car) -> u8 {
+    fn stalk_press(&mut self, car: &crate::types::Car, valid: bool) -> u8 {
         let counts = car.stalk_counts;
         let Some(last) = self.stalk_counts.replace(counts) else {
             return 0;
         };
-        if self.tesla.enabled {
+        if self.tesla.enabled || (self.kick_supported && self.boundary_indicator.blocked != 0) {
             let (left, right) = (counts[0] != last[0], counts[1] != last[1]);
             if (car.left_blinker && car.right_blinker)
+                || !valid
                 || !car.turn_signal_driver_valid
                 || left == right
             {
@@ -693,20 +716,33 @@ impl DesireHelper {
         } else {
             self.turn_disable_count = self.turn_disable_count.saturating_sub(1);
         }
-        let lamp = self
-            .boundary_indicator
-            .filter_lamp(u8::from(car.left_blinker) + 2 * u8::from(car.right_blinker));
-        let mut driver = if self.tesla.enabled {
-            self.tesla_driver(car, lamp)
+        let raw_lamps = u8::from(car.left_blinker) + 2 * u8::from(car.right_blinker);
+        let lamp = self.boundary_indicator.filter_lamp(raw_lamps);
+        // carrot 6393f9518: on a Kick car the verified lever, not the masked
+        // lamp, says what the driver asked for while the lamp is owned.
+        let driver_input_valid = !self.kick_supported || (input.indicator.valid && car.can_valid);
+        let kick_masked = self.kick_supported && self.boundary_indicator.blocked != 0;
+        let mut driver = if self.tesla.enabled || kick_masked {
+            let driver_lamps = if self.kick_supported { raw_lamps } else { lamp };
+            self.tesla_driver(car, lamp, driver_lamps, driver_input_valid)
         } else {
+            if self.kick_supported {
+                self.tesla.manual_direction = 0;
+                self.tesla.manual_grace = 0.;
+                self.tesla.driver_counts = Some(car.stalk_counts);
+            }
             lamp
         };
         let mut driver_changed = driver != self.driver_blinker_state;
         self.driver_blinker_state = driver;
         let mut driver_enabled = matches!(driver, 1 | 2) && self.config.need_torque >= 0;
         let previous_state = self.lane_change_state;
-        let physical_stalk_press = self.stalk_press(car);
-        let stalk_press = self.boundary_indicator.filter_lamp(physical_stalk_press);
+        let physical_stalk_press = self.stalk_press(car, driver_input_valid);
+        let stalk_press = if self.kick_supported && car.turn_signal_driver_valid {
+            physical_stalk_press
+        } else {
+            self.boundary_indicator.filter_lamp(physical_stalk_press)
+        };
         let lever = car.blinker_lever;
         let forced_turn = self.lever_forced_turn.update(lever, car.blinker_lamp);
         if self.lever_wait.update(
@@ -1256,7 +1292,13 @@ mod lane_command_tests {
 
     #[test]
     fn only_left_or_right_lane_change_commands_request_a_side() {
-        for (argument, expected) in [("LEFT", 1), ("RIGHT", 2), ("", 0), ("CANCEL", 0), ("left", 0)] {
+        for (argument, expected) in [
+            ("LEFT", 1),
+            ("RIGHT", 2),
+            ("", 0),
+            ("CANCEL", 0),
+            ("left", 0),
+        ] {
             let mut helper = DesireHelper::new(false, None);
             let navigation = Navigation {
                 command_index: 7,
@@ -1281,7 +1323,11 @@ mod classify_tests {
         let mut side = SideState::new("left");
         side.dist_to_edge_far = 2.5; // centre line of a two-way road
         let mut input = Input::default();
-        for (kph, expected) in [(15., Maneuver::Turn), (29., Maneuver::Turn), (35., Maneuver::None)] {
+        for (kph, expected) in [
+            (15., Maneuver::Turn),
+            (29., Maneuver::Turn),
+            (35., Maneuver::None),
+        ] {
             input.car.v_ego = kph / 3.6;
             // score: below 30 km/h (+1 only there) and no side lane seen (+1)
             let got = classify(&input, &side, true, "", Maneuver::None);
@@ -1289,7 +1335,10 @@ mod classify_tests {
         }
         side.dist_to_edge_far = 5.;
         input.car.v_ego = 35. / 3.6;
-        assert_eq!(classify(&input, &side, true, "", Maneuver::None), Maneuver::Turn);
+        assert_eq!(
+            classify(&input, &side, true, "", Maneuver::None),
+            Maneuver::Turn
+        );
     }
 }
 

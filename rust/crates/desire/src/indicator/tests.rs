@@ -262,6 +262,7 @@ fn observe(
             feedback: None,
             manual_turn_enabled,
             yaw_rate,
+            manual_minimum: 0.,
         },
         isolation,
     );

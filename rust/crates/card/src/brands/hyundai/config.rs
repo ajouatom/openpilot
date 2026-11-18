@@ -14,6 +14,8 @@ pub struct CarConfig {
     pub wheelbase: f64,
     pub steer_ratio: f64,
     pub bus: CanBus,
+    /// `HyundaiSafetyFlags.CANFD_BLINKER_KICK` on a non-passive car.
+    pub kick: bool,
 }
 
 impl CarConfig {
@@ -37,6 +39,11 @@ impl CarConfig {
             wheel_speed_factor: f64::from(cp.get_wheel_speed_factor()),
             wheelbase: f64::from(cp.get_wheelbase()),
             steer_ratio: f64::from(cp.get_steer_ratio()),
+            kick: !cp.get_passive()
+                && cp
+                    .get_safety_configs()?
+                    .iter()
+                    .any(|config| config.get_safety_param() & f::safety::CANFD_BLINKER_KICK != 0),
             bus: CanBus::with_offset(
                 offset,
                 flags & f::HDA2 != 0,

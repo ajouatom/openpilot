@@ -70,6 +70,27 @@ pub fn parameters(input: ParamsInput<'_>) -> Result<Builder<HeapAllocator>, Erro
         detection.flags |= flags::CLUSTER_DIRECT_TX;
         detection.safety_param |= flags::safety::CLUSTER_DIRECT_TX;
     }
+    // carrot interface.py (6af3073e3): select the Kick by the observed
+    // protocol and harness, never the model name. Runtime CRC/counter/driver
+    // checks still precede each new Kick request.
+    let ecan_size = |address| super::bus::size(input.fingerprints, detection.bus.ecan, address);
+    let kick = detection.flags & flags::CANFD != 0
+        && super::spas::kick_compatible_with(
+            ecan_size,
+            detection.bus.ecan,
+            detection.flags & flags::CAMERA_SCC != 0,
+        )
+        && input.settings.get_bool("CanfdBlinkerKick")?;
+    if detection.flags & flags::CANFD != 0
+        && detection.flags & flags::CAMERA_SCC != 0
+        && super::bus::size(input.fingerprints, detection.bus.cam, 0x1ea) == Some(32)
+    {
+        detection.ext_flags |= flags::ext::CANFD_INDICATOR_HOLD;
+    }
+    if kick && input.settings.get_bool("CanfdBlinkerControl")? {
+        // The Kick and the SPAS lease are exclusive; the Kick wins.
+        input.settings.put_bool("CanfdBlinkerControl", false)?;
+    }
     // carrot interface.py: opt-in SPAS indicators need both exact ECAN SPAS
     // messages and are exclusive with the HDA2 blinker path.
     if detection.flags & flags::CANFD != 0
@@ -82,6 +103,11 @@ pub fn parameters(input: ParamsInput<'_>) -> Result<Builder<HeapAllocator>, Erro
     {
         detection.flags |= flags::CANFD_SPAS_BLINKERS;
         detection.safety_param |= flags::safety::CANFD_SPAS_BLINKERS;
+    }
+    if kick {
+        // panda admits the Kick ids only with this flag; read at fingerprint
+        // time, so switching it on applies from the next onroad start.
+        detection.safety_param |= flags::safety::CANFD_BLINKER_KICK;
     }
     cp.set_brand("hyundai");
     cp.set_flags(detection.flags);

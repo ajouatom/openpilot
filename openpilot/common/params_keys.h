@@ -214,6 +214,8 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"ClusterHudRadarSourceColor", {PERSISTENT, INT, "0"}},
     {"RecordRoadCam", {PERSISTENT, INT, "0"}},
     {"HDPuse", {PERSISTENT, INT, "0"}},
+    {"CcncClusterDisplay", {PERSISTENT, INT, "0"}},
+    {"CcncTrafficBackground", {PERSISTENT, INT, "0"}},
 
     {"AutoCruiseControl", {PERSISTENT, INT, "0"}},
     {"SoftHoldOnCancel", {PERSISTENT, BOOL, "0"}},
@@ -323,6 +325,8 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"IsLdwsCar", {PERSISTENT, INT, "0"}},
     {"CanfdHDA2", {PERSISTENT, INT, "0"}},
     {"CanfdBlinkerControl", {PERSISTENT, BOOL, "0"}},
+    {"CanfdBlinkerKick", {PERSISTENT, BOOL, "0"}},
+    {"CanfdBlinkerKickMode", {PERSISTENT, INT, "1"}},
     {"CanfdBlinkerTest", {CLEAR_ON_MANAGER_START, INT, "0"}},
     {"CanfdDebug", {PERSISTENT, INT, "0"}},
 
@@ -387,6 +391,7 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"SpeedFromPCM", {PERSISTENT, INT, "2"}},
     {"MaxTimeOffroadMin", {PERSISTENT, INT, "60"}},
     {"TeslaAutoTurnSignals", {PERSISTENT, BOOL, "0"}},
+    {"TeslaAutoSpeedLimit", {PERSISTENT, BOOL, "0"}},
     {"TeslaCanTrafficStop", {PERSISTENT, BOOL, "0"}},
     {"TeslaManualLaneSignals", {PERSISTENT, BOOL, "0"}},
     {"TeslaModelDesireSignals", {PERSISTENT, BOOL, "0"}},

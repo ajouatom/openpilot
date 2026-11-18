@@ -89,7 +89,7 @@ impl Controls {
         let longitudinal = Longitudinal::new(&config, params)?;
         let lateral = Lateral::new(&config, &interface, params)?;
         let vm = VehicleModel::new(config.physical.clone());
-        let physical_hold = crate::physical_hold::HoldReader::new(&config.fingerprint);
+        let physical_hold = crate::physical_hold::HoldReader::new(&config);
         Ok(Self {
             config,
             interface,

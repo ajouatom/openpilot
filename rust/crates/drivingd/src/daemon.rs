@@ -152,14 +152,17 @@ pub fn run(
         .get_car_fingerprint()?
         .to_str()?
         .to_owned();
-    let supported = indicator::supported(&fingerprint);
+    let support = indicator::Support::read(car_params.get_root::<car_params::Reader>()?)?;
+    let supported = support.any();
     let (tesla_signals, native_voice) = {
         let cp = car_params.get_root::<car_params::Reader>()?;
         let brand = cp.get_brand()?.to_str()?;
         let flags = cp.get_flags();
         // carrot voice_indicator.native_indicator: EA_02 or Hyundai SPAS2.
         const HYUNDAI_NATIVE: u32 = (1 << 13) | 1 | (1 << 5); // CANFD | CANFD_HDA2 | ENABLE_BLINKERS
+                                                              // carrot 2accb1fa3: a Kick car has no native voice route.
         let native = !cp.get_passive()
+            && !support.kick
             && ((brand == "volkswagen" && flags & 16384 != 0)
                 || (brand == "hyundai" && flags & HYUNDAI_NATIVE == HYUNDAI_NATIVE));
         (brand == "tesla" && flags & 32 != 0, native) // TeslaFlags.AUTO_TURN_SIGNALS
@@ -173,6 +176,7 @@ pub fn run(
                 None
             },
         )
+        .with_kick(support.kick)
         .with_tesla(tesla_signals, (process::monotonic() * 1e9) as u64)
         .with_assistant(&fingerprint, native_voice),
     );

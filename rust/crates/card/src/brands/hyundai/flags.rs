@@ -44,6 +44,9 @@ pub mod ext {
     pub const EV_MODE_230: u32 = 1 << 16;
     pub const BOSCH_RADAR: u32 = 1 << 17;
     pub const BOSCH_RADAR_BUS1: u32 = 1 << 18;
+    /// The camera's ADRV_0x1EA is DLC 32: an external indicator hold can be
+    /// carried in it (carrot 6af3073e3).
+    pub const CANFD_INDICATOR_HOLD: u32 = 1 << 19;
 }
 
 pub mod safety {
@@ -61,4 +64,7 @@ pub mod safety {
     pub const CANFD_SPAS_BLINKERS: u16 = 4096;
     pub const PEDAL_INTERCEPTOR: u16 = 8192;
     pub const PEDAL_INTERCEPTOR_RAY: u16 = 16384;
+    /// Observed SPAS + stalk contract on the camera-SCC harness: panda
+    /// admits the Kick ids behind stock SPAS frames.
+    pub const CANFD_BLINKER_KICK: u16 = 32768;
 }

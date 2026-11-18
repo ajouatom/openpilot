@@ -25,6 +25,7 @@ mod fd_cruise;
 pub mod flags;
 mod float_number;
 pub mod jerk;
+pub mod kick;
 pub mod lead;
 pub mod legacy_acc;
 mod legacy_buttons;
