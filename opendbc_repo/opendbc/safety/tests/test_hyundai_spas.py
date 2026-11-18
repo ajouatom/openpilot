@@ -137,12 +137,13 @@ def test_disallow_arbitrary_diagnostics_and_suppressed_ack_disable():
     assert not d.tx(APRK, data)
 
 
-def park_inputs(d, count, *, gear=0, wheel=0, driver=False, stock_direction=None, include_stock=True):
+def park_inputs(d, count, *, gear=0, wheel=0, gas=0, driver=False, stock_direction=None, include_stock=True):
   for addr, size in ((0x35, 32), (0xA0, 24)):
     data = bytearray(size)
     data[2] = count % 256
     if addr == 0x35:
       data[24] = gear
+      data[5] = gas
     else:
       data[8] = wheel
     data[:2] = checksum(addr, data).to_bytes(2, 'little')
@@ -189,13 +190,10 @@ def test_parked_comparison_no_uds_ten_seconds_and_cooldown(flags):
   assert d.tx(0x165, frame(0x165, 30, None, 0).dat)
 
 
-@pytest.mark.parametrize('bad', ['moving', 'gear', 'driver', 'controls', 'stock', 'stale', 'bus', 'disabled', 'bad_crc'])
+@pytest.mark.parametrize('bad', ['driver', 'stock', 'stale', 'bus', 'disabled', 'bad_crc'])
 def test_parked_comparison_rejects_missing_or_unsafe_inputs(bad):
   d = Device(flags=0 if bad == 'disabled' else 4096 | (16 if bad == 'bus' else 0), bus=1 if bad == 'bus' else 0)
-  parked(d, wheel=1 if bad == 'moving' else 0, gear=5 if bad == 'gear' else 0,
-         driver=bad == 'driver', stock_direction='right' if bad == 'stock' else None)
-  if bad == 'controls':
-    d.s.set_controls_allowed(True)
+  parked(d, driver=bad == 'driver', stock_direction='right' if bad == 'stock' else None)
   if bad == 'stale':
     d.advance(100000)
   if bad == 'bad_crc':
@@ -204,21 +202,17 @@ def test_parked_comparison_rejects_missing_or_unsafe_inputs(bad):
   assert not d.tx(0x16A, frame(0x16A, 30, 'left', d.bus).dat)
 
 
-@pytest.mark.parametrize('bad', ['moving', 'gear', 'driver', 'stock', 'controls', 'stale'])
+@pytest.mark.parametrize('bad', ['driver', 'stock', 'stale'])
 def test_parked_comparison_revokes_without_resuming(bad):
   d = Device()
   parked(d)
   assert d.tx(0x165, frame(0x165, 30, None, 0).dat)
   assert d.tx(0x16A, frame(0x16A, 30, 'left', 0).dat)
   d.advance(20000)
-  park_inputs(d, 30, wheel=1 if bad == 'moving' else 0, gear=5 if bad == 'gear' else 0,
-              driver=bad == 'driver', stock_direction='right' if bad == 'stock' else None)
-  if bad == 'controls':
-    d.s.set_controls_allowed(True)
+  park_inputs(d, 30, driver=bad == 'driver', stock_direction='right' if bad == 'stock' else None)
   if bad == 'stale':
     d.advance(500000)
   assert not d.tx(0x16A, frame(0x16A, 31, 'left', 0).dat)
-  d.s.set_controls_allowed(False)
   parked(d)
   assert not d.tx(0x165, frame(0x165, 30, None, 0).dat)
 
@@ -278,7 +272,7 @@ def test_original_patch_parked_sequence_no_ack_required_and_ten_second_bound(fla
   assert not d.tx(0x16A, frame(0x16A, count % 256, 'left', 0).dat)
 
 
-@pytest.mark.parametrize('fault', ['moving', 'gear', 'driver', 'controls', 'stale', 'watchdog'])
+@pytest.mark.parametrize('fault', ['driver', 'stale', 'watchdog'])
 def test_original_patch_parked_revocation_always_allows_default_restore(fault):
   from opendbc.car.hyundai.spas import PATCH_DISABLE
   d = Device()
@@ -301,17 +295,14 @@ def test_original_patch_parked_revocation_always_allows_default_restore(fault):
     d.advance(500000)
   else:
     d.advance(20000)
-    park_inputs(d, 36, wheel=1 if fault == 'moving' else 0,
-                gear=5 if fault == 'gear' else 0, driver=fault == 'driver')
-    if fault == 'controls':
-      d.s.set_controls_allowed(True)
+    park_inputs(d, 36, driver=True)
   assert not d.tx(0x16A, frame(0x16A, 1, 'right', 0).dat)
   assert d.tx(APRK, DEFAULT)
   assert not d.tx(APRK, PATCH_DISABLE)
 
 
 @pytest.mark.parametrize('flags', [4096, 4253])
-@pytest.mark.parametrize('fault', ['none', 'driver', 'moving', 'gear', 'stale', 'crc', 'knob', 'rate', 'direction', 'counter', 'gap', 'duration'])
+@pytest.mark.parametrize('fault', ['none', 'driver', 'stale', 'crc', 'knob', 'rate', 'direction', 'counter', 'gap', 'duration'])
 def test_stalk_replay_native_guards(flags, fault):
   from opendbc.car.hyundai.stalk_trial import replay, crc
   d = Device(flags)
@@ -322,7 +313,7 @@ def test_stalk_replay_native_guards(flags, fault):
   assert not d.tx(APRK, EXTENDED)
   assert not d.tx(0x165, frame(0x165, 30, None, 0).dat)
   d.advance(10000 if fault == 'rate' else 160000 if fault == 'gap' else 50000)
-  park_inputs(d, 30, driver=fault == 'driver', wheel=1 if fault == 'moving' else 0, gear=5 if fault == 'gear' else 0)
+  park_inputs(d, 30, driver=fault == 'driver')
   if fault == 'stale':
     d.advance(600000)
   if fault == 'crc':
@@ -361,6 +352,46 @@ def test_stalk_driver_change_latches_off_even_before_next_transmit():
   d.advance(30000)
   park_inputs(d, 31)
   assert not d.tx(0x3C1, packet)
+
+
+# 11-18: CanfdBlinkerTest follows CanfdBlinkerMenuTest (the Kick path's shape-only checks): its trials start and keep
+# running while moving, in another gear, with the gas pressed or with controls allowed
+@pytest.mark.parametrize('state', ['moving', 'gear', 'gas', 'controls'])
+@pytest.mark.parametrize('mode', ['comparison', 'patch', 'stalk'])
+def test_trials_run_in_any_gear_speed_and_engagement(state, mode):
+  from opendbc.car.hyundai.spas import PATCH_DISABLE
+  from opendbc.car.hyundai.stalk_trial import replay
+  d = Device(4253)  # EV gas signal: ACCELERATOR byte 5 drives gas_pressed
+  state_inputs = {'wheel': 200 if state == 'moving' else 0, 'gear': 5 if state == 'gear' else 0, 'gas': 50 if state == 'gas' else 0}
+  parked(d, **state_inputs)
+  if state == 'controls':
+    d.s.set_controls_allowed(True)
+  assert d.s.get_vehicle_moving() == (state == 'moving')
+  assert d.s.get_gas_pressed_prev() == (state == 'gas')
+  if mode == 'comparison':
+    for count in range(30, 80):
+      assert d.tx(0x165, frame(0x165, count % 256, None, 0).dat)
+      assert d.tx(0x16A, frame(0x16A, count % 256, 'left', 0).dat)
+      d.advance(20000)
+      park_inputs(d, count, **state_inputs)
+  elif mode == 'patch':
+    assert d.tx(APRK, EXTENDED)
+    for i in range(1, 6):
+      d.advance(10000)
+      park_inputs(d, 29+i, **state_inputs)
+    assert d.tx(APRK, PATCH_DISABLE)
+    for count in range(50):
+      d.advance(20000)
+      park_inputs(d, 35+count, **state_inputs)
+      for addr in SPAS:
+        assert d.tx(addr, frame(addr, count, 'left', 0).dat)
+  else:
+    packet = replay(bytes.fromhex('12b0000000000000'), 'left').dat
+    for tick in range(20):
+      assert d.tx(0x3C1, packet)
+      d.advance(50000)
+      park_inputs(d, 30+tick, **state_inputs)
+  assert d.s.get_controls_allowed() == (state == 'controls')
 
 
 # SpasSteerTest (joongyu01 fork, CANFD_SPAS_BLINKERS off): SPAS1 may carry the parking ECU's steering request - byte 3

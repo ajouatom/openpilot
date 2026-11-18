@@ -61,24 +61,44 @@ def test_parked_trial_is_one_shot_and_three_seconds(monkeypatch, setting):
   assert s.test_pulse == (setting >= 3)
 
 
-@pytest.mark.parametrize('bad', ['moving', 'drive', 'active', 'controls', 'panda', 'stale', 'can', 'stalk', 'other_hold'])
+# 11-18: CanfdBlinkerTest follows CanfdBlinkerMenuTest (Kick menu test): no P / standstill / disengaged gate
+@pytest.mark.parametrize('state', ['moving', 'reverse', 'drive', 'engaged'])
+@pytest.mark.parametrize('setting', [1, 5, 17])
+def test_trial_runs_in_any_gear_speed_and_engagement(monkeypatch, state, setting):
+  s, p, cs, sm = setup(monkeypatch)
+  cs.vEgo, cs.standstill = (20., False) if state == 'moving' else (0., True)
+  cs.gearShifter = {'moving': 'drive', 'reverse': 'reverse', 'drive': 'drive'}.get(state, 'park')
+  if state == 'engaged':
+    sm['carControl'].latActive = sm['carControl'].longActive = True
+    sm['selfdriveState'].active = sm['selfdriveState'].enabled = True
+    sm['pandaStates'][0].controlsAllowed = True
+  warm(s)
+  s.driver_data = bytes.fromhex('f880300000000000')
+  s.update(cs, sm, 10., True)
+  p.value = setting
+  s.settings_at = 0
+  sent = s.update(cs, sm, 10.01, True)
+  if setting == 1:
+    assert sent[0].dat == EXTENDED
+    s.update(cs, sm, 10.05, True)
+    assert s.test_request is not None
+  elif setting == 5:
+    assert {m.address for m in sent} == {0x165, 0x16A}
+    warm(s, 10.04)
+    assert {m.address for m in s.update(cs, sm, 10.04, True)} == {0x165, 0x16A}
+  else:
+    assert [m.address for m in sent] == [0x3C1]
+    assert [m.address for m in s.update(cs, sm, 10.07, True)] == [0x3C1]
+
+
+@pytest.mark.parametrize('bad', ['stale', 'can', 'stalk', 'other_hold'])
 def test_invalid_trial_edge_is_consumed_without_later_start(monkeypatch, bad):
   s, p, cs, sm = setup(monkeypatch)
   warm(s)
   s.update(cs, sm, 10.0, True)
   p.value = 3
   s.settings_at = 0
-  if bad == 'moving':
-    cs.vEgo = 0.1
-  elif bad == 'drive':
-    cs.gearShifter = 'drive'
-  elif bad == 'active':
-    sm['selfdriveState'].active = True
-  elif bad == 'controls':
-    sm['carControl'].latActive = True
-  elif bad == 'panda':
-    sm['pandaStates'][0].controlsAllowed = True
-  elif bad == 'stale':
+  if bad == 'stale':
     sm.recv_time['carControl'] = 0
   elif bad == 'can':
     cs.canValid = False
@@ -88,12 +108,7 @@ def test_invalid_trial_edge_is_consumed_without_later_start(monkeypatch, bad):
     s.hold_supported = False
   assert s.update(cs, sm, 10.01, True) == []
   assert s.test_request is None
-  cs.vEgo = 0
-  cs.gearShifter = 'park'
   cs.canValid = True
-  sm['selfdriveState'].active = False
-  sm['carControl'].latActive = False
-  sm['pandaStates'][0].controlsAllowed = False
   sm.recv_time['carControl'] = 10.0
   s.driver_count = 3
   s.hold_supported = True
@@ -229,25 +244,19 @@ def test_direct_trial_stops_on_stall_or_panda_rejection(monkeypatch, cause):
   assert s.hold_value == 1
 
 
-@pytest.mark.parametrize('bad', ['moving', 'gear', 'driver', 'stock', 'stale', 'panda', 'lamp', 'unsupported'])
+@pytest.mark.parametrize('bad', ['driver', 'stock', 'stale', 'lamp', 'unsupported'])
 def test_direct_trial_rejects_guard_or_contract_failure(monkeypatch, bad):
   s, p, cs, sm = setup(monkeypatch)
   warm(s)
   s.update(cs, sm, 10., True)
   p.value = 7
   s.settings_at = 0
-  if bad == 'moving':
-    cs.vEgo = .1
-  if bad == 'gear':
-    cs.gearShifter = 'drive'
   if bad == 'driver':
     cs.blinkerLever = 1
   if bad == 'stock':
     s.session.stock_direction = 3
   if bad == 'stale':
     sm.recv_time['carControl'] = 0
-  if bad == 'panda':
-    sm['pandaStates'][0].controlsAllowed = True
   if bad == 'lamp':
     cs.leftBlinker = True
   if bad == 'unsupported':
@@ -263,9 +272,9 @@ def test_direct_trial_guard_loss_cannot_resume(monkeypatch):
   p.value = 5
   s.settings_at = 0
   assert len(s.update(cs, sm, 10.01, True)) == 2
-  cs.vEgo = .1
+  cs.canValid = False
   assert s.update(cs, sm, 10.04, True) == []
-  cs.vEgo = 0.
+  cs.canValid = True
   warm(s)
   assert s.update(cs, sm, 10.05, True) == []
   assert s.hold_value == 1
@@ -425,7 +434,7 @@ def test_direct_trial_never_starts_with_unhealthy_or_missing_can_health(monkeypa
 
 
 @pytest.mark.parametrize('setting', [15, 16])
-@pytest.mark.parametrize('stop', ['expiry', 'can_error', 'moving', 'cancel'])
+@pytest.mark.parametrize('stop', ['expiry', 'can_error', 'can_invalid', 'cancel'])
 def test_patch_mode_uses_original_uds_and_continues_without_stock_then_restores(monkeypatch, setting, stop):
   from opendbc.car.hyundai.spas import APRK, PATCH_DISABLE, DEFAULT
   s, p, cs, sm = setup(monkeypatch)
@@ -443,7 +452,7 @@ def test_patch_mode_uses_original_uds_and_continues_without_stock_then_restores(
     s.driver_at = now
     if stop != 'expiry' and i == 130:
       if stop == 'can_error': sm['pandaStates'][0].canState2.totalErrorCnt += 1
-      if stop == 'moving': cs.vEgo = .1
+      if stop == 'can_invalid': cs.canValid = False
       if stop == 'cancel': p.value = 0; s.settings_at = 0
     batch = s.update(cs, sm, now, True, i)
     sent.extend(batch)

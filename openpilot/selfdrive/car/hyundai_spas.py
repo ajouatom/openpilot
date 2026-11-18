@@ -113,10 +113,15 @@ class SpasSignals:
         self.worker = Process('blink_source.py', 'spas')
       except OSError:
         self.worker_retry = now+5.
-    healthy = (initialized and cs.canValid and math.isfinite(cs.vEgo) and
+    data_ok = (initialized and cs.canValid and math.isfinite(cs.vEgo) and
                self.driver_count >= 3 and 0 <= now-self.driver_at < .5 and
-               str(cs.gearShifter) in ('park', 'neutral', 'drive') and
                all(sm.valid[k] and sm.alive[k] and 0 <= now-sm.recv_time[k] < .35 for k in ('carControl', 'selfdriveState')))
+    healthy = data_ok and str(cs.gearShifter) in ('park', 'neutral', 'drive')
+    # CanfdBlinkerTest follows CanfdBlinkerMenuTest's (Kick menu test) state rule since 11-18: any gear, speed or
+    # engagement, no P / standstill / disengaged gate. Only data health stays: fresh CAN and 0x3C1, and fresh
+    # pandaStates, whose CAN counters and safetyTxBlocked the direct, patch and stalk modes compare while running.
+    test_ready = (data_ok and sm.valid['pandaStates'] and sm.alive['pandaStates'] and
+                  0 <= now-sm.recv_time['pandaStates'] < .75 and len(sm['pandaStates']) > 0)
     stalks = (cs.leftBlinkerStalkCount, cs.rightBlinkerStalkCount)
     override = bool(cs.blinkerLever or (cs.leftBlinker and cs.rightBlinker) or self.stalks is not None and stalks != self.stalks)
     self.stalks = stalks
@@ -127,16 +132,11 @@ class SpasSignals:
     if now >= self.settings_at:
       setting = self.params.get_int('CanfdBlinkerTest')
       if setting != self.test_setting and setting in range(1, 19):
-        # Consume the edge even when the parked guard fails; never run later.
-        cc, ss = sm['carControl'], sm['selfdriveState']
-        parked = (healthy and str(cs.gearShifter) == 'park' and cs.standstill and abs(cs.vEgo) < .01 and
-                  not (cc.latActive or cc.longActive or ss.active or ss.enabled) and
-                  sm.valid['pandaStates'] and sm.alive['pandaStates'] and 0 <= now-sm.recv_time['pandaStates'] < .75 and
-                  len(sm['pandaStates']) > 0 and not any(p.controlsAllowed for p in sm['pandaStates']))
+        # Consume the edge even when the guard fails; never run later.
         direct = setting >= 5
         direct_ready = (not direct or (now >= self.direct_cooldown and self.can_health(sm['pandaStates']) is not None and self.session.stock_ready(now) and
                         self.session.stock_direction == 0 and not (cs.leftBlinker or cs.rightBlinker)))
-        if parked and (setting <= 2 or self.hold_supported) and self.session.state == 'idle' and direct_ready:
+        if test_ready and (setting <= 2 or self.hold_supported) and self.session.state == 'idle' and direct_ready:
           self.test_serial += 1
           self.test_request = f'park:{self.test_serial}'
           # Pulse/hold and SPAS-only comparisons have independent bounded modes.
@@ -179,11 +179,7 @@ class SpasSignals:
         if taps:
           request, direction = taps[-1].get('id'), taps[-1].get('direction')
     if self.test_request is not None:
-      cc, ss = sm['carControl'], sm['selfdriveState']
-      healthy = (healthy and str(cs.gearShifter) == 'park' and cs.standstill and abs(cs.vEgo) < .01 and
-                 not (cc.latActive or cc.longActive or ss.active or ss.enabled) and
-                 sm.valid['pandaStates'] and sm.alive['pandaStates'] and 0 <= now-sm.recv_time['pandaStates'] < .75 and
-                 len(sm['pandaStates']) > 0 and not any(p.controlsAllowed for p in sm['pandaStates']))
+      healthy = test_ready
       if now < self.test_until and self.test_setting != 0:
         request, direction = self.test_request, self.test_direction
       else:
@@ -217,7 +213,7 @@ class SpasSignals:
         self.test_request = None
       return sends
     direct = self.test_request is not None and self.test_direct
-    # A selected parked direct test never falls through to automatic/UDS intent.
+    # A selected direct test never falls through to automatic/UDS intent.
     parked_selected = direct or self.test_setting >= 5 or now < self.direct_cooldown
     sends = self.session.update(now, healthy=healthy, request=None if parked_selected else request,
                                 direction=None if parked_selected else direction,
@@ -233,7 +229,7 @@ class SpasSignals:
     if direct_active and now >= self.direct_next and (not self.test_pulse or pulse_active):
       if self.test_setting in (11, 12, 13, 14):
         # At most one packet per new stock RX, bounded by the selected test duration.
-        # This is a bounded parked phase trial, not a wire-time guarantee.
+        # This is a bounded phase trial, not a wire-time guarantee.
         for address in SPAS:
           received = self.stock_received.get(address, -math.inf)
           previous_rx, previous_tx, count = self.phase_sent.get(address, (-math.inf, -math.inf, 0))

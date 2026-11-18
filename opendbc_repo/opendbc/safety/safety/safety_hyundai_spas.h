@@ -9,11 +9,12 @@ static uint32_t hyundai_spas_rx_at[2], hyundai_spas_tx_at[2];
 static uint8_t hyundai_spas_rx_counter[2], hyundai_spas_rx_count[2], hyundai_spas_tx_counter[2];
 static bool hyundai_spas_tx_seen[2];
 static CanMsg hyundai_spas_tx_list[128];
-// Separate ten-second parked comparison. Normal driving still needs the
-// acknowledged ECU handoff. This path never authorizes diagnostic commands.
+// Separate ten-second CanfdBlinkerTest comparison (host settings 5..18). Since 11-18 it has the
+// Kick menu test's (CanfdBlinkerMenuTest) state rule: any gear, speed or engagement (park guard).
+// The normal path still needs the acknowledged ECU handoff. This path never authorizes diagnostic commands.
 static uint32_t hyundai_spas_park_at[3], hyundai_spas_trial_at;
 static uint8_t hyundai_spas_park_counter[2], hyundai_spas_park_count[3], hyundai_spas_trial_direction;
-static bool hyundai_spas_park_value[3], hyundai_spas_trial_used, hyundai_spas_stock_idle;
+static bool hyundai_spas_lever_idle, hyundai_spas_trial_used, hyundai_spas_stock_idle;
 static bool hyundai_spas_patch_candidate, hyundai_spas_patch_present;
 static uint8_t hyundai_stalk_latest[8], hyundai_stalk_original[8];
 static uint32_t hyundai_stalk_tx_at;
@@ -24,12 +25,11 @@ static void hyundai_spas_init(bool enabled, int bus) {
   hyundai_spas_phase = 0U;
   hyundai_spas_phase_at = hyundai_spas_started = hyundai_spas_alive = 0U;
   hyundai_spas_trial_at = 0U;
-  hyundai_spas_trial_used = hyundai_spas_stock_idle = false;
+  hyundai_spas_trial_used = hyundai_spas_stock_idle = hyundai_spas_lever_idle = false;
   hyundai_spas_trial_direction = 0U;
   hyundai_spas_patch_candidate = hyundai_spas_patch_present = false;
   for (int i = 0; i < 3; i++) {
     hyundai_spas_park_at[i] = hyundai_spas_park_count[i] = 0U;
-    hyundai_spas_park_value[i] = false;
   }
   hyundai_spas_park_counter[0] = hyundai_spas_park_counter[1] = 0U;
   for (int i = 0; i < 2; i++) {
@@ -51,10 +51,14 @@ static bool hyundai_spas_stock_ready(uint32_t now) {
   return ready;
 }
 
+// CanfdBlinkerTest trial gate. Same state rule as CanfdBlinkerMenuTest, whose Kick path (safety_hyundai_canfd.h)
+// checks only payload shape: no controls_allowed, vehicle_moving, gas_pressed, P-gear or wheel-speed condition
+// (user request 11-18). Data health stays: WHEEL_SPEEDS (0xA0) and ACCELERATOR (0x35) arrive fresh with a valid
+// CRC and advancing counter, and the driver's lever (0x3C1) is fresh and idle.
 static bool hyundai_spas_park_guard(uint32_t now) {
-  bool ready = !controls_allowed && !vehicle_moving && !gas_pressed && (hyundai_spas_bus == 0);
+  bool ready = (hyundai_spas_bus == 0) && hyundai_spas_lever_idle;
   for (int i = 0; i < 3; i++) {
-    ready = ready && hyundai_spas_park_value[i] && (hyundai_spas_park_count[i] >= ((i == 2) ? 3U : 10U)) &&
+    ready = ready && (hyundai_spas_park_count[i] >= ((i == 2) ? 3U : 10U)) &&
             (get_ts_elapsed(now, hyundai_spas_park_at[i]) < ((i == 2) ? 500000U : 100000U));
   }
   // Corrupt checked frames never reach the vehicle RX hook. Consult the
@@ -88,14 +92,6 @@ static void hyundai_spas_rx(const CANPacket_t *pkt, uint32_t now) {
         hyundai_spas_park_count[idx] = advancing ? MIN(hyundai_spas_park_count[idx] + 1U, 20U) : 1U;
         hyundai_spas_park_at[idx] = now;
         hyundai_spas_park_counter[idx] = count;
-        if (idx == 0) {
-          hyundai_spas_park_value[idx] = (GET_BYTES(pkt, 8, 2) & 0x3FFFU) == 0U &&
-            (GET_BYTES(pkt, 10, 2) & 0x3FFFU) == 0U && (GET_BYTES(pkt, 12, 2) & 0x3FFFU) == 0U &&
-            (GET_BYTES(pkt, 14, 2) & 0x3FFFU) == 0U;
-        } else {
-          // Known EV ACCELERATOR layout: P=0, pedal=0. Other layouts do not arm.
-          hyundai_spas_park_value[idx] = ((GET_BYTE(pkt, 24) & 7U) == 0U) && (GET_BYTE(pkt, 5) == 0U);
-        }
       } else {
         hyundai_spas_park_count[idx] = 0U;
       }
@@ -111,7 +107,7 @@ static void hyundai_spas_rx(const CANPacket_t *pkt, uint32_t now) {
         hyundai_spas_park_count[2] = (get_ts_elapsed(now, hyundai_spas_park_at[2]) < 500000U) ? MIN(hyundai_spas_park_count[2] + 1U, 10U) : 1U;
         hyundai_spas_park_at[2] = now;
         for (int i = 0; i < 8; i++) { hyundai_stalk_latest[i] = GET_BYTE(pkt, i); }
-        hyundai_spas_park_value[2] = ((GET_BYTE(pkt, 3) & 0x40U) == 0U) && ((GET_BYTE(pkt, 4) & 0x51U) == 0U);
+        hyundai_spas_lever_idle = ((GET_BYTE(pkt, 3) & 0x40U) == 0U) && ((GET_BYTE(pkt, 4) & 0x51U) == 0U);
       } else {
         hyundai_spas_park_count[2] = 0U;
       }
@@ -169,7 +165,7 @@ static void hyundai_spas_rx(const CANPacket_t *pkt, uint32_t now) {
   }
 }
 
-// Parked 0x3C1 comparison only. No APRK/SPAS or longitudinal commands.
+// CanfdBlinkerTest 17/18 0x3C1 comparison only (park guard). No APRK/SPAS or longitudinal commands.
 static bool hyundai_stalk_tx(const CANPacket_t *pkt, uint32_t now) {
   bool ready = hyundai_spas_enabled && !relay_malfunction && (GET_BUS(pkt) == 0) &&
                (GET_LEN(pkt) == 8) && hyundai_spas_park_guard(now);
@@ -224,7 +220,7 @@ static bool hyundai_spas_tx(const CANPacket_t *pkt, uint32_t now) {
       return false;
     }
     if (ok && ((cmd == 0x01002803U) || (cmd == 0x00011002U))) {
-      // Exact default-session recovery remains possible after parked revocation.
+      // Exact default-session recovery remains possible after trial revocation.
       hyundai_spas_phase = (hyundai_spas_phase >= 6U) ? 7U : 0U;
       hyundai_spas_patch_candidate = false;
     } else if (ok && (cmd == 0x00031002U)) {
@@ -239,7 +235,7 @@ static bool hyundai_spas_tx(const CANPacket_t *pkt, uint32_t now) {
         }
       }
     } else if (ok && (cmd == 0x01832803U)) {
-      // Supplied patch's response-suppressed command is confined to a parked
+      // Supplied patch's response-suppressed command is confined to a
       // ten-second lease. It does not relax the normal acknowledged handoff.
       ok = (hyundai_spas_phase <= 2U) && hyundai_spas_patch_candidate && hyundai_spas_park_ready(now) &&
            (get_ts_elapsed(now, hyundai_spas_started) >= 40000U) &&
