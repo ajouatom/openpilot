@@ -44,6 +44,11 @@ impl Audio {
     }
 
     pub fn push(&mut self, bytes: &[u8], timestamp_us: u64, sample_rate: u32) -> Result<(), Error> {
+        // A different format needs a new segment header. The next writer
+        // opens at the observed rate; never encode PCM at the wrong speed.
+        if self.encoder.rate() != sample_rate {
+            return Ok(());
+        }
         if self.pts == 0 {
             self.pts = i64::try_from(
                 timestamp_us
