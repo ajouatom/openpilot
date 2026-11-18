@@ -37,6 +37,8 @@ impl Matcher {
         self._stationary_weak_pair_identity = None;
         self._stationary_weak_pair_last_vision_time_s = None;
         self._stationary_pending_weak_pair_supported = false;
+        self._close_xyv_previous = None;
+        self._close_xyv_since_s = None;
         self.reset_stationary_challenger();
     }
     pub fn reset_stationary_challenger(&mut self) {

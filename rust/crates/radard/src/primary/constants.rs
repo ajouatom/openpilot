@@ -120,6 +120,16 @@ pub const STATIONARY_CLOSER_HANDOFF_MIN_VISION_RANGE_GAIN_M: f64 = 0.75;
 pub const STATIONARY_DISTINCT_HANDOFF_MAX_VISION_ERROR_M: f64 = 2.5;
 pub const STATIONARY_DISTINCT_HANDOFF_MAX_ERROR_RATIO: f64 = 0.5;
 pub const STATIONARY_DISTINCT_HANDOFF_CONFIRMATION_S: f64 = 0.5;
+// Close-range queue handoff (carrot e5f4ac8a1). A front return on the near
+// side of a merging vehicle can be offset from the visual center even while
+// their bodies overlap.
+pub const CLOSE_XYV_HANDOFF_MAX_DREL_M: f64 = 8.0;
+pub const CLOSE_XYV_HANDOFF_MAX_EGO_SPEED_MPS: f64 = 5.0;
+pub const CLOSE_XYV_HANDOFF_CONFIRMATION_S: f64 = 0.20;
+pub const CLOSE_XYV_HANDOFF_MAX_FRAME_GAP_S: f64 = 0.10;
+/// radar_motion/predictor.py PATH_OVERLAP_HALF_WIDTH_M: ego path 0.90 + vehicle
+/// 0.90 (trajectory_cutin's own constant is 1.9).
+pub const PREDICTOR_PATH_OVERLAP_HALF_WIDTH_M: f64 = 1.8;
 pub const STATIONARY_CLOSER_THAN_MOVING_MIN_DREL_GAIN_M: f64 = 3.0;
 pub const RADAR_ONLY_MOVING_MIN_VLEAD_MPS: f64 = 4.0;
 pub const RADAR_ONLY_MOVING_CONFIRMATION_S: f64 = 0.25;

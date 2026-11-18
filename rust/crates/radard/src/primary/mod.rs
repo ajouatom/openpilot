@@ -89,6 +89,9 @@ pub struct Matcher {
     pub _stationary_closer_challenger_since_s: Option<f64>,
     pub _stationary_closer_challenger_last_point: Option<Point>,
     pub _stationary_closer_challenger_last_time_s: Option<f64>,
+    pub _close_xyv_since_s: Option<f64>,
+    /// Held track, the near point and its time at the last close x/y/v match.
+    pub _close_xyv_previous: Option<(TrackId, Point, f64)>,
     pub _vision_fallback: Option<VisionLead>,
     pub _vision_fallback_hold_frames: usize,
     pub radar_only_moving_identity: Option<Identity>,
