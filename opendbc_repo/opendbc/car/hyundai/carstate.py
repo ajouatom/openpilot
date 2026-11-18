@@ -207,7 +207,7 @@ class CarState(CarStateBase):
     self.adrv_0x160 = None
     self.ccnc_0x162 = None
     self.canfd_wrapped_navi = CP.carFingerprint == CAR.KIA_PV5
-    self.canfd_ev4_navi = CP.carFingerprint == CAR.KIA_EV4
+    self.canfd_ev4_navi = CP.carFingerprint in (CAR.KIA_EV4, CAR.GENESIS_GV80)
     self.hda_info_msg = CANFD_HDA_INFO_MSG if (self.canfd_wrapped_navi or self.canfd_ev4_navi) else "HDA_INFO_4A3"
     self.navi_segment_msg = CANFD_NAVI_SEGMENT_MSG if self.canfd_ev4_navi else "NEW_MSG_4B9"
     self.navi_profile_msg = CANFD_NAVI_PROFILE_MSG if (self.canfd_wrapped_navi or self.canfd_ev4_navi) else "NEW_MSG_4BE"
