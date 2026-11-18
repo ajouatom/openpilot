@@ -19,14 +19,10 @@ const DEMAND_PATH: &str = "/dev/shm/carrot-nav-map-demand";
 
 impl NavigationInput {
     /// Zeros unless `wanted` and a fresh (< 2 s) valid instruction exists.
-    pub fn update(&mut self, wanted: bool, speed: f64, now: f64) -> Result<[f32; NAVIGATION_LEN], Error> {
+    pub fn update(&mut self, wanted: bool, speed: f64) -> Result<[f32; NAVIGATION_LEN], Error> {
         if !wanted {
             self.subscriber = None;
             return Ok([0.; NAVIGATION_LEN]);
-        }
-        if now - self.demand_at >= 1. {
-            self.demand_at = now;
-            let _ = std::fs::write(DEMAND_PATH, b"1");
         }
         let subscriber = match &mut self.subscriber {
             Some(subscriber) => subscriber,
@@ -36,6 +32,11 @@ impl NavigationInput {
             )?),
         };
         subscriber.update(Duration::ZERO)?;
+        let now = crate::clock::monotonic();
+        if now - self.demand_at >= 1. {
+            self.demand_at = now;
+            let _ = std::fs::write(DEMAND_PATH, b"1");
+        }
         let topic = subscriber.state.topic("navInstructionCarrot")?;
         let age = now - topic.receive_time;
         if !topic.seen || !topic.valid || !(0. ..2.).contains(&age) {

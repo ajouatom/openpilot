@@ -2,7 +2,10 @@ use crate::{polyfit, prediction::DrivingPrediction, wire_helpers::float};
 use openpilot_cereal::log_capnp::event;
 use serde::{Deserialize, Serialize};
 
-pub fn driving(model_event: event::Reader<'_>, log_mono_time: u64) -> capnp::Result<Vec<u8>> {
+pub fn driving(
+    model_event: event::Reader<'_>,
+    log_mono_time: u64,
+) -> capnp::Result<capnp::message::Builder<capnp::message::HeapAllocator>> {
     let source = match model_event.which()? {
         event::ModelV2(model) => model?,
         _ => return Err(capnp::Error::failed("expected modelV2 event".to_owned())),
@@ -55,7 +58,7 @@ pub fn driving(model_event: event::Reader<'_>, log_mono_time: u64) -> capnp::Res
     path.set_x_coefficients(&coefficients[0][..])?;
     path.set_y_coefficients(&coefficients[1][..])?;
     path.set_z_coefficients(&coefficients[2][..])?;
-    Ok(capnp::serialize::write_message_to_words(&message))
+    Ok(message)
 }
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize)]
@@ -67,7 +70,10 @@ pub struct PoseTiming {
     pub live_calibration_seen: bool,
 }
 
-pub fn pose(data: &DrivingPrediction, timing: PoseTiming) -> capnp::Result<Vec<u8>> {
+pub fn pose(
+    data: &DrivingPrediction,
+    timing: PoseTiming,
+) -> capnp::Result<capnp::message::Builder<capnp::message::HeapAllocator>> {
     let mut message = capnp::message::Builder::new_default();
     let mut event = message.init_root::<event::Builder>();
     event.set_log_mono_time(timing.log_mono_time);
@@ -83,5 +89,5 @@ pub fn pose(data: &DrivingPrediction, timing: PoseTiming) -> capnp::Result<Vec<u
     pose.set_wide_from_device_euler_std(&data.wide_euler.std[..])?;
     pose.set_road_transform_trans(&data.road_transform.mean[..3])?;
     pose.set_road_transform_trans_std(&data.road_transform.std[..3])?;
-    Ok(capnp::serialize::write_message_to_words(&message))
+    Ok(message)
 }

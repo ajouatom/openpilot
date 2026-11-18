@@ -50,9 +50,9 @@ pub struct Output<'a> {
 }
 
 pub struct Messages {
-    pub model: Vec<u8>,
-    pub driving: Vec<u8>,
-    pub pose: Vec<u8>,
+    pub model: capnp::message::Builder<capnp::message::HeapAllocator>,
+    pub driving: capnp::message::Builder<capnp::message::HeapAllocator>,
+    pub pose: capnp::message::Builder<capnp::message::HeapAllocator>,
 }
 
 impl Publication {
@@ -132,7 +132,7 @@ impl Publication {
             },
         )?;
         Ok(Messages {
-            model: capnp::serialize::write_message_to_words(&model),
+            model,
             driving,
             pose,
         })

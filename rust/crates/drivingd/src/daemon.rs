@@ -97,6 +97,7 @@ pub fn run(
             )?;
         }
     }
+    let mut usb_first_publication = runtime.uses_usb();
     let mut recovery = if runtime.uses_usb() {
         openpilot_usbgpu::model::compiled_path(&usb_config.paths).and_then(|path| {
             openpilot_driving_modeld::recovery_prepare::Preparation::capture(
@@ -304,7 +305,6 @@ pub fn run(
                     .update(
                         external.navigation_model(),
                         f64::from(sources.car.get_v_ego()),
-                        process::monotonic(),
                     )
                     .unwrap_or([0.; openpilot_modeld::navigation::NAVIGATION_LEN]),
             },
@@ -446,11 +446,21 @@ pub fn run(
             let fresh = external.valid_at_publish();
             jetlink::persist(&params, &mut external_stored, &external.status)?;
             jetlink::publication(&mut messages, &external.status, fresh)?;
-            publishers.send("modelV2", &messages.model)?;
-            publishers.send("drivingModelData", &messages.driving)?;
-            publishers.send("cameraOdometry", &messages.pose)?;
-            if runtime.uses_usb() {
+            publishers.send(
+                "modelV2",
+                &capnp::serialize::write_message_to_words(&messages.model),
+            )?;
+            publishers.send(
+                "drivingModelData",
+                &capnp::serialize::write_message_to_words(&messages.driving),
+            )?;
+            publishers.send(
+                "cameraOdometry",
+                &capnp::serialize::write_message_to_words(&messages.pose),
+            )?;
+            if usb_first_publication && runtime.uses_usb() {
                 usb_selection::published(&params)?;
+                usb_first_publication = false;
             }
         }
         if !runtime.uses_usb() {
@@ -482,6 +492,7 @@ pub fn run(
                 match recovered {
                     Ok(Some(model)) => {
                         runtime.enable_usb(model);
+                        usb_first_publication = true;
                         params.put_bool("UsbGpuStartupFailed", false)?;
                         params.put_bool("UsbGpuActive", true)?;
                         params.put_bool("UsbGpuLoading", true)?;
