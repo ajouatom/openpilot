@@ -289,7 +289,8 @@ def test_source_loop_uses_independent_option_with_lateral_control_off(monkeypatc
     get=lambda _: b'cp', get_int=lambda key: 1 if key == 'AutoBlinkerControl' else atc if key == 'AutoTurnControl' else 0,
     get_bool=lambda key: enabled and key == 'ManualTurnIndicator')))
   monkeypatch.setitem(sys.modules, 'openpilot.cereal', N(messaging=N(SubMaster=lambda _: sm),
-    car=N(CarParams=N(from_bytes=lambda _: nullcontext(N(carFingerprint='HYUNDAI_IONIQ_5_PE'))))))
+    car=N(CarParams=N(from_bytes=lambda _: nullcontext(N(carFingerprint='PROTOCOL_MATCHED_CAR',
+      brand='hyundai', passive=False, openpilotLongitudinalControl=True, extFlags=1 << 19))))))
   sock = N(setblocking=lambda _: None, recv=receive, send=lambda raw: sent.append(json.loads(raw)))
   monkeypatch.setattr(source.socket, 'socket', lambda **kw: sock)
   monkeypatch.setattr(source.select, 'select', lambda *args: ([sock] if len(sent) not in received else [], [], []))

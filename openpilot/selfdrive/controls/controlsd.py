@@ -63,7 +63,7 @@ class Controls:
     cloudlog.info("controlsd got CarParams")
 
     self.CI = interfaces[self.CP.carFingerprint](self.CP)
-    self.physical_blinker_hold = HoldReader(self.CP.carFingerprint, self.params)
+    self.physical_blinker_hold = HoldReader(self.CP, self.params)
 
     self.sm = messaging.SubMaster(['liveDelay', 'liveParameters', 'liveTorqueParameters', 'modelV2', 'selfdriveState',
                                    'liveCalibration', 'livePose', 'longitudinalPlan', 'carState', 'carOutput',

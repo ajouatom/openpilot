@@ -4,6 +4,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from opendbc.car.hyundai.values import HyundaiExtFlags  # Load before the source-loop cereal fixture.
 
 sys.path.insert(0, str(Path(__file__).parent))
 import blink_protocol as protocol
@@ -230,13 +231,12 @@ class Vehicle(dict):
 
 @pytest.mark.parametrize('gear,speed,engaged', [('park',0.,False),('drive',25.,False),('drive',25.,True),('reverse',-2.,False)])
 def test_manual_indicator_allowed_while_driving_or_engaged(gear, speed, engaged):
-  assert vehicle_ready(Vehicle(gear, speed, engaged), 10.1, 'HYUNDAI_IONIQ_5_PE')
+  assert vehicle_ready(Vehicle(gear, speed, engaged), 10.1)
 
 
-@pytest.mark.parametrize('fault', ['stale','future','invalid','dead','can','speed','gear','panda','profile'])
+@pytest.mark.parametrize('fault', ['stale','future','invalid','dead','can','speed','gear','panda'])
 def test_manual_indicator_still_rejects_unknown_vehicle_or_stale_state(fault):
   sm = Vehicle()
-  fingerprint = 'HYUNDAI_IONIQ_5_PE'
   if fault == 'stale':
     sm.recv_time['carState'] = 9.
   if fault == 'future':
@@ -253,9 +253,7 @@ def test_manual_indicator_still_rejects_unknown_vehicle_or_stale_state(fault):
     sm['carState'].gearShifter = 'unknown'
   if fault == 'panda':
     sm['pandaStates'] = []
-  if fault == 'profile':
-    fingerprint = 'OTHER_VEHICLE'
-  assert not vehicle_ready(sm, 10.1, fingerprint)
+  assert not vehicle_ready(sm, 10.1)
 
 
 def test_disabled_local_profile_overrides_packaged_trial(tmp_path):
@@ -282,7 +280,7 @@ def test_bundled_driver_sources_match_pinned_manifest():
     assert entry['url'].startswith('https://raw.githubusercontent.com/gregkh/linux/v5.15.148/')
 
 
-@pytest.mark.parametrize('ble,fingerprint', [(False, 'HYUNDAI_IONIQ_5_PE'), (True, 'ANOTHER_CAR')])
+@pytest.mark.parametrize('ble,fingerprint', [(False, 'ANOTHER_CAR'), (True, 'ANOTHER_CAR')])
 def test_source_uses_time_after_receiving_vehicle_messages(monkeypatch, ble, fingerprint):
   import blink_source as source
   import types
@@ -298,7 +296,8 @@ def test_source_uses_time_after_receiving_vehicle_messages(monkeypatch, ble, fin
   fake_params.Params = lambda: SimpleNamespace(get=lambda _:b'car-params', get_int=lambda _:0)
   fake_cereal = types.ModuleType('openpilot.cereal')
   fake_cereal.messaging = SimpleNamespace(SubMaster=lambda _:sm)
-  fake_cereal.car = SimpleNamespace(CarParams=SimpleNamespace(from_bytes=lambda _:nullcontext(SimpleNamespace(carFingerprint=fingerprint))))
+  fake_cereal.car = SimpleNamespace(CarParams=SimpleNamespace(from_bytes=lambda _:nullcontext(
+    SimpleNamespace(carFingerprint=fingerprint, extFlags=HyundaiExtFlags(0)))))
   monkeypatch.setitem(sys.modules, 'openpilot.common.params', fake_params)
   monkeypatch.setitem(sys.modules, 'openpilot.cereal', fake_cereal)
   sock = SimpleNamespace(setblocking=lambda _:None, recv=lambda _:b'', send=lambda raw:sent.append(json.loads(raw)))

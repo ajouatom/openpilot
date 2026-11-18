@@ -294,3 +294,72 @@ checks pass 1,249 cases with nine platform-specific skips. Native/full CI is
 checked after publication. Private evidence is retained under
 `.analysis/scratch/2026-11-17-indicator-fixes` and
 `.analysis/scratch/2026-11-17-indicators`.
+
+## November 18 boundary lifetime and consecutive-turn follow-up
+
+The retained corpus now contains 467 full-log segments from 60 routes, including
+41 additional November 17–18 segments. A/B comparisons process 523,934 aligned
+model inputs per variant. Both sides use identical recorded motion, input validity,
+prior indication journals and lamp/lever feedback. Receiver readiness is simulated.
+The production observer sources are frozen independently for every candidate.
+
+Only an existing manual lane indication gets the new boundary tolerance. An early
+retreat very near the boundary can wait 150 ms for paired lane reassignment, using
+the pre-retreat pair as its anchor. A separate early uncertain-boundary case requires
+same-side driver torque and opposite-boundary progress; it must establish continued
+progress within 250 ms and recover stable centered geometry within three seconds.
+Opposite driver steering, invalid inputs and bounded geometry/continuity failures
+still cancel. New lane admission, left marking and right road-edge gates are unchanged.
+
+For consecutive turns, only opposite steering that ends a recognized manual turn
+can seed retained intent. The extension requires at least 10 km/h, expires in three
+seconds, and bridges only the last 250 ms of steering before rearm. Emission still
+requires growing same-side driver steering, the existing two-second rearm and one
+continuous dark second. Ordinary fresh-steering detection runs independently, so
+expiry of retained intent cannot erase an otherwise valid turn. Ordinary manual-turn
+admission remains 5–60 km/h. No automatic steering or transport changes are added.
+
+| Fixed-input output assumption | Requests before / after | Lost previous requests |
+| --- | --- | --- |
+| Native first submission at request | 363 / 365 | 0 |
+| Native first submission delayed 410 ms | 362 / 364 | 0 |
+| External output, existing zero minimum | 364 / 366 | 0 |
+
+All three comparisons add the same two visually confirmed right turns:
+11d6/0+17.410s and 11f5/8+49.368s. Two existing turns start about 100–102 ms
+earlier with exactly the same ends. Every other existing start/side/source is
+unchanged. Five existing lane requests have changed ends; all other ends agree.
+The following durations are observation requests, not measured physical lamp times.
+
+| Request | Before | After, native with 410 ms submission delay |
+| --- | --- | --- |
+| 11f5/4+17.162s right | 0.200s, returned | 2.990s, completed |
+| 11f5/7+28.690s left | 0.246s, returned | 2.446s, completed |
+| 11d9/4+21.688s right | 0.156s, returned | 2.202s, relabel |
+| 11e1/3+9.716s right | 0.103s, returned | 2.430s, completed |
+| 118a/9+40.860s left | 0.203s, returned | 0.351s, relabel |
+
+The last case remains shorter than the modeled 410 ms preparation delay and is
+not counted as a recovered physical indication. The new 11f5/8 turn requests
+1.700s before opposite driver steering cancels it; cancellation deliberately takes
+priority over a two-second normal-completion minimum. Two full flashes are not
+promised for this cancellation case. The other new turn requests 2.445s under the
+delayed native assumption. No new false indication was identified in the two added
+video scenes; this is not a whole-corpus false-positive rate. Existing falsely
+classified curves/parking maneuvers are not comprehensively labeled or eliminated.
+
+Broader candidates were rejected: retaining an entire steering sweep introduced
+parking and exit-alignment indications and delayed subsequent requests; sharing
+that memory with ordinary detection erased an existing turn when memory expired.
+The retained 250 ms bridge and independent ordinary observer avoid those reproduced
+regressions. Three deterministic failure-shape regressions fail on the baseline
+and pass after correction. Local observer/source/native-ownership checks pass
+1,184 cases with nine platform-specific skips; Linux CI separately covers native
+imports and integration after publication.
+
+Still unresolved: the 11f5/6 2.463 m lane-width admission rejection, unknown left
+markings, and the 11f3/4 source-delivery gap without a recorded worker refusal.
+Recorded output feedback cannot prove how a newly emitted lamp would affect a
+closed-loop drive. No vehicle installation, CAN actuation or physical cure is
+claimed. Private inputs, frozen sources, all comparison tables and visual evidence
+are indexed in `.analysis/archive/2026-11-18/indicator-continuity-fixes/INDEX.md`.

@@ -217,7 +217,7 @@ VW MEB(ID.4 포함)에도 수동 조향비와 학습 비율이 적용됩니다. 
 
 | 세부 구역 | 파라미터 | 용도 |
 |---|---|---|
-| [과속카메라](speed-deceleration.md#speed-camera) | `AutoNaviSpeedCtrlMode`, `AutoNaviSpeedCtrlEnd`, `AutoNaviRearCameraHoldDistance`, `AutoNaviSpeedDecelRate`, `AutoNaviSpeedSafetyFactor`, `AutoNaviCountDownMode`, `VehicleNaviCanControl`, `VehicleNaviSchoolZoneControl`, `VehicleNaviDecelCancel`(`VehicleNaviDecelCancelBox`, `VehicleNaviDecelCancelMobileZone`, `VehicleNaviDecelCancelBump`, `VehicleNaviDecelCancelUnknown`, `VehicleNaviDecelCancelEarlyWarning`), `VehicleNaviSectionAvgControl`, `VehicleSpeedCameraControlMode`, `VehicleSpeedCameraDistanceTime` | 안전운전 이벤트의 대상, 후면단속 통과 후 유지, 순정 카메라 거리 연결·가상거리, PV5 단속 상태에 따른 카메라 유지·해제와 구간단속 제한속도 유지, 감속 시점과 목표 속도 |
+| [과속카메라](speed-deceleration.md#speed-camera) | `AutoNaviSpeedCtrlMode`, `AutoNaviSpeedCtrlEnd`, `AutoNaviRearCameraHoldDistance`, `AutoNaviSpeedDecelRate`, `AutoNaviSpeedSafetyFactor`, `AutoNaviCountDownMode`, `VehicleNaviCanControl`, `VehicleNaviSchoolZoneControl`, `VehicleNaviDecelCancel`(`VehicleNaviDecelCancelBox`, `VehicleNaviDecelCancelMobileZone`, `VehicleNaviDecelCancelBump`, `VehicleNaviDecelCancelUnknown`, `VehicleNaviDecelCancelEarlyWarning`), `VehicleNaviSectionAvgControl`, `VehicleSpeedCameraControlMode`, `VehicleSpeedCameraDistanceTime` | 안전운전 이벤트의 대상, 후면단속 통과 후 유지, 순정 카메라 거리 연결·가상거리, EV4 카메라·방지턱 지원과 평균속도 검증 상태, PV5 단속 상태에 따른 카메라 유지·해제와 구간단속 제한속도 유지, 감속 시점과 목표 속도 |
 | [도로 제한속도](speed-deceleration.md#road-speed-limit) | `AutoRoadSpeedLimitOffset`, `AutoRoadSpeedAdjust`, `AutoSpeedUptoRoadSpeedLimit` | 도로 제한속도에 맞춘 목표 속도 조절 |
 | [과속방지턱](speed-deceleration.md#speed-bump) | `AutoNaviSpeedBumpTime`, `AutoNaviSpeedBumpSpeed`, `AutoNaviSpeedBumpEndDistance` | 방지턱 감속 완료 시점, 통과 속도와 조기 종료 거리 |
 | [커브·턴](speed-deceleration.md#curve-turn) | `AutoCurveSpeedFactor`, `AutoCurveSpeedLowerLimit`, `TurnSpeedControlMode`, `MapTurnSpeedFactor`, `ApplyModelSpeed` | 곡률·남은 거리 기반 감속, 회전 완화 확인 후 빠른 복구와 경로 턴 속도 |
@@ -261,7 +261,6 @@ VW MEB(ID.4 포함)에도 수동 조향비와 학습 비율이 적용됩니다. 
 
 `SpeedTFFactor`는 선택한 기본 TF에 속도별 선형 배율을 적용합니다. 10은 변화 없음, 20은 100km/h에서 2배입니다. 단계별 `LeadAccelResponseTF1`~`TF4`는 -1이면 공통값, 0~5이면 해당 반응을 사용합니다. 반응 4~5도 속도 배율을 유지합니다. 주행 화면의 거리 바는 동적 보정이 반영된 추종 목표거리를 m로 표시합니다.
 
-
 감속 미리보기는 반응 단계와 별도로 동작합니다. 상대 가속도가 줄거나 앞차가 레이더·비전 사이에서 전환되거나 사라져도, 제어 중에는 남은 보정을 점진적으로 해제합니다. 가속·브레이크 페달 개입이나 종방향 제어 종료 시에는 초기화합니다.
 
 `LongTuning*`, `LongActuatorDelay`는 openpilot이 가감속을 제어하는 차량에서 직접적인 영향을 줄 수 있는 고급 항목입니다. 차량 식별로 확인된 레이 EV 콤마페달에서는 세 게인을 표시하고 저장값을 속도 PID에 적용합니다. 그 외 현대·기아·제네시스에서는 `LongTuningKpV`, `LongTuningKiV`, `LongTuningKf`가 안전값 `100/0/100`으로 고정되어 설정 화면에 나오지 않으며, 토요타·렉서스는 전용 보정기 앞의 중복 보정을 막기 위해 공통 게인을 `0/0/100`으로 고정·숨깁니다. 순정 ACC 차량에서는 관련 없는 항목도 있습니다.
@@ -299,7 +298,7 @@ VW MEB(ID.4 포함)에도 수동 조향비와 학습 비율이 적용됩니다. 
 
 설정 > 차량·하드웨어 > 깜박이 제어에 자동 점등, 출력 장치, 레버 동작을 모았습니다. 자동 점등에는 `AutoBlinkerControl`, `ManualLaneChangeIndicator`, `ManualTurnIndicator`, `ModelDesireIndicator`, `ModelPathIndicator`가 있습니다. 출력 장치에는 `CanfdBlinkerKick`, `CanfdBlinkerKickMode`, `CanfdBlinkerControl`, `CanfdBlinkerTest`가 있으며 레버 동작에는 `BlinkerLatchedTurn`, `LaneChangeLeverWait`가 있습니다.
 
-**Panda/SPAS 깜박이 출력** (`CanfdBlinkerKick`)은 공통 판단이 만든 깜박이 요청을 Panda로 송신합니다. 아이오닉5 PE·아이오닉9·그랜저 GN7의 카메라 SCC CAN-FD 구성에서 지원합니다. 수동 차로변경·수동 회전·모델 관찰·내비 회전·음성 차로변경의 시작과 유지, 종료는 기존 공통 설정을 따릅니다. 실제 레버 조작과 오래된 입력은 출력을 중단하며, 종료된 요청은 새 요청 없이 재개하지 않습니다.
+**Panda/SPAS 깜박이 출력** (`CanfdBlinkerKick`)은 공통 판단이 만든 깜박이 요청을 Panda로 송신합니다. 차종명 제한 없이 ECAN의 SPAS 0x165(24바이트)·0x16A(32바이트)와 레버 0x3C1(8바이트)가 확인된 카메라 SCC CAN-FD 구성에서 지원합니다. 수동 차로변경·수동 회전·모델 관찰·내비 회전·음성 차로변경의 시작과 유지, 종료는 기존 공통 설정을 따릅니다. 실제 레버 조작과 오래된 입력은 출력을 중단하며, 종료된 요청은 새 요청 없이 재개하지 않습니다.
 
 `CanfdBlinkerKickMode`는 ECU 응답 후 송신하는 0과 응답이 없을 때 순정 프레임 뒤에 송신하는 1을 선택합니다. 켜기는 다음 OnRoad 시작부터 적용되며 갱신된 Panda 펌웨어가 필요합니다. 끄기는 즉시 적용됩니다. Kick을 켜면 USB2CAN·BT2CAN 출력이 중단되고 잔여 명령 만료와 독점 소유권을 확인합니다. 다음 OnRoad 시작 때 `CanfdBlinkerControl`이 꺼집니다.
 
@@ -356,7 +355,6 @@ GAP 수치와 다른 설정은 유지합니다. 실제 차종 변경 때 카메�
 `ClusterHud`(외부 HUD 활성화)는 **본체 USB에 직접 연결한 HUD**를 켜고 끄는 설정입니다. Jetson에 연결한 HUD는 이 값이 `0`이어도 자동 실행되며, 기본적으로 시동 OFF 시 화면을 끕니다. 시동 OFF에도 표시하려면 기존 `ClusterHudDebug`의 항상 켜기를 사용합니다. 밝기·화면 구성 설정은 Jetson HUD에도 적용됩니다.
 
 ESP32-S3 Wi-Fi 디스플레이 지원은 제거되었습니다. USB 디스플레이를 Jetson에 연결하세요. 지원 수신기는 추론 중 제한된 USB 전송으로 HUD·지도·신호등 정보를 받으며, 구형 수신기는 업데이트 전까지 Wi-Fi를 사용합니다. Git Pull로 업데이트하고 Jetson 런타임이 바뀌면 양쪽 장치를 재부팅합니다.
-
 
 
 Jetson HUD에는 `jetSON` 아래에 Jetson 내부 센서의 최고 온도가 표시됩니다. 전체 내비게이션·그래프 화면에서는 우측 상단에 표시하며, 온도 정보가 3초 이상 갱신되지 않으면 `--°C`로 바뀝니다. 각 센서의 장치 설정 온도 한계보다 5°C 낮은 지점부터 상단에 온도 높음 경고, 한계 도달 시 과열 경고를 표시합니다. 예를 들어 성능 제한 온도가 99°C인 장치는 94°C부터 사전 경고합니다. 경고가 나타나면 팬과 통풍 상태를 확인하세요. 차량 운전 경고가 우선 표시되며, 이 온도 표시는 본체 온도·메모리 통계와 구분됩니다. 이 기능은 업데이트된 Jetson HUD 소프트웨어가 필요합니다.
@@ -589,11 +587,15 @@ ATC 세부 설정의 `AutoTurnControlRightLaneChange`는 1·2번 모드에서 10
 
 `ManualTurnIndicator`는 운전자가 같은 방향으로 조향하고 차체가 회전할 때 깜빡이를 요청합니다. 핸들이 42도 이상이고 조작 시작 때보다 22도 이상 돌아가야 합니다. 다음 턴은 직전 표시의 마지막 유지 시점에서 2초가 지나고 양쪽 램프가 연속 1초 꺼진 뒤 감지합니다. 기본은 꺼짐이며 주차장 회전도 감지될 수 있습니다. [수동 턴 조건](lane-change.md)
 
+이전 수동 턴이 반대 조향으로 끝나면 10km/h 이상에서 다음 반대 턴의 최근 조향을 제한적으로 이어받습니다. 재점등 직전 0.25초의 각도 변화만 이어받고, 기존 2초 대기·연속 1초 소등 및 현재 같은 방향 조향 조건을 확인합니다. 3초 안에 이어지지 않으면 버리며 기존 새 조향 감지는 별도로 유지합니다.
+
 교차로 차선 위치 변화가 수동 턴 감지를 막지 않도록 처리하며, 정차 확인 중 미세한 음수 차속도 유지합니다. 현재 모델 차선변경 확률은 실제 양쪽 경계의 접근을 함께 확인합니다.
 
 수동 차선 접근은 짧은 경계 흔들림을 0.15초 확인하며, 수동 턴 조건까지 충족되면 같은 점등 요청으로 턴 완료를 추적합니다. 모델 턴 표시는 같은 방향 조향각 15도 이상과 실제 회전 3도/초 이상을 함께 확인합니다.
 
 `ManualLaneChangeIndicator`는 시속 5km 이상에서 수동 차로변경을 감지해 깜빡이를 요청합니다. 최근 조향 의도를 최대 1.5초 기억합니다. 왼쪽은 최신 흰 차선 분류로 중앙선을 제외하고, 오른쪽은 목표 차선부터 로드에지까지 2.5m 이상 여유를 확인합니다. 바깥 차선 인식 확률은 사용하지 않으며 자동 조향은 요청하지 않습니다. 자세한 조건은 [차로 변경](lane-change.md)을 참고하세요.
+
+점등 직후의 경계 흔들림은 기존 요청 안에서만 제한적으로 확인합니다. 경계 가까이에서 양쪽 차선이 다시 배정되는 짧은 변화는 0.15초 기다립니다. 신뢰도가 낮은 대상 경계가 멀어져도 반대편 경계와 운전자 조향이 접근을 뒷받침하면 최대 3초 안에 안정된 차로를 확인하며, 반대 조향·입력 오류는 유지하지 않습니다.
 
 수동 차선변경 깜박이는 이전 요청 후 최소 3초·연속 1초 소등과 새로운 조향/접근 조건을 확인한 뒤 재요청합니다. 자동 조향 피드백 보호는 최소 12초 유지합니다.
 
@@ -604,6 +606,5 @@ ATC 재요청이 실행되면 새 요청부터 점등 확인 제한 4초를 다�
 수동 깜박이는 차선 접근 속도로 0.3초 뒤를 예측하되, 중심에서 경계까지의 기준을 최대 0.3m만 앞당깁니다. 기존 속도·중앙선·로드에지 조건은 유지합니다.
 
 TBT 턴은 실제 회전 진입을 확인한 뒤 주행 중 핸들이 ±15도 안으로 돌아오면 30m 이동을 기다리지 않고 유지 요청을 끝냅니다. 턴 진입 전 신호 대기에서는 유지하며, 자세한 조건은 [차로 변경](lane-change.md)을 참고하세요.
-
 
 ATC 세부 설정의 우회전 자동 차선변경 거리는 0m에서 꺼지며 50m 단위로 최대 500m까지 선택합니다. 기존 켜짐 설정은 재시작 시 250m로 전환합니다.

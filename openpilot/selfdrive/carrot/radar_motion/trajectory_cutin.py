@@ -333,26 +333,49 @@ def _motion_metrics(observations, window_s=LONG_MOTION_WINDOW_S, attribute="d_pa
   return _motion_metrics_python(observations, window_s, attribute)
 
 
+@dataclass(frozen=True)
+class _VisionSupportLead:
+  probability: float
+  d_rel: float
+  y_rel: float
+  v_lead: float
+  x_std: float
+  y_std: float
+  v_std: float
+
+
 def _vision_supports(
   point: RadarPointSnapshot,
   model: Any,
+  prepared: dict[int, _VisionSupportLead],
   *,
   precise: bool = False,
 ) -> bool:
-  for lead in getattr(model, "leadsV3", ()):
-    probability = _finite(getattr(lead, "prob", 0.0))
-    if probability < (0.90 if precise else 0.35):
+  for index, raw in enumerate(getattr(model, "leadsV3", ())):
+    lead = prepared.get(index)
+    if lead is None:
+      probability = _finite(getattr(raw, "prob", 0.0))
+      if probability < (0.90 if precise else 0.35):
+        continue
+      # Decode only when the original association would read these fields.
+      # The cache belongs to one update, never to the persistent track history.
+      lead = prepared[index] = _VisionSupportLead(
+        probability,
+        _finite(getattr(raw, "x", (0.0,))[0]) - RADAR_TO_CAMERA_M,
+        -_finite(getattr(raw, "y", (0.0,))[0]),
+        # Missing/nonfinite speed retains the per-radar-point fallback below.
+        _finite(getattr(raw, "v", (math.nan,))[0], math.nan),
+        max(1.0, _finite(getattr(raw, "xStd", (1.0,))[0], 1.0)),
+        max(0.5, _finite(getattr(raw, "yStd", (0.5,))[0], 0.5)),
+        max(1.0, _finite(getattr(raw, "vStd", (1.0,))[0], 1.0)),
+      )
+    if lead.probability < (0.90 if precise else 0.35):
       continue
-    d_rel = _finite(getattr(lead, "x", (0.0,))[0]) - RADAR_TO_CAMERA_M
-    y_rel = -_finite(getattr(lead, "y", (0.0,))[0])
-    v_lead = _finite(getattr(lead, "v", (point.v_lead,))[0], point.v_lead)
-    x_std = max(1.0, _finite(getattr(lead, "xStd", (1.0,))[0], 1.0))
-    y_std = max(0.5, _finite(getattr(lead, "yStd", (0.5,))[0], 0.5))
-    v_std = max(1.0, _finite(getattr(lead, "vStd", (1.0,))[0], 1.0))
+    v_lead = lead.v_lead if math.isfinite(lead.v_lead) else point.v_lead
     if (
-      abs(point.d_rel - d_rel) <= max(4.0, 0.20 * point.d_rel, 0.0 if precise else 2.0 * x_std)
-      and abs(point.y_rel - y_rel) <= (1.5 if precise else max(1.5, 2.0 * y_std))
-      and abs(point.v_lead - v_lead) <= max(5.0, 2.0 * v_std)
+      abs(point.d_rel - lead.d_rel) <= max(4.0, 0.20 * point.d_rel, 0.0 if precise else 2.0 * lead.x_std)
+      and abs(point.y_rel - lead.y_rel) <= (1.5 if precise else max(1.5, 2.0 * lead.y_std))
+      and abs(point.v_lead - v_lead) <= max(5.0, 2.0 * lead.v_std)
     ):
       return True
   return False
@@ -522,6 +545,7 @@ class TrajectoryCutInDetector:
 
     matches = cross_sensor_matches or {}
     vision = vision_lead_from_model(model)
+    support_leads: dict[int, _VisionSupportLead] = {}
     lane_probs = tuple(getattr(model, "laneLineProbs", ()))
     lane_path_supported = len(lane_probs) < 3 or max(lane_probs[1:3]) >= 0.75
     seen: set[tuple[str, int]] = set()
@@ -626,6 +650,13 @@ class TrajectoryCutInDetector:
         state.observations.popleft()
       state.last_seen_s = time_s
 
+      # The paired-front checks below share the same unmodified history.
+      front_motion = (
+        _motion_metrics(state.front_observations)
+        if point.source.startswith("corner") and cross_sensor_point is not None
+        else None
+      )
+
       history_s = (
         state.observations[-1].time_s - state.observations[0].time_s
         if len(state.observations) >= 2 else 0.0
@@ -710,7 +741,7 @@ class TrajectoryCutInDetector:
         else None
       )
 
-      vision_supported = _vision_supports(point, model)
+      vision_supported = _vision_supports(point, model, support_leads)
       cross_sensor_supported = cross_sensor_point is not None
       paired_front_overlap = (
         point.source.startswith("corner")
@@ -786,7 +817,7 @@ class TrajectoryCutInDetector:
         and cross_sensor_point.d_rel + cross_sensor_point.v_rel * time_to_overlap_s > 0.5
         and state.front_observations[-1].time_s - state.front_observations[0].time_s >= 0.50
       ):
-        _, front_rate, front_progress, _, front_net, front_direction, _ = _motion_metrics(state.front_observations)
+        _, front_rate, front_progress, _, front_net, front_direction, _ = front_motion
         # A shared shift of the predicted path affects both dPath histories.
         # Check actual lateral displacement of each body return as well.
         _, _, corner_body_progress, _, _, _, _ = _motion_metrics(state.observations, MAX_HISTORY_S, "y_rel")
@@ -977,7 +1008,7 @@ class TrajectoryCutInDetector:
         and reported_inward >= 0.10
         and vision is not None and vision.probability >= 0.90
         and (
-          _vision_supports(point, model, precise=True)
+          _vision_supports(point, model, support_leads, precise=True)
           or _vision_brackets_pair(point, cross_sensor_point, vision, primary_lead, path)
         )
       ):
@@ -986,11 +1017,10 @@ class TrajectoryCutInDetector:
         # and rotation-corrected front velocity before overriding that veto.
         _, _, body_progress, _, body_net, body_direction, _ = _motion_metrics(state.observations, attribute="y_rel")
         _, _, front_progress, _, front_net, front_direction, _ = _motion_metrics(state.front_observations, attribute="y_rel")
-        paired_projection = project_to_model_path(path, cross_sensor_point.d_rel, cross_sensor_point.y_rel)
         paired_body_entry = (
           body_progress >= 0.10 and body_net >= 0.65 and body_direction >= 0.80
           and front_progress >= 0.20 and front_net >= 0.50 and front_direction >= 0.75
-          and _reported_inward_speed(cross_sensor_point, paired_projection, yaw_rate_rad_s) >= 0.10
+          and _reported_inward_speed(cross_sensor_point, front_projection, yaw_rate_rad_s) >= 0.10
         )
       jitter_override = (
         paired_body_entry
@@ -1153,7 +1183,7 @@ class TrajectoryCutInDetector:
         and (
           not point.source.startswith("corner")
           or point.d_rel <= 8.0
-          or _vision_supports(point, model, precise=True)
+          or _vision_supports(point, model, support_leads, precise=True)
           or abs(point.y_rel) <= 1.0
           or lane_path_supported
         )
@@ -1256,16 +1286,13 @@ class TrajectoryCutInDetector:
       paired_front_entry_ahead = False
       stationary_pair_alias = False
       if point.source.startswith("corner") and cross_sensor_point is not None:
-        front_projection = project_to_model_path(
-          path, cross_sensor_point.d_rel, cross_sensor_point.y_rel,
-        )
         front_inward = _reported_inward_speed(
           cross_sensor_point, front_projection, yaw_rate_rad_s,
         )
         # Front velocity is often heavily filtered. Its own position history
         # can corroborate entry once displacement exceeds the range-dependent
         # lateral noise floor; corner history alone cannot supply this vote.
-        front_rate, _, front_progress, _, _, front_direction, _ = _motion_metrics(state.front_observations)
+        front_rate, _, front_progress, _, _, front_direction, _ = front_motion
         if (
           len(state.front_observations) >= 3
           and front_progress >= 0.75 * front_lateral_noise_floor_m(cross_sensor_point.d_rel)

@@ -4,6 +4,7 @@ from collections import deque
 from opendbc.car.hyundai.values import HyundaiSafetyFlags
 from opendbc.car.hyundai.hyundaicanfd import CanBus
 from opendbc.car.hyundai.stalk_trial import crc
+from opendbc.car.hyundai.spas import Session, SPAS
 from openpilot.selfdrive.carrot.bluetooth.model import atomic_json, read_json, RUNTIME
 from tools.jetlink.blink_owner import Owner  # noqa: TID251 -- shared physical output lease
 from tools.jetlink.blink_protocol import Process, fresh  # noqa: TID251 -- common indicator policy worker
@@ -17,6 +18,8 @@ class KickOutput:
     self.event = event
     self.owner = Owner('CANFD Kick')
     self.bus = CanBus(cp).ECAN if self.configured else None
+    self.contract = Session(self.bus)
+    self.contract_admitted = False
     self.next_update = self.last_journal = 0.
     self.direction = 0
     self.driver_stamp = self.driver_pressed_at = -1.
@@ -57,6 +60,15 @@ class KickOutput:
     if exclusive:
       for stamp, packets in frames:
         for address, data, bus in packets:
+          if address in SPAS and bus == self.bus:
+            if 0 <= now - stamp / 1e9 < .1:
+              self.contract.observe(address, bus, data, stamp / 1e9)
+              if self.contract.stock[address].consecutive == 0 or (
+                  self.request_id is not None and self.contract.stock[address].consecutive < 2):
+                self.contract_admitted = False
+            else:
+              self.contract.stock[address].consecutive = 0
+              self.contract_admitted = False
           if address != 0x3C1 or bus != self.bus:
             continue
           if len(data) != 8 or data[0] != crc(data[1:]) or not 0 <= now - stamp / 1e9 < .35:
@@ -83,8 +95,18 @@ class KickOutput:
     if not enabled or now >= self.next_update:
       self.owner.acquire(enabled)
       self.next_update = now + .05
+    if not enabled or not self.owner.held:
+      self.contract = Session(self.bus)
+      self.contract_admitted = False
+    # Require ten advancing CRC-valid stock frames before a new request.
+    # During an admitted session the ECU may deliberately go quiet; the
+    # independent driver message must remain fresh throughout that session.
+    stock_ready = self.contract.stock_ready(now)
+    if self.request_id is None:
+      self.contract_admitted = stock_ready
     driver_active = self.driver_direction not in (None, 0) or 0 <= now - self.driver_pressed_at < .2
-    return enabled and self.owner.held and not driver_active
+    driver_valid = self.driver_direction is not None and 0 <= now - self.driver_stamp < .35
+    return enabled and self.owner.held and self.contract_admitted and driver_valid and not driver_active
 
   def request(self, cs, now, initialized, ready, *, clock=None):
     """Translate the existing source's fresh hold/tap into a leased SPAS direction."""
