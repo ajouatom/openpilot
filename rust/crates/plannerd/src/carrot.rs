@@ -397,13 +397,27 @@ mod stop_release_tests {
             pose_valid: false,
             yaw_rate: 0.,
         };
-        for (count, released) in [(5, false), (19, false), (20, true)] {
+        // carrot 00d9cae3b: rolling to a red line below 3 m/s, even a steady
+        // green does not release the stop.
+        for (count, hold, released) in [
+            (5, false, false),
+            (19, false, false),
+            (20, false, true),
+            (40, true, false),
+        ] {
             planner.x_state = XState::E2eStop;
             planner.traffic_state = TrafficState::Green;
             planner.start_sign_count = count;
             let (mut cruise, mut stop_model) = (20., 50.);
             planner
-                .transition(&input, &mut cruise, [50., 50.], &mut stop_model, TrafficState::Red, &mut || 100.)
+                .transition(
+                    &input,
+                    &mut cruise,
+                    [50., 50.],
+                    &mut stop_model,
+                    (TrafficState::Red, hold),
+                    &mut || 100.,
+                )
                 .unwrap();
             assert_eq!(planner.x_state == XState::E2eCruise, released, "{count}");
         }
