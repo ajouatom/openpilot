@@ -32,6 +32,10 @@ class CheddarModelState:
       self.file = tempfile.NamedTemporaryFile(prefix='carrot-internal-', delete=False)
       worker = Path(__file__).with_name('cheddar_worker.py')
       device = get_tg_input_devices('openpilot.selfdrive.modeld.modeld', False)['WARP_DEV']
+      # The device file stores the backend name, while Linux compilation uses
+      # the LLVM renderer. Preserve that choice for runtime transfer kernels.
+      if device == 'CPU' and sys.platform != 'darwin':
+        device = 'CPU:LLVM'
       self.inference_timeout = .15 if device.split(':')[0] == 'QCOM' else 10
       env = os.environ | {'DEV': device, 'IMAGE': '1', 'FLOAT16': '1', 'NOLOCALS': '1',
                           'JIT_BATCH_SIZE': '0', 'OPENPILOT_HACKS': '1'}
