@@ -77,6 +77,15 @@ impl LoopState {
                     updater.context.logger,
                     "preserving prepared update until an explicit download request",
                 )?;
+            } else if updater.params.boolean("IsOnroad")? && !user_fetch {
+                // The original runs updated only offroad. Here it stays up
+                // onroad for requests, but the automatic fetch copies the whole
+                // checkout into finalized (GBs) and on a small disk that makes
+                // the deleter remove the drive's logs.
+                report::info(
+                    updater.context.logger,
+                    "skipping fetch while onroad; a download request still runs",
+                )?;
             } else if updater.params.boolean("NetworkMetered")? && !timed_out && !user_fetch {
                 report::info(updater.context.logger, "skipping fetch, connection metered")?;
             } else if wake.request()? == UserRequest::Check {
@@ -90,6 +99,8 @@ impl LoopState {
             self.failed_count = 0;
             Ok(false)
         })();
+        // Retrying every 5 min would fetch again just to meet the same full disk.
+        let storage_short = matches!(attempt, Err(Error::Storage { .. }));
         let failure = match attempt {
             Ok(true) => {
                 return Ok(Cycle {
@@ -113,6 +124,10 @@ impl LoopState {
                             serde_json::json!({"cmd":command,"output":output,"returncode":code}),
                         )?;
                         format!("command failed: {}\n{output}", python_arguments(command))
+                    }
+                    Error::Storage { .. } => {
+                        report::info(updater.context.logger, &error.to_string())?;
+                        error.to_string()
                     }
                     _ => {
                         report::exception(
@@ -147,7 +162,11 @@ impl LoopState {
         }
         wake.clear_request()?;
         Ok(Cycle {
-            wait_seconds: if self.failed_count > 0 { 300 } else { 5400 },
+            wait_seconds: if self.failed_count > 0 && !storage_short {
+                300
+            } else {
+                5400
+            },
             warmup: false,
             failed_count: self.failed_count,
         })

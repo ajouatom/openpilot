@@ -52,4 +52,10 @@ pub enum Error {
     Contract(&'static str),
     #[error("copytree failed: {0:?}")]
     CopyTree(Vec<(std::path::PathBuf, String)>),
+    #[error("not enough storage for the update copy: it needs {needed_mb} MB, {available_mb} MB is free and the drive logs keep {floor_mb} MB; the update was not downloaded and no log was deleted")]
+    Storage {
+        needed_mb: u64,
+        available_mb: u64,
+        floor_mb: u64,
+    },
 }

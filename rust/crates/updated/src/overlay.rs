@@ -132,6 +132,31 @@ impl Updater<'_> {
         report::info(self.context.logger, &format!("git diff output:\n{diff}"))?;
         Ok(())
     }
+    /// The finalized copy is a whole checkout (several GB). On a small disk it
+    /// pushed free space under the deleter's floor, and the deleter then
+    /// removed every drive log as soon as it closed (C3X Lite, 2026-11-17).
+    /// Refuse the copy unless the deleter floor plus a log reserve stays free;
+    /// an old copy that cannot be replaced is dropped too, since a start would
+    /// install it over a checkout that has moved on.
+    fn ensure_copy_space(&mut self) -> Result<(), Error> {
+        let paths = self.context.paths;
+        let finalized = paths.finalized();
+        let reclaim = if finalized.try_exists()? {
+            common::tree_bytes(&finalized)?
+        } else {
+            0
+        };
+        let needed = common::tree_bytes(&paths.merged())?;
+        let (available, total) = common::filesystem_bytes(&paths.staging)?;
+        let Some(error) = common::copy_space_shortage(available, reclaim, needed, total) else {
+            return Ok(());
+        };
+        common::set_consistent_flag(paths, &finalized, false)?;
+        if finalized.try_exists()? {
+            common::remove_tree(&finalized)?;
+        }
+        Err(error)
+    }
     pub fn finalize_update(&mut self) -> Result<(), Error> {
         report::info(
             self.context.logger,
@@ -166,6 +191,7 @@ impl Updater<'_> {
             )?;
             return Ok(());
         }
+        self.ensure_copy_space()?;
         common::set_consistent_flag(paths, &paths.finalized(), false)?;
         if paths.finalized().exists() {
             common::remove_tree(&paths.finalized())?;

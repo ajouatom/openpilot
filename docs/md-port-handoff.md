@@ -276,6 +276,7 @@ tmux 로그에 B1 흔적은 없었다. 사용자에게 B1 보드 유무를 아�
 - [ ] 외부 클러스터 화면은 15fps에서 코어 1개의 66–70%를 쓰고, 대부분이 JPEG 압축(프레임당 33–39ms)이다.
 - [ ] 책상 위에서는 차량 CAN이 없어 `card`가 대기하고 modeld가 추론하지 않는다. jetlink 합류는 차에서만 재현된다.
 - [ ] 책상 전원(5V)으로 주행 상태를 켜면 기기가 전압 부족으로 꺼진 적이 있다(PMIC UVLO).
+- [ ] (2026-11-19, 기기 확인 전) K5 + C3X Lite에서 rlog가 남지 않았다. 경로 `00000287`(11-17)의 `deviceState.freeSpacePercent`가 부팅 1분 뒤 55초 동안 42.7%→29.0%로 떨어졌고, 그때 `openpilot-updated`가 주행 중에 `git fetch`→`/data/safe_staging/finalized`로 저장소 전체 복사→`git lfs prune`을 했다. 이후 여유 공간은 deleter 기준(30%, 원본 carrot-wip과 같음)에 붙어 있었고, deleter는 세그먼트가 닫히는 대로 지웠다. 분당 0.93% 감소로 보면 `/data`는 약 18GB다. 원인은 #346(`0f8125fda`)에서 updated의 시동 조건(원본 `enable_updated = not started and SoftwareMenu`)을 뺀 것이다. 요청을 받으려던 변경인데 자동 fetch·복사까지 주행 중에 돌았다. K5는 carrot-server 자동 업데이트(직접 git pull)로 갱신되므로 이 사본은 설치되지 않는다("has been modified, skipping overlay update installation"). 수정(브랜치 `claude/lite-log-retention`): updated는 주행 중에는 사용자의 다운로드 요청만 실행한다. 복사 후 deleter 기준+2GB가 남지 않으면 복사하지 않고 낡은 사본을 지운다(오류 문구에 크기를 적는다). deleter는 오래된 세그먼트의 fcamera/ecamera/dcamera부터 지운다(1분 165MB 중 150MB). 영상이 없는 세그먼트는 min(3GB, 로그 전체의 절반)까지 남긴다. 셋 다 원본과 다르다.
 
 ### 5. 정리
 

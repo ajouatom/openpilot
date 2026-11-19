@@ -4046,6 +4046,7 @@ dependencies = [
  "chrono",
  "indexmap",
  "openpilot-agnos",
+ "openpilot-deleter",
  "openpilot-hardware-info",
  "openpilot-logging",
  "openpilot-logmessaged",

@@ -11,6 +11,7 @@ workspace = true
 
 [dependencies]
 openpilot-managed-entry = { path = "../managed-entry" }
+openpilot-deleter = { path = "../deleter" }
 openpilot-agnos = { path = "../agnos" }
 openpilot-process-supervision = { path = "../process-supervision" }
 openpilot-params = { path = "../params" }
