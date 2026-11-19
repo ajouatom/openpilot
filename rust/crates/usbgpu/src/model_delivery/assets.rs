@@ -63,7 +63,15 @@ pub(super) fn regular(root: &Path, relative: &str) -> Result<PathBuf, Error> {
 /// Missing, corrupt, out-of-package or mismatched artifacts remain unavailable.
 /// The manifest is a trusted package integrity record, not a signature authority.
 pub fn validate(root: &Path, digest: &str, model_size: u64) -> Result<Package, Error> {
-    let manifest_file = regular(root, "manifest.json")?;
+    if digest.len() != 64 || !digest.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return Err(Error::Invalid("invalid native model digest".into()));
+    }
+    let manifest_file = match regular(root, &format!("models/{digest}/manifest.json")) {
+        Err(Error::Io(e)) if e.kind() == std::io::ErrorKind::NotFound => {
+            regular(root, "manifest.json")?
+        }
+        result => result?,
+    };
     if manifest_file.metadata()?.len() > 1024 * 1024 {
         return Err(Error::Invalid("native asset manifest too large".into()));
     }

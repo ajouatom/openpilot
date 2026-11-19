@@ -143,6 +143,9 @@ if [[ -L rust/bin || ! -f $assets_stamp || $(<"$assets_stamp") != "$assets_id" ]
   install_update_helper
   start_ui
 fi
+# Downloaded eGPU weights share the installed camera kernels and firmware.
+cp -R device-inputs/usbgpu-models/. rust/bin/usbgpu-assets/models/ \
+  || fail 'Could not install eGPU model descriptors'
 # The Cheddar internal model ships as its own bundle so adding it did not
 # change the large runtime bundle. Optional: CD210 runs if it is missing.
 cheddar_id=$(bundle_id cheddar)

@@ -128,7 +128,20 @@ pub fn run(
             runtime.warm_internal(&image.buffer)?;
             runtime.enable_usb(model);
         }
-        Ok(None) => {}
+        Ok(None) => {
+            logger.emit(
+                log_site!(),
+                Record::text(
+                    Level::Info,
+                    format!(
+                        "eGPU not started: present={}, compiled={}, startup_failed={}",
+                        params.get_bool("UsbGpuPresent")?,
+                        params.get_bool("UsbGpuCompiled")?,
+                        params.get_bool("UsbGpuStartupFailed")?,
+                    ),
+                ),
+            )?;
+        }
         Err(error) => {
             logger.emit(
                 log_site!(),

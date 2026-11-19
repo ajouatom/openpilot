@@ -1,0 +1,216 @@
+{
+  "files": [
+    {
+      "bytes": 132352,
+      "path": "firmware/gc_12_0_0_imu.bin",
+      "sha256": "aa15e5b3156bffc45e0c50bccbcd364fbd3f958531b695b7487a803d780b8328"
+    },
+    {
+      "bytes": 467712,
+      "path": "firmware/gc_12_0_0_me.bin",
+      "sha256": "d7eba5197f2580f32b8256b1d9cb68e723e9e644293a34446a7913e3c093cba5"
+    },
+    {
+      "bytes": 451552,
+      "path": "firmware/gc_12_0_0_mec.bin",
+      "sha256": "1931593440b8f9423580d9e2cdc5b34e7c682cdffe1ca4b74b0c2f6a0420236d"
+    },
+    {
+      "bytes": 351920,
+      "path": "firmware/gc_12_0_0_pfp.bin",
+      "sha256": "16bfd64c10fe73b5e760055069a60e5841dba16c0ed4edb56c20d675e23901f6"
+    },
+    {
+      "bytes": 150704,
+      "path": "firmware/gc_12_0_0_rlc.bin",
+      "sha256": "6436b582734a413456fff3d3c7195e71cc9e78a7ed31ee21c83ffd6fae1ad186"
+    },
+    {
+      "bytes": 421216,
+      "path": "firmware/psp_14_0_2_sos.bin",
+      "sha256": "7b538448b57d4f9dd06b2eea90d4f86a16e65e3027cdecee8db71c2c5f1fa243"
+    },
+    {
+      "bytes": 47872,
+      "path": "firmware/sdma_7_0_0.bin",
+      "sha256": "beaafb53993a106edd392392d5896245ae2a957c6d0f495d0002eec72ad8ad38"
+    },
+    {
+      "bytes": 333236,
+      "path": "firmware/smu_14_0_2.bin",
+      "sha256": "6951995d1d606f4dc60c895f19d34ed18aa40e62129f83d8510c45e8aa9ae2fc"
+    },
+    {
+      "bytes": 761,
+      "path": "models/b4dead3ee091d66ab002a6b8e716c26f4f79e3c931e4be5f48e017ba92f6e960/model.hcq-meta.json",
+      "sha256": "26401eeb36cda9f907623999da06308ce3b5ecce13d929a9b5e8b2a692586c21"
+    },
+    {
+      "bytes": 996088,
+      "path": "models/b4dead3ee091d66ab002a6b8e716c26f4f79e3c931e4be5f48e017ba92f6e960/model.hcq.json",
+      "sha256": "2844b1dbebcecafeedad1734633f3c802a7e31c6f7ceb30762ecc8a13e214e14"
+    },
+    {
+      "bytes": 25024,
+      "path": "probe-gfx1100.json",
+      "sha256": "b55b5d48918abc7826268438aed5c5b8e27f3f078aff8d1ab176e33aa068dbe6"
+    },
+    {
+      "bytes": 25021,
+      "path": "probe-gfx1101.json",
+      "sha256": "c1f35a255db97c6636ed7e6003f614abc1c8a0b028fa607da7663365d21d9203"
+    },
+    {
+      "bytes": 25024,
+      "path": "probe-gfx1102.json",
+      "sha256": "dd3727e972b9cc223ab03bb62a696740a67cf728278bccd49c8e1c2bb82b5d31"
+    },
+    {
+      "bytes": 25021,
+      "path": "probe-gfx1150.json",
+      "sha256": "3925cbcb9d07999ce26057adffb7751915cea217c75f4446ff25673af2c189f1"
+    },
+    {
+      "bytes": 25033,
+      "path": "probe-gfx1200.json",
+      "sha256": "e09dda8c981e2fac30a86de5368b56033c26dc83ea8588af2d743a83150889f9"
+    },
+    {
+      "bytes": 25033,
+      "path": "probe-gfx1201.json",
+      "sha256": "71faabc92b8f77bb412b5b67530dfc298c56c394207ecc36a8c9ee226981151b"
+    },
+    {
+      "bytes": 28543,
+      "path": "probe-gfx942.json",
+      "sha256": "0248463f6d3c222d75035b08fa4cc21b85e40d07bd59d33f331540597c42f47a"
+    },
+    {
+      "bytes": 28543,
+      "path": "probe-gfx950.json",
+      "sha256": "554381e7a0a992b0d2a1f106fc73830c559a984e24c990af7c74f12f7ab613ae"
+    },
+    {
+      "bytes": 1692,
+      "path": "source-provenance.json",
+      "sha256": "ae8c5e3a2d1f76b8b361be4a3cfaf9d8a76eacfc4f706684693d77f2b4f795ab"
+    },
+    {
+      "bytes": 1058,
+      "path": "tinygrad-LICENSE",
+      "sha256": "00146150f1082f320d608ba481acc3fbfacf8a9914354c2c96b6f44719d5e977"
+    },
+    {
+      "bytes": 98053,
+      "path": "warp-gfx1200-1344x760.json",
+      "sha256": "5d2b5457d75e1d9ae51ffda8c828b2b08acf5d9410361619f63b97f44eb25ac8"
+    },
+    {
+      "bytes": 97255,
+      "path": "warp-gfx1200-1928x1208.json",
+      "sha256": "e26fcb923c6144356ef8d9d3ad9ff12d26264735bb97577604f7b76dffda3265"
+    },
+    {
+      "bytes": 7277,
+      "path": "warp-qcom-a630-1344x760/graph.json",
+      "sha256": "12f1d20969e8e6ae5fccb4453a8ac4338c416c5c6342b0e38538d4c94453051b"
+    },
+    {
+      "bytes": 6332,
+      "path": "warp-qcom-a630-1344x760/kernel-0.bin",
+      "sha256": "d1a0b76295d22a9a92ccffea3011895f093eb91c89edb6fb04956840b91bd028"
+    },
+    {
+      "bytes": 8968,
+      "path": "warp-qcom-a630-1344x760/kernel-1.bin",
+      "sha256": "a6b070eeacb8a5b50bc859ecd8ff48d8912f3af1ee7b5bbc9b964eed754a2fec"
+    },
+    {
+      "bytes": 8968,
+      "path": "warp-qcom-a630-1344x760/kernel-2.bin",
+      "sha256": "dda50f45bd48546664ba5de5ef34c8d3b081bf6af3f49e0481105550b26ddac3"
+    },
+    {
+      "bytes": 6468,
+      "path": "warp-qcom-a630-1344x760/kernel-3.bin",
+      "sha256": "210415e9b39ba02a596bdba7bf62e557ca35176983631b9ce63088a9d9098e6f"
+    },
+    {
+      "bytes": 9088,
+      "path": "warp-qcom-a630-1344x760/kernel-4.bin",
+      "sha256": "f963460f1b990e3f53bf0a621c2ae55adc7d0c11690be758413b55a9a8f1ddc9"
+    },
+    {
+      "bytes": 9088,
+      "path": "warp-qcom-a630-1344x760/kernel-5.bin",
+      "sha256": "793bcaafddcbd0d6860bc5c62d299b56817741b9a308332c2956e5f73cdb18a4"
+    },
+    {
+      "bytes": 4980,
+      "path": "warp-qcom-a630-1344x760/kernel-6.bin",
+      "sha256": "f79995ff39b423377bfe87f130a8e6b6e8b36a4adc325effa3030e69f4ef149d"
+    },
+    {
+      "bytes": 359,
+      "path": "warp-qcom-a630-1344x760/provenance.json",
+      "sha256": "f0754d846402c090ca207de21d86027230dcd2489cddcb18674d6cb73edf1e7b"
+    },
+    {
+      "bytes": 72,
+      "path": "warp-qcom-a630-1344x760/weights.bin",
+      "sha256": "656ea7c7e4ebfac95509d9ddb0411d479d44deb7d637bedb85bcf9106dec6bcb"
+    },
+    {
+      "bytes": 7277,
+      "path": "warp-qcom-a630-1928x1208/graph.json",
+      "sha256": "b4d0d0a0b218b0ddf1ebd843ff540160e9e095fc3e1ea7621dc4a4f363fc03a9"
+    },
+    {
+      "bytes": 6268,
+      "path": "warp-qcom-a630-1928x1208/kernel-0.bin",
+      "sha256": "4b67fc24d2152c88462ccbd866cff73596d2c615366c659483bdd4fa66deb3bb"
+    },
+    {
+      "bytes": 8816,
+      "path": "warp-qcom-a630-1928x1208/kernel-1.bin",
+      "sha256": "efc3be7c5c785e9cfe318dc2ab24d8454b0d8c0b74f07365f3b57ce85d5ab132"
+    },
+    {
+      "bytes": 8816,
+      "path": "warp-qcom-a630-1928x1208/kernel-2.bin",
+      "sha256": "3ce3d9ed589fb0e1119b4ce28a36df0fc48df73fc956c563fb181207ec22e0ec"
+    },
+    {
+      "bytes": 6404,
+      "path": "warp-qcom-a630-1928x1208/kernel-3.bin",
+      "sha256": "d6fec0464ad1d0b69d87c546c2d2e6604aa939c7ac53fef72f6da581eeacde83"
+    },
+    {
+      "bytes": 8936,
+      "path": "warp-qcom-a630-1928x1208/kernel-4.bin",
+      "sha256": "601887c740f47bbdfd1a41bd6d8d5157b85ad6dd1aede2bef9aaa5d101125e6d"
+    },
+    {
+      "bytes": 8936,
+      "path": "warp-qcom-a630-1928x1208/kernel-5.bin",
+      "sha256": "164d678b48f440cff20ea28423c3a50273f562a426a7b8a6f166bf64e506812b"
+    },
+    {
+      "bytes": 4980,
+      "path": "warp-qcom-a630-1928x1208/kernel-6.bin",
+      "sha256": "f79995ff39b423377bfe87f130a8e6b6e8b36a4adc325effa3030e69f4ef149d"
+    },
+    {
+      "bytes": 360,
+      "path": "warp-qcom-a630-1928x1208/provenance.json",
+      "sha256": "2776f8a89a9f5fa03f0d9adb1800f34702705d18fd8ea654cb6fc57e3a85a256"
+    },
+    {
+      "bytes": 72,
+      "path": "warp-qcom-a630-1928x1208/weights.bin",
+      "sha256": "656ea7c7e4ebfac95509d9ddb0411d479d44deb7d637bedb85bcf9106dec6bcb"
+    }
+  ],
+  "model_sha256": "b4dead3ee091d66ab002a6b8e716c26f4f79e3c931e4be5f48e017ba92f6e960",
+  "version": 1
+}
