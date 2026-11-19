@@ -214,12 +214,15 @@ compile() {
         [[ -n $ui ]] && echo "Compiling ${line##*Compiling } · $done" >> "$status_file"
         ;;
     esac
+  # Progress and diagnostics stay on stderr; the JSON list of every unit this
+  # build used goes to a file, so device_cleanup.sh can drop all other outputs.
   done < <(
     echo 1000 > /proc/self/oom_score_adj
     exec taskset -c 0-7 cargo --config 'source.crates-io.replace-with="device-vendor"' \
       --config "source.device-vendor.directory=\"$sdk/vendor\"" \
       build --manifest-path rust/Cargo.toml --locked --offline --release \
-      --target aarch64-unknown-linux-gnu -j "$jobs" "${arguments[@]}" 2>&1
+      --message-format=json-render-diagnostics \
+      --target aarch64-unknown-linux-gnu -j "$jobs" "${arguments[@]}" 2>&1 > "$store/artifacts.jsonl"
     )
   wait $!
 }
@@ -248,3 +251,5 @@ rm -rf rust/.runtime-packages rust/.runtime-active rust/.runtime-bootstrap \
   rust/.runtime-install-rollback rust/.runtime-install-journal.json rust/runtime-manifest.json
 echo "$head" > "$stamp"
 status "Build complete in $((SECONDS - started))s"
+# Only this version stays: older build outputs, checkouts and history go.
+bash rust/tools/device_cleanup.sh now "$root" "$store" || status 'Update cleanup failed'

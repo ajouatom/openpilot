@@ -280,6 +280,8 @@ tmux 로그에 B1 흔적은 없었다. 사용자에게 B1 보드 유무를 아�
 
 ### 5. 정리
 
+- [ ] (2026-11-19, 기기 확인 전) 업데이트 찌꺼기 정리 `rust/tools/device_cleanup.sh`. `device_build.sh`가 새 커밋을 빌드한 직후에만 돈다. 즉시: cargo가 이번 빌드에 쓴 단위(JSON 메시지 + 바이너리 하드링크 inode)만 `target/`에 남기고, `safe_staging`의 `old_openpilot*`·`finalized`(ready 준비본 제외)·overlay 작업 폴더를 지운다(journal이 있으면 건너뜀). 백그라운드(코어 0-3, nice 19, ionice idle, 저장소 잠금): 현재 브랜치와 upstream·stash 외 ref 삭제, HEAD에서 shallow, reflog 만료, LFS prune, gc. 결과는 `/data/openpilot-build/cleanup.log`. `device-inputs` 청크(1.1GB)는 작업 트리에 둔다(sparse로 빼면 옛 브랜치 빌드가 깨진다).
+
 - [ ] 시험 기기의 `/data/openpilot-native`(19GB)는 쓰는 곳이 없다. 삭제는 사용자가 한다.
 - [ ] 원본 빌드를 돌리고 Rust로 돌아오면 추적 파일 6개(글꼴·DBC)가 수정됨 상태로 남는다. Rust 쪽에서 무시하거나 복원할지 정해야 한다.
 - [ ] 이 PC에서 `carrot-recovery` 테스트 7건과 `tombstoned` 1건은 보조 실행 파일이 없어 실패한다. `carrot-server` 테스트는 위 "이 PC에서 이어받기"의 라이브러리 경로를 주면 실행된다(25건 통과).
