@@ -49,8 +49,6 @@ type HelloCheck = Box<dyn Fn(&Value) -> Result<(), Error> + Send>;
 /// INFER_REQ flag: a uint8 256x256 route map follows the packed floats
 /// (the modified Jetlink app; the server keeps it until the next one).
 pub const NAV_MAP_FLAG: u32 = 1 << 3;
-/// carrot's map freshness gate (map_client.py).
-const MAP_FRESH_NS: u64 = 500_000_000;
 pub struct Client<T: Transport> {
     transport: T,
     sequence: u32,
@@ -108,8 +106,6 @@ fn named_pick_at() -> Option<f64> {
     (bits != 0).then(|| f64::from_bits(bits))
 }
 impl<T: Transport> Client<T> {
-    /// A new, fresh, valid route map to send, or one blank map when it went
-    /// stale so the server stops using the last one; None when unchanged.
     /// The hidden_state range a protocol-3 stateful session leaves out of
     /// replies. carrot's client asked for the whole vector (WANT_HIDDEN)
     /// though nothing on the comma reads a stateful graph's hidden state.
@@ -147,25 +143,6 @@ impl<T: Transport> Client<T> {
             app.pick_at = pick.as_ref().map(|pick| pick.at);
         }
         Ok((serde_json::to_vec(&hello)?, pick))
-    }
-
-    fn next_map(&mut self) -> Option<Vec<u8>> {
-        let now = crate::now_ns();
-        let map =
-            openpilot_mapsd::output::read(std::path::Path::new(openpilot_mapsd::output::PATH))
-                .filter(|m| m.valid && m.rendered_ns <= now && now - m.rendered_ns < MAP_FRESH_NS);
-        match map {
-            Some(map) if self.map_sent != Some(map.rendered_ns) => {
-                self.map_sent = Some(map.rendered_ns);
-                Some(map.image)
-            }
-            Some(_) => None,
-            None if self.map_sent != Some(0) => {
-                self.map_sent = Some(0);
-                Some(vec![0; openpilot_mapsd::output::MAP_BYTES])
-            }
-            None => None,
-        }
     }
 
     pub fn new(transport: T) -> Self {
@@ -914,7 +891,7 @@ impl<T: Transport> Client<T> {
             if reset {
                 self.map_sent = None; // RESET_QUEUES clears the server's map
             }
-            self.next_map()
+            openpilot_mapsd::output::changed_image(&mut self.map_sent, crate::now_ns())
         } else {
             None
         };

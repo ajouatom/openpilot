@@ -43,6 +43,20 @@ pub fn read(path: &Path) -> Option<Map> {
     })
 }
 
+/// Send only changed model input, including one blank image when a route
+/// becomes invalid or its render is more than half a second old.
+pub fn changed_image(last_render: &mut Option<u64>, now_ns: u64) -> Option<Vec<u8>> {
+    let map = read(Path::new(PATH)).filter(|m| {
+        m.valid && m.rendered_ns <= now_ns && now_ns - m.rendered_ns < 500_000_000
+    });
+    let stamp = map.as_ref().map_or(0, |m| m.rendered_ns);
+    if *last_render == Some(stamp) {
+        return None;
+    }
+    *last_render = Some(stamp);
+    Some(map.map_or_else(|| vec![0; MAP_BYTES], |m| m.image))
+}
+
 #[cfg(test)]
 mod tests {
     #[test]

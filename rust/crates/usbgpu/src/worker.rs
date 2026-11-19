@@ -90,7 +90,7 @@ impl Info {
             || metadata.output_count > 1_000_000
             || metadata.output_slices.is_empty()
             || metadata.output_slices.len() > 256
-            || metadata.inputs.len() != 3
+            || !matches!(metadata.inputs.len(), 3 | 5)
         {
             return Err(Error::Contract("unsupported worker metadata"));
         }
@@ -127,6 +127,8 @@ impl Info {
             let size: usize = match input.name.as_str() {
                 "desire" if input.shape == [8] => 32,
                 "traffic_convention" | "action_t" if input.shape == [1, 2] => 8,
+                "nav_map" if input.shape == [1, 1, 256, 256] => 256 * 256 * 4,
+                "navigation" if input.shape == [1, 47] => 47 * 4,
                 _ => return Err(Error::Contract("unsupported worker input shape")),
             };
             if layout
@@ -143,6 +145,13 @@ impl Info {
                 return Err(Error::Contract("duplicate worker input"));
             }
             offset += size.next_multiple_of(128);
+        }
+        if !["desire", "traffic_convention", "action_t"]
+            .iter()
+            .all(|name| layout.contains_key(*name))
+            || layout.contains_key("navigation") != layout.contains_key("nav_map")
+        {
+            return Err(Error::Contract("incomplete worker input layout"));
         }
         let mut input_shapes = BTreeMap::new();
         for name in ["img", "big_img"] {

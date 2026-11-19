@@ -7,6 +7,7 @@ use crate::{
 
 pub struct NativeRuntime<B: HcqBus> {
     pub model: Model<HcqGpu<B>>,
+    last_map: Vec<u8>,
     #[cfg(feature = "native-skip-miri")]
     local: Option<crate::qcom_warp::LocalWarp>,
 }
@@ -14,6 +15,7 @@ impl<B: HcqBus> NativeRuntime<B> {
     pub fn new(model: Model<HcqGpu<B>>) -> Self {
         Self {
             model,
+            last_map: Vec::new(),
             #[cfg(feature = "native-skip-miri")]
             local: None,
         }
@@ -136,6 +138,16 @@ impl<B: HcqBus> Runtime for NativeRuntime<B> {
             .prepare_input("new_img", |gpu, _| gpu.warp(frames, transforms))?;
         for name in ["desire", "traffic_convention", "action_t"] {
             self.model.write_input(name, info.input(packed, name)?)?;
+        }
+        if info.layout.contains_key("navigation") {
+            self.model
+                .write_input("navigation", info.input(packed, "navigation")?)?;
+            let map = info.input(packed, "nav_map")?;
+            if self.last_map != map {
+                self.model.write_input("nav_map", map)?;
+                self.last_map.clear();
+                self.last_map.extend_from_slice(map);
+            }
         }
         crate::worker_progress::mark("model_call");
         self.model.run()?;

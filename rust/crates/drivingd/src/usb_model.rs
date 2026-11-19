@@ -27,6 +27,7 @@ impl Controls {
 pub struct UsbModel {
     pub client: Client,
     pub controls: Controls,
+    last_map_render: Option<u64>,
     inputs: PolicyInputs,
     artifact: Option<PathBuf>,
     slices: BTreeMap<String, [usize; 2]>,
@@ -88,6 +89,7 @@ impl UsbModel {
         Ok(Self {
             client,
             controls: Controls::default(),
+            last_map_render: None,
             artifact: None,
             inputs: PolicyInputs::new(
                 slices
@@ -100,6 +102,15 @@ impl UsbModel {
     pub fn update(&mut self, controls: Controls) {
         self.controls = controls;
         controls.apply(&mut self.inputs);
+    }
+
+    pub fn set_navigation(&mut self, navigation: &[f32; 47]) -> Result<(), Error> {
+        let map = openpilot_mapsd::output::changed_image(
+            &mut self.last_map_render,
+            openpilot_jetlink::now_ns(),
+        );
+        self.client.set_navigation(navigation, map.as_deref())?;
+        Ok(())
     }
     pub fn infer(
         &mut self,

@@ -1,9 +1,10 @@
-//! N16 navigation input for a jetlink navigation graph: carrot's
+//! N16 navigation input for eGPU and Jetlink models: carrot's
 //! `map_client.MapInput` `navigation` half. Subscribed only while such a
 //! graph is connected: navInstructionCarrot is invalid without a route and
 //! must not join modeld's ordinary input checks.
 use crate::Error;
 use openpilot_cereal::log_capnp::event;
+use openpilot_mapsd::output::DEMAND_PATH;
 use openpilot_messaging::{runtime::SubMaster, state::Options as SubscriberOptions};
 use openpilot_modeld::navigation::{navigation_input, Maneuver, NAVIGATION_LEN};
 use std::time::Duration;
@@ -13,9 +14,6 @@ pub struct NavigationInput {
     subscriber: Option<SubMaster>,
     demand_at: f64,
 }
-
-/// mapsd renders the route map only while a navigation graph asks for it.
-const DEMAND_PATH: &str = "/dev/shm/carrot-nav-map-demand";
 
 impl NavigationInput {
     /// Zeros unless `wanted` and a fresh (< 2 s) valid instruction exists.

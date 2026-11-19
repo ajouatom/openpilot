@@ -349,6 +349,16 @@ pub fn run(
         } else {
             [1.0, 0.0]
         };
+        let usb_navigation = runtime.usb_navigation_model();
+        let navigation = navigation_input
+            .update(
+                usb_navigation.is_some() || external.navigation_model(),
+                f64::from(sources.car.get_v_ego()),
+            )
+            .unwrap_or([0.; openpilot_modeld::navigation::NAVIGATION_LEN]);
+        if let Some(model) = usb_navigation {
+            model.set_navigation(&navigation)?;
+        }
         external.begin(
             openpilot_jetlink::runtime::FrameInput {
                 controls,
@@ -359,13 +369,7 @@ pub fn run(
                 desire,
                 traffic,
                 action: [lateral as f32, longitudinal as f32],
-                // A missing route input must never fail the model loop.
-                navigation: navigation_input
-                    .update(
-                        external.navigation_model(),
-                        f64::from(sources.car.get_v_ego()),
-                    )
-                    .unwrap_or([0.; openpilot_modeld::navigation::NAVIGATION_LEN]),
+                navigation,
             },
             || {
                 runtime

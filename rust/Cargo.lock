@@ -2807,6 +2807,7 @@ dependencies = [
  "openpilot-jetlink",
  "openpilot-logging",
  "openpilot-managed-entry",
+ "openpilot-mapsd",
  "openpilot-messaging",
  "openpilot-model-runtime",
  "openpilot-modeld",

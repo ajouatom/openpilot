@@ -46,7 +46,12 @@ fn validate(info: &Info, camera: [u32; 2]) -> Result<(), Error> {
     let mut inputs = info
         .layout
         .iter()
-        .filter(|(name, _)| ["desire", "traffic_convention", "action_t"].contains(&name.as_str()))
+        .filter(|(name, _)| {
+            matches!(
+                name.as_str(),
+                "desire" | "traffic_convention" | "action_t" | "navigation" | "nav_map"
+            )
+        })
         .collect::<Vec<_>>();
     inputs.sort_by_key(|(_, view)| view.offset);
     let metadata = Metadata {

@@ -322,6 +322,11 @@ impl<'a> DrivingRuntime<'a> {
     pub fn uses_usb(&self) -> bool {
         self.usb.is_some()
     }
+    pub fn usb_navigation_model(&mut self) -> Option<&mut UsbModel> {
+        self.usb
+            .as_mut()
+            .filter(|model| model.client.info.layout.contains_key("navigation"))
+    }
     pub fn disable_usb(&mut self) {
         if let Some(usb) = self.usb.take() {
             usb.controls.apply(&mut self.inputs);
