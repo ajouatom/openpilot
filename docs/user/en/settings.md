@@ -337,17 +337,20 @@ A saved change takes effect at the **next vehicle-parameter initialization**; it
 
 ### Porter–Ioniq 5 manual vehicle selection
 
-On the comma, open **Settings → Toggles → Vehicle (manual)** and select **Porter II EV** or **Ioniq 5 HDA2**. Selection is available only offroad and saves the vehicle and these three settings.
+This manual selector is available on both `c3-pht-porter` and `c3-pht`.
+
+On the comma, open **Settings → Toggles → Vehicle (manual)** and select **Porter II EV** or **Ioniq 5 HDA2**. Selection is available only offroad and saves the vehicle and these four settings.
 
 | Setting | Porter II EV | Ioniq 5 HDA2 |
 |---|---|---|
 | `HyundaiCameraSCC` | `0` | `2` |
 | `EnableRadarTracks` | `0` | `3` |
 | `CanfdHDA2` | `0` | `1` |
+| `CustomSR` (steering ratio ×10) | `202` (20.2) | `140` (14.0) |
 
 Manually choose `c3-pht-porter` for the Porter or `c3-pht` for the Ioniq 5, then restart before driving. Automatic identification, preset restoration and Git branch switching have been removed. Manual selection skips active VIN/firmware queries; passive CAN bus detection and camera/model startup are still required.
 
-Other manual settings, including steering ratio, steering strength, GAP and Porter toggles, are preserved. Porter-specific features run only on the Porter and remain inactive on the Ioniq 5. Shared steering settings can affect both cars; check them for the selected vehicle. Calibration is no longer reset automatically: reset calibration in the Device menu after moving to the other vehicle's mounting position.
+The ratio preset applies when a vehicle button is pressed; later manual adjustments remain until the next vehicle selection. Other manual settings, including steering strength, GAP and Porter automatic SET, low-speed cancellation and dedicated GAP toggles, are preserved. Porter-specific features run only on the Porter and remain inactive on the Ioniq 5. Shared steering settings can affect both cars; check them for the selected vehicle. Calibration is no longer reset automatically: reset calibration in the Device menu after moving to the other vehicle's mounting position.
 
 <a id="display"></a>
 ## Display

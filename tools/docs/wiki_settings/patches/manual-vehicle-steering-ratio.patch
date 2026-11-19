@@ -1,0 +1,42 @@
+--- a/KO-CustomSteerRatiox0.1(0).md
++++ b/KO-CustomSteerRatiox0.1(0).md
+@@ -30,0 +31,11 @@
++<!-- CARROT:SECTION:BEGIN BEHAVIOR -->
++### 동작
++
++포터·아이오닉5 수동 선택을 지원하는 브랜치에서는 콤마 토글에서 차량을 선택하면 포터2 EV의 조향비를 20.2, 아이오닉5 HDA2를 14.0으로 저장합니다. 포터 자동 SET·저속 취소·전용 GAP 토글과 다른 수동 설정은 유지합니다.
++<!-- CARROT:SECTION:END BEHAVIOR -->
++
++<!-- CARROT:SECTION:BEGIN USAGE -->
++### 사용
++
++주행 종료 상태에서 차량과 해당 브랜치를 직접 선택하고 주행 전에 재시작합니다. 이후 수동 조향비 변경은 다음 차량 선택 전까지 유지되며, 부팅만으로 차량별 값을 다시 적용하지 않습니다.
++<!-- CARROT:SECTION:END USAGE -->
+--- a/EN-CustomSteerRatiox0.1(0).md
++++ b/EN-CustomSteerRatiox0.1(0).md
+@@ -30,0 +31,11 @@
++<!-- CARROT:SECTION:BEGIN BEHAVIOR -->
++### Behavior
++
++On branches with the manual Porter/Ioniq selector, choosing a vehicle in comma Toggles saves a steering ratio of 20.2 for Porter II EV or 14.0 for Ioniq 5 HDA2. Porter automatic SET, low-speed cancellation and dedicated GAP toggles and other manual settings are preserved.
++<!-- CARROT:SECTION:END BEHAVIOR -->
++
++<!-- CARROT:SECTION:BEGIN USAGE -->
++### Usage
++
++Select the vehicle and matching branch manually while offroad, then restart before driving. Later manual ratio changes remain until the next vehicle selection; startup alone does not reapply a vehicle preset.
++<!-- CARROT:SECTION:END USAGE -->
+--- a/ZH-自定义转向比x0.1(0).md
++++ b/ZH-自定义转向比x0.1(0).md
+@@ -30,0 +31,11 @@
++<!-- CARROT:SECTION:BEGIN BEHAVIOR -->
++### 行为
++
++在支持 Porter/IONIQ 手动车型选择的分支中，点击 comma 开关菜单中的车型会将 Porter II EV 转向比设为 20.2，将 Ioniq 5 HDA2 设为 14.0。保留 Porter 自动 SET、低速取消、专用 GAP 开关和其他手动设置。
++<!-- CARROT:SECTION:END BEHAVIOR -->
++
++<!-- CARROT:SECTION:BEGIN USAGE -->
++### 使用
++
++请在非行驶状态下手动选择车型及对应分支，并在驾驶前重启。之后手动修改的转向比会保留到下次车型选择，仅启动设备不会重新应用车型预设。
++<!-- CARROT:SECTION:END USAGE -->

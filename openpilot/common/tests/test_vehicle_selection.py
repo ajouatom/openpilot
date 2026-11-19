@@ -1,4 +1,4 @@
-"""Manual choice changes only the vehicle and three requested parameters."""
+"""Manual choice changes only the vehicle and explicitly requested preset parameters."""
 
 from types import SimpleNamespace as NS
 
@@ -41,7 +41,6 @@ def preserved(p):
   return {
     key: p.get(key)
     for key in (
-      'CustomSR',
       'CustomSteerMax',
       'AutoEngage',
       'PorterAutoSetMain',
@@ -54,7 +53,7 @@ def preserved(p):
   }
 
 
-def test_repeated_explicit_choices_change_only_vehicle_and_three_values(store):
+def test_repeated_explicit_choices_apply_vehicle_presets_and_keep_other_values(store):
   before = preserved(store)
   for index, vehicle in ((0, PORTER), (1, IONIQ5), (0, PORTER)):
     select_manual_vehicle(store, index)
@@ -165,3 +164,24 @@ def test_ioniq_params_are_identical_with_porter_options_on_or_off(store, monkeyp
       store.put_bool(key, enabled)
     results.append(interface.CarInterface.get_params(CAR.HYUNDAI_IONIQ_5, fingerprint, [], True, False, False).to_dict())
   assert results[0] == results[1]
+
+
+@pytest.mark.parametrize('values', [(True, False, True), (False, True, False), (False, False, False)])
+def test_porter_feature_toggles_survive_both_vehicle_choices(store, values):
+  keys = ('PorterAutoSetMain', 'PorterAutoCancelBelow30', 'PorterGapUse')
+  for key, value in zip(keys, values, strict=True):
+    store.put_bool(key, value)
+  for index in (0, 1, 1, 0):
+    select_manual_vehicle(store, index)
+    assert tuple(store.get_bool(key) for key in keys) == values
+
+
+def test_manual_ratio_adjustment_is_not_overwritten_on_startup_without_a_new_choice(store):
+  select_manual_vehicle(store, 1)
+  assert store.get_int('CustomSR') == 140
+  store.put_int('CustomSR', 155)
+  retire_automatic_switch(store)
+  finish_pending_selection(store)
+  assert store.get_int('CustomSR') == 155
+  select_manual_vehicle(store, 0)
+  assert store.get_int('CustomSR') == 202

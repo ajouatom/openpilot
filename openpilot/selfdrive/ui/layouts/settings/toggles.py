@@ -16,8 +16,9 @@ PERSONALITY_TO_INT = log.LongitudinalPersonality.schema.enumerants
 # Description constants
 DESCRIPTIONS = {
   "ManualVehicle": tr_noop(
-    "Porter II EV: CAMERA SCC 0, radar tracks 0, HDA2 0. Ioniq 5 HDA2: 2, 3, 1. " +
-    "Only the vehicle and these three settings change; other manual settings stay unchanged. " +
+    "Porter II EV: CAMERA SCC 0, radar tracks 0, HDA2 0, steering ratio 20.2. " +
+    "Ioniq 5 HDA2: 2, 3, 1, steering ratio 14.0. " +
+    "Other manual settings, including Porter toggles, stay unchanged. " +
     "Select while offroad, choose the matching branch manually and restart before driving."
   ),
   "OpenpilotEnabledToggle": tr_noop(

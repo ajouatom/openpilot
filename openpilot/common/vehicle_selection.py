@@ -5,8 +5,8 @@ IONIQ5 = 'HYUNDAI_IONIQ_5'
 VEHICLES = (PORTER, IONIQ5)
 CAR_LABELS = {PORTER: 'Hyundai Porter II EV 2024', IONIQ5: 'Hyundai Ioniq 5 (with HDA II) 2022-24'}
 PRESETS = {
-  PORTER: {'HyundaiCameraSCC': 0, 'EnableRadarTracks': 0, 'CanfdHDA2': 0},
-  IONIQ5: {'HyundaiCameraSCC': 2, 'EnableRadarTracks': 3, 'CanfdHDA2': 1},
+  PORTER: {'HyundaiCameraSCC': 0, 'EnableRadarTracks': 0, 'CanfdHDA2': 0, 'CustomSR': 202},
+  IONIQ5: {'HyundaiCameraSCC': 2, 'EnableRadarTracks': 3, 'CanfdHDA2': 1, 'CustomSR': 140},
 }
 PENDING = 'ManualVehicleSelectionPending'
 
@@ -37,7 +37,7 @@ def select_manual_vehicle(params, index):
     raise RuntimeError('Select the vehicle only while offroad')
   if type(index) is not int or not 0 <= index < len(VEHICLES):
     raise ValueError('Unsupported manual vehicle selection')
-  # Journal the explicit request before changing any of the five fields. This
+  # Journal the explicit request before changing the vehicle preset. This
   # also recovers a power loss without restoring unrelated manual settings.
   pending = {'version': 1, 'vehicle': VEHICLES[index]}
   params.put(PENDING, pending)

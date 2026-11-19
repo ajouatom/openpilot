@@ -46,14 +46,14 @@ def menu(tmp_path):
   return obj, params, ui, errors
 
 
-def test_both_buttons_write_exact_three_values_and_keep_manual_tuning(menu):
+def test_both_buttons_apply_vehicle_settings_and_steering_ratio(menu):
   obj, params, _, errors = menu
   assert len(obj._vehicle_selection.buttons) == 2
   for index, vehicle, values in ((0, PORTER, (0, 0, 0)), (1, IONIQ5, (2, 3, 1))):
     obj._vehicle_selection.callback(index)
     assert params.get('CarSelected3') == CAR_LABELS[vehicle]
     assert tuple(params.get_int(k) for k in ('HyundaiCameraSCC', 'EnableRadarTracks', 'CanfdHDA2')) == values
-    assert params.get_int('CustomSR') == 202
+    assert params.get_int('CustomSR') == (202 if vehicle == PORTER else 140)
     assert obj._vehicle_selection.action_item.selected_button == index
   assert not errors
 
