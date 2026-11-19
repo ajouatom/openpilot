@@ -639,14 +639,16 @@ def create_spas_steer(packer, CAN, mode, angle):
   return [packer.make_can_msg("SPAS1", CAN.ECAN, {"BYTE3": 0x4b, "NEW_SIGNAL_2": mode, "NEW_SIGNAL_1": angle})]
 
 
-def create_spas_messages(packer, CAN, frame, left_blink, right_blink, spas2_template=None, hazard=False, spas1=True):
+def create_spas_messages(packer, CAN, frame, left_blink, right_blink, spas2_template=None, hazard=False, spas1=True, raw=None):
   ret = []
 
   if spas1:  # CanfdBlinkerSpas2Only leaves SPAS1 to the parking ECU (or to nobody)
     ret.append(packer.make_can_msg("SPAS1", CAN.ECAN, {}))
 
   blink = 0
-  if hazard:
+  if raw is not None:
+    blink = raw  # CanfdHazardTest 10-17: BLINKER_CONTROL 0-7 as is (DBC names 1-4 only)
+  elif hazard:
     blink = 1  # DBC VAL_ 362 BLINKER_CONTROL 1 "hazards"
   elif left_blink:
     blink = 3
@@ -1068,7 +1070,8 @@ HAZARD_FAST_ON = 20
 
 
 def hazard_request(mode, frame):
-  """CanfdHazardTest 1: hazards held on. 2: the same request switched on/off for a fast flash. 0: off."""
+  """CanfdHazardTest 1: hazards held on. 2: the same request switched on/off for a fast flash. 0: off. 3/4/10-17 are SPAS2-only
+  tests (carcontroller.aprk_blinkers) and ask nothing on 0x1ea."""
   return mode == 1 or (mode == 2 and frame % HAZARD_FAST_PERIOD < HAZARD_FAST_ON)
 
 

@@ -117,16 +117,21 @@ def test_spas2_continues_the_stock_counter():
       assert d.stock(SPAS2, nxt) == bytes(frame(SPAS2, (nxt + 1) % 256, "left", 0).dat)  # wraps 255 -> 0, CRC redone
 
 
-def test_hazards_is_a_blinker_command_other_values_stay_refused():
-  # BLINKER_CONTROL 1 ("hazards"): the remote hazard on cars without a camera 0x1ea (11-17); 2 (button backlight) is not ours
+def test_any_blinker_control_value_is_a_lamp_command_other_bits_stay_refused():
+  # BLINKER_CONTROL 1 ("hazards"): the remote hazard on cars without a camera 0x1ea (11-17). 11-19: all 8 values, so
+  # CanfdHazardTest 10-17 can try 2 ("hazards button backlight") and 5-7 on the Tucson; the low 5 bits stay zero
   d = Device()
   d.stock(SPAS2, 1)
   assert d.tx(SPAS2, 10, "hazards") == (True, True)
   assert d.stock(SPAS2, 2) == bytes(frame(SPAS2, 3, "hazards", 0).dat)
-  data = bytearray(frame(SPAS2, 11, None, 0).dat)
-  data[16] = 2 << 5
-  data[:2] = checksum(SPAS2, data).to_bytes(2, 'little')
-  assert not d.s.safety_tx_hook(libsafety_py.make_CANPacket(SPAS2, 0, bytes(data)))
+  def raw(counter, byte16):
+    data = bytearray(frame(SPAS2, counter, None, 0).dat)
+    data[16] = byte16
+    data[:2] = checksum(SPAS2, data).to_bytes(2, 'little')
+    return libsafety_py.make_CANPacket(SPAS2, 0, bytes(data))
+  for value in range(8):
+    assert d.s.safety_tx_hook(raw(11 + value, value << 5))
+  assert not d.s.safety_tx_hook(raw(20, (2 << 5) | 1))
 
 
 def test_hda1_allows_the_parking_ecu_and_spas_ids():

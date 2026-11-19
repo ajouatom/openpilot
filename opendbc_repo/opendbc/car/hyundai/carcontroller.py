@@ -75,6 +75,16 @@ APRK_DEFAULT_SESSION = bytes([0x02, 0x10, 0x01, 0, 0, 0, 0, 0])
 APRK_IDLE, APRK_ASK, APRK_WAIT_QUIET, APRK_ACTIVE, APRK_FAILED = range(5)
 APRK_REPLY_FRAMES = int(0.4 / DT_CTRL)
 APRK_QUIET_NANOS = 100_000_000
+# CanfdHazardTest 3/4 (Tucson HDA1, user 11-19), SPAS2 path only (a car whose camera sends 0x1ea ignores them): is
+# BLINKER_CONTROL 1 a push-to-toggle switch or a held request? 11-18 logs (02_logs/measurements.md s66, 00000419 seg1)
+# point to held: the lamp went off 20-30 ms after our last frame in 4/4 windows, a 0.1 s pause in the fast flash turned it
+# off, and the stock hazard-switch bit (0x413 byte3 bit2) never rose. 3 sends one value-1 frame once (toggle: hazards stay
+# on; held: one short flash); 0 then 3 sends it again. 4 asks left (3) and right (4) in turn, 0.4 s each: the BCM runs its
+# own clean 0.4 s timer for 3/4 even with the stock 0 frames in between (s66 seg1 113 s).
+HAZARD_ALT_FRAMES = int(0.4 / DT_CTRL)
+# CanfdHazardTest 10-17 (user 11-19): BLINKER_CONTROL 0-7 held as is, same path. 2 is "hazards button backlight" in the
+# DBC, 5-7 have no name; none of them was tried on a car before (panda allows all 8 values since then).
+HAZARD_RAW_FIRST = 10
 # SpasSteerTest: stock RSPA handshake, mode 4 then 5 after 0.1 s (2019 log 226.7 -> 226.8 s), angle at 100 deg/s
 SPAS_STEER_ASK_FRAMES = 10
 SPAS_STEER_RATE = 1.0
@@ -311,6 +321,7 @@ class CarController(CarControllerBase):
     self.model_flashes = 0  # CanfdBlinkerKickModelMode 2/3/4 -> 3/5/7 flashes; 0 = hold through the change
     self.blinker_test = 0  # CanfdBlinkerMenuTest: 1 left, 2 right (menu test, any speed/gear)
     self.hazard_test = 0  # CanfdHazardTest (remote hazard, 2 = fast flash): SPAS2 hazards when no camera 0x1ea carries bit 104
+    self.hazard_shot_sent = False  # CanfdHazardTest 3: the single value-1 frame went out (resets when the value leaves 3)
     self.blinker_stalk = 0  # BlinkerStalkTest: 1 left, 2 right (0x3C1 replay)
     self.highbeam_frame = None       # frame the latest push started
     self.highbeam_kind = 1           # 1 high beam, 2 flash-to-pass
@@ -607,8 +618,13 @@ class CarController(CarControllerBase):
       self.blinker_pulse_end, self.model_pulse = min(self.blinker_pulse_end, self.frame), False
     # CanfdHazardTest on a car whose camera sends no 0x1ea (HDA1 Tucson): bit 104 has no carrier, so SPAS2 BLINKER_CONTROL 1
     # (DBC "hazards") asks for them instead, any gear, while the test is on. A car with 0x1ea keeps bit 104 (hyundaicanfd).
-    hazard = bool(self.hazard_test) and getattr(CS, "adrv_0x1ea", None) is None
-    want = self.blinker_test in (1, 2) or kick or remote or spas or hazard
+    haz_mode = self.hazard_test if getattr(CS, "adrv_0x1ea", None) is None else 0
+    if haz_mode != 3:
+      self.hazard_shot_sent = False
+    hazard = haz_mode in (1, 2) or (haz_mode == 3 and not self.hazard_shot_sent)
+    alternate = haz_mode == 4  # left/right in turn, HAZARD_ALT_FRAMES each
+    raw = haz_mode - HAZARD_RAW_FIRST if HAZARD_RAW_FIRST <= haz_mode <= HAZARD_RAW_FIRST + 7 else None
+    want = self.blinker_test in (1, 2) or kick or remote or spas or hazard or alternate or raw is not None
     spas2_only = 0 if spas else self.spas2_only  # SpasSteerTest: its request is SPAS1 itself
     now, stock, ack = getattr(CS, "can_nanos", 0), getattr(CS, "aprk_stock_nanos", 0), getattr(CS, "aprk_ack_nanos", 0)
 
@@ -669,11 +685,14 @@ class CarController(CarControllerBase):
       # every frame (100 Hz), twice APRK's 50 Hz: 10-26 APRK stayed on, so its BLINKER_CONTROL 0 frames interleave with ours
       if not self.aprk_acked and self.blinker_kick_mode == 2 and self.frame % 4:
         return ret  # direct 25 Hz: a quarter of the frames, a quarter of the collision chances
-      left = (pulse and self.blinker_side == 3) or self.blinker_test == 1
-      right = (pulse and self.blinker_side == 4) or self.blinker_test == 2
+      side = (self.frame // HAZARD_ALT_FRAMES) % 2
+      left = (pulse and self.blinker_side == 3) or self.blinker_test == 1 or (alternate and side == 0)
+      right = (pulse and self.blinker_side == 4) or self.blinker_test == 2 or (alternate and side == 1)
+      haz = hazard and (haz_mode == 3 or hyundaicanfd.hazard_request(haz_mode, self.frame))
       ret.extend(hyundaicanfd.create_spas_messages(self.packer, self.CAN, self.frame, left, right, getattr(CS, "spas2", None),
-                                                         hazard and hyundaicanfd.hazard_request(self.hazard_test, self.frame),
-                                                         spas1=not spas2_only))
+                                                         haz, spas1=not spas2_only, raw=raw))
+      if haz_mode == 3 and haz:
+        self.hazard_shot_sent = True  # next frame want is False: the session is given back
     return ret
 
   def update(self, CC, CS, now_nanos):

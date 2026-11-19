@@ -46,7 +46,7 @@ def make_cc(control=True, test=0, spas=0, ecu=None, mode=1, model=True, spas2_on
   cc = SimpleNamespace(blinker_control=control, blinker_test=test, blinker_kick_mode=mode, spas2_only=spas2_only, aprk_spas2_only=0, aprk_state=0, aprk_frame=0, aprk_nanos=0, aprk_acked=False,
                          lane_crossing=Crossing(), blinker_side=0, blinker_pulse_end=0, frame=0, yellow_until=[0, 0],
                          blinker_kick_model=model, lane_change_prev="off", model_pulse=False, blinker_pulse_start=0, model_hold={}, model_flashes=0, cgw_kick=False, cgw_trial=0, cgw_last_tx=-carcontroller.CGW_REARM_FRAMES,
-                         remote_blinker=0, remote_pulse=False, hazard_test=False,
+                         remote_blinker=0, remote_pulse=False, hazard_test=False, hazard_shot_sent=False,
                          CAN=SimpleNamespace(ECAN=0, ACAN=1), packer=CANPacker('hyundai_canfd_generated'), params=SimpleNamespace(STEER_THRESHOLD=250),
                          spas_steer_test=spas, spas_angle=0., aprk_buses=(), ecu=ecu or Ecu())
   cc.kick_pulse = lambda CS: CarController.kick_pulse(cc, CS)
@@ -695,13 +695,51 @@ def test_hazard_without_camera_0x1ea_uses_spas2_hazards():
 
 def test_hazard_with_camera_0x1ea_leaves_spas2_alone():
   # Ioniq 5 PE: bit 104 of the camera's 0x1ea carries it (hyundaicanfd), nothing on SPAS2
-  cc = make_cc(control=False, ecu=Ecu(answers=False))
-  cc.hazard_test = True
-  sent = run(cc, 50, lambda: SimpleNamespace(adrv_0x1ea={}, out=SimpleNamespace(
-    gearShifter=P, vEgo=0., leftBlinker=False, rightBlinker=False, steeringTorque=0, naviTunnel=False,
-    naviRoundabout=False, leftLaneLine=10, rightLaneLine=10)))
-  assert sent == [] and cc.aprk_state == carcontroller.APRK_IDLE
+  for mode in (1, 2, 3, 4, 12, 17):  # 3/4/10-17 are SPAS2-only tests: nothing here either
+    cc = make_cc(control=False, ecu=Ecu(answers=False))
+    cc.hazard_test = mode
+    sent = run(cc, 50, lambda: SimpleNamespace(adrv_0x1ea={}, out=SimpleNamespace(
+      gearShifter=P, vEgo=0., leftBlinker=False, rightBlinker=False, steeringTorque=0, naviTunnel=False,
+      naviRoundabout=False, leftLaneLine=10, rightLaneLine=10)))
+    assert sent == [] and cc.aprk_state == carcontroller.APRK_IDLE
 
+
+
+def test_hazard_one_shot_sends_a_single_value_1_frame():
+  # CanfdHazardTest 3 (Tucson, user 11-19): one value-1 frame, then the session is given back; 0 then 3 sends it again
+  cc = make_cc(control=False, ecu=Ecu(answers=False))
+  cc.hazard_test = 3
+  sent = step(cc, carcontroller.APRK_REPLY_FRAMES + 30, P, 0)
+  assert spas2(cc, sent).count(1) == 1 and set(spas2(cc, sent)) == {1}
+  assert uds(sent)[-2:] == [(DEFAULT, 0), (DEFAULT, 1)] and cc.aprk_state == carcontroller.APRK_IDLE
+  assert step(cc, 100, P, 0) == []  # held at 3: nothing more
+  cc.hazard_test = 0
+  step(cc, 1, P, 0)
+  cc.hazard_test = 3
+  assert spas2(cc, step(cc, carcontroller.APRK_REPLY_FRAMES + 30, P, 0)).count(1) == 1
+
+
+def test_hazard_alternate_asks_left_and_right_in_turn():
+  # CanfdHazardTest 4: BLINKER_CONTROL 3 and 4 in 0.4 s turns, never 1
+  cc = make_cc(control=False, ecu=Ecu(answers=False))
+  cc.hazard_test = 4
+  step(cc, carcontroller.APRK_REPLY_FRAMES + 1, P, 0)
+  values = spas2(cc, step(cc, 4 * carcontroller.HAZARD_ALT_FRAMES, P, 0))
+  runs = [len(list(g)) for _, g in __import__("itertools").groupby(values)]
+  assert set(values) == {3, 4} and all(r == carcontroller.HAZARD_ALT_FRAMES for r in runs[1:-1])
+  cc.hazard_test = 0
+  assert uds(step(cc, 1, P, 0)) == [(DEFAULT, 0), (DEFAULT, 1)]
+
+
+@pytest.mark.parametrize("value", range(8))
+def test_hazard_raw_values_hold_blinker_control_as_is(value):
+  # CanfdHazardTest 10-17: BLINKER_CONTROL 0-7 held (2 "hazards button backlight", 5-7 unnamed, 11-19 Tucson trial)
+  cc = make_cc(control=False, ecu=Ecu(answers=False))
+  cc.hazard_test = carcontroller.HAZARD_RAW_FIRST + value
+  sent = step(cc, carcontroller.APRK_REPLY_FRAMES + 30, P, 0)
+  assert len(spas2(cc, sent)) == 29 and set(spas2(cc, sent)) == {value}
+  cc.hazard_test = 9  # not a test value: given back, nothing sent
+  assert uds(step(cc, 1, P, 0)) == [(DEFAULT, 0), (DEFAULT, 1)] and step(cc, 10, P, 0) == []
 
 
 def test_fast_hazard_switches_spas2_between_hazards_and_off():
