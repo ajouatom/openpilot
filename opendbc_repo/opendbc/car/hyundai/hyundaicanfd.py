@@ -1121,10 +1121,15 @@ NON_DBC_CLUSTER_VALUE_CARS = (CAR.HYUNDAI_IONIQ_5_PE, CAR.HYUNDAI_AZERA_7TH_GEN,
 DASHED_LANE_CARS = NON_DBC_CLUSTER_VALUE_CARS
 
 
-def _ioniq9_cluster_test(car):
-  # Ioniq9ClusterTest (Joongyu Lab, IONIQ 9 only, cleared at manager start): 1 HDP icon, 2 dashed lane codes, 3 both, so
-  # the owner can look at values this cluster is not confirmed to draw. Read only on an IONIQ 9.
-  return Params().get_int("Ioniq9ClusterTest") if car == CAR.HYUNDAI_IONIQ_9 else 0
+def _ioniq9_cluster_test():
+  # Ioniq9ClusterTest (Joongyu Lab > [CCNC] cluster tests, cleared at manager start): 1 HDP icon, 2 dashed lane codes, 3 both:
+  # values a cluster is not confirmed to draw. First tried on an IONIQ 9 (10-28~30); open to every CCNC car since 11-19 (the
+  # test menu hides nothing). Every CCNC car now calls this per cluster frame, so the key is read at most once a second.
+  now = time.monotonic()
+  if now - _ioniq9_cluster_test.read_at >= 1.0:
+    _ioniq9_cluster_test.value, _ioniq9_cluster_test.read_at = Params().get_int("Ioniq9ClusterTest"), now
+  return _ioniq9_cluster_test.value
+_ioniq9_cluster_test.value, _ioniq9_cluster_test.read_at = 0, float("-inf")
 
 
 def _dbc_listed(field, value):
@@ -1136,7 +1141,7 @@ def _dbc_listed(field, value):
 
 def _dashed_lane_line(color, lane_line, car=None):
   # 0x161 dashed codes seen on the Ioniq 5 PE cluster: 8 white, 10 green (no orange dashed)
-  if (car in DASHED_LANE_CARS or _ioniq9_cluster_test(car) & 2) and lane_line // 10 > 0 and lane_line % 10 in (0, 5):  # camera: dashed / DLM inner dashed (color 0 = no lane info)
+  if (car in DASHED_LANE_CARS or _ioniq9_cluster_test() & 2) and lane_line // 10 > 0 and lane_line % 10 in (0, 5):  # camera: dashed / DLM inner dashed (color 0 = no lane info)
     return {2: 8, 6: 10}.get(color, color)
   return color
 
@@ -1768,7 +1773,7 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
         msg = _cluster_test_msg(packer, "CCNC_0x162", CAN.ECAN, values, rx_counter, test_field, test_value)
         # HDP icon while cruise or steering is engaged; bit 188 has no DBC name: checked clusters only
         car = getattr(CP, "carFingerprint", None)
-        if ((car in NON_DBC_CLUSTER_VALUE_CARS or _ioniq9_cluster_test(car) & 1) and (CC.enabled or lat_active) and
+        if ((car in NON_DBC_CLUSTER_VALUE_CARS or _ioniq9_cluster_test() & 1) and (CC.enabled or lat_active) and
             HDP_ICON_BIT not in CLUSTER_TEST_BITS.get(test_field, ())):
           msg = _set_raw_bits(msg, (HDP_ICON_BIT,), 1)
         ret.append(msg)

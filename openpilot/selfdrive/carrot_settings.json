@@ -15,9 +15,9 @@
           "groups": [
             {
               "id": "LAB_BLINKER_TEST_SPAS",
-              "ko": "SPAS (CAN-FD·CCNC, 주차ECU 경로)",
-              "en": "SPAS (CAN-FD·CCNC, parking ECU path)",
-              "zh": "SPAS (CAN-FD·CCNC, 泊车ECU路径)",
+              "ko": "[CAN-FD] SPAS·주차ECU 경로",
+              "en": "[CAN-FD] SPAS · parking ECU path",
+              "zh": "[CAN-FD] SPAS·泊车ECU路径",
               "params": [
                 "CanfdBlinkerMenuTest",
                 "CanfdBlinkerSpas2Only",
@@ -27,27 +27,27 @@
             },
             {
               "id": "LAB_BLINKER_TEST_CGW1",
-              "ko": "CGW1 (일반 CAN·팰리세이드 등)",
-              "en": "CGW1 (classic CAN, Palisade etc.)",
-              "zh": "CGW1 (普通 CAN·帕里斯帝等)",
+              "ko": "[CAN] CGW1 (팰리세이드 등)",
+              "en": "[CAN] CGW1 (Palisade etc.)",
+              "zh": "[CAN] CGW1 (帕里斯帝等)",
               "params": [
                 "PalisadeBlinkerTest"
               ]
             },
             {
               "id": "LAB_BLINKER_TEST_STALK",
-              "ko": "레버·상향등 (0x3C1·CGW1)",
-              "en": "Lever·High Beam (0x3C1·CGW1)",
-              "zh": "拨杆·远光 (0x3C1·CGW1)",
+              "ko": "[CAN-FD·CAN] 레버·상향등 (0x3C1·CGW1)",
+              "en": "[CAN-FD·CAN] Lever·High Beam (0x3C1·CGW1)",
+              "zh": "[CAN-FD·CAN] 拨杆·远光 (0x3C1·CGW1)",
               "params": [
                 "BlinkerStalkTest"
               ]
             },
             {
               "id": "LAB_BLINKER_TEST_HAZARD",
-              "ko": "비상등·상향등",
-              "en": "Hazard & High Beam",
-              "zh": "危险警示灯·远光灯",
+              "ko": "[CAN-FD] 비상등",
+              "en": "[CAN-FD] Hazard",
+              "zh": "[CAN-FD] 危险警示灯",
               "params": [
                 "CanfdHazardTest"
               ]
@@ -62,9 +62,9 @@
           "groups": [
             {
               "id": "LAB_BLINKER_KICK",
-              "ko": "Kick — 핸들로 차선을 넘으면 깜빡이",
-              "en": "Kick — blink when steering across a lane line",
-              "zh": "Kick — 转向越过车道线时闪烁",
+              "ko": "[CAN-FD·CAN] Kick — 핸들로 차선을 넘으면 깜빡이",
+              "en": "[CAN-FD·CAN] Kick — blink when steering across a lane line",
+              "zh": "[CAN-FD·CAN] Kick — 转向越过车道线时闪烁",
               "params": [
                 "CanfdBlinkerKick",
                 "CanfdBlinkerKickMode",
@@ -73,18 +73,18 @@
             },
             {
               "id": "LAB_BLINKER_SPAS",
-              "ko": "SPAS 주차ECU 경유",
-              "en": "SPAS via parking ECU",
-              "zh": "SPAS 经泊车ECU",
+              "ko": "[CAN-FD] SPAS 주차ECU 경유",
+              "en": "[CAN-FD] SPAS via parking ECU",
+              "zh": "[CAN-FD] SPAS 经泊车ECU",
               "params": [
                 "CanfdBlinkerControl"
               ]
             },
             {
               "id": "LAB_BLINKER_EXT",
-              "ko": "외부장치 Jetson·B1",
-              "en": "External device Jetson·B1",
-              "zh": "外部设备 Jetson·B1",
+              "ko": "[CAN-FD] 외부장치 Jetson·B1",
+              "en": "[CAN-FD] External device Jetson·B1",
+              "zh": "[CAN-FD] 外部设备 Jetson·B1",
               "params": [
                 "AutoBlinkerControl",
                 "ManualLaneChangeIndicator",
@@ -96,9 +96,9 @@
             },
             {
               "id": "LAB_BLINKER_LEVER",
-              "ko": "레버 판단 (0x3C1 읽기)",
-              "en": "Lever reading (0x3C1)",
-              "zh": "拨杆判断 (读取 0x3C1)",
+              "ko": "[CAN-FD] 레버 판단 (0x3C1 읽기)",
+              "en": "[CAN-FD] Lever reading (0x3C1)",
+              "zh": "[CAN-FD] 拨杆判断 (读取 0x3C1)",
               "params": [
                 "BlinkerLatchedTurn",
                 "LaneChangeLeverWait"
@@ -106,9 +106,9 @@
             },
             {
               "id": "LAB_BLINKER_HOLD",
-              "ko": "차선변경 보류 (CCNC)",
-              "en": "Lane change hold (CCNC)",
-              "zh": "变道保留 (CCNC)",
+              "ko": "[CCNC] 차선변경 보류",
+              "en": "[CCNC] Lane change hold",
+              "zh": "[CCNC] 变道保留",
               "params": [
                 "TunnelLaneChangeHold",
                 "RoundaboutLaneChangeHold"
@@ -129,9 +129,9 @@
         },
         {
           "id": "LAB_BVM",
-          "ko": "사각지대 카메라",
-          "en": "Blind-Spot Camera",
-          "zh": "盲区摄像头",
+          "ko": "[CAN-FD] 사각지대 카메라",
+          "en": "[CAN-FD] Blind-Spot Camera",
+          "zh": "[CAN-FD] 盲区摄像头",
           "params": [
             "CanfdBvmReverse",
             "CanfdBvmView",
@@ -143,14 +143,30 @@
           "ko": "시험·진단",
           "en": "Tests & Diagnostics",
           "zh": "测试·诊断",
-          "params": [
-            "SpasSteerTest",
-            "SteerAngleTest",
-            "Ioniq9ClusterTest",
-            "ClusterLaneTest",
-            "ClusterLaneTestValue",
-            "ClusterLaneTestFrom",
-            "ClusterLaneTestTo"
+          "groups": [
+            {
+              "id": "LAB_TEST_STEER",
+              "ko": "[CAN-FD] 조향 시험",
+              "en": "[CAN-FD] Steering tests",
+              "zh": "[CAN-FD] 转向测试",
+              "params": [
+                "SpasSteerTest",
+                "SteerAngleTest"
+              ]
+            },
+            {
+              "id": "LAB_TEST_CLUSTER",
+              "ko": "[CCNC] 계기판 시험",
+              "en": "[CCNC] Cluster tests",
+              "zh": "[CCNC] 仪表测试",
+              "params": [
+                "ClusterLaneTest",
+                "ClusterLaneTestValue",
+                "ClusterLaneTestFrom",
+                "ClusterLaneTestTo",
+                "Ioniq9ClusterTest"
+              ]
+            }
           ]
         },
         {
@@ -2411,15 +2427,14 @@
     {
       "group": "Joongyu Lab",
       "name": "Ioniq9ClusterTest",
-      "visible_cars": ["HYUNDAI_IONIQ_9"],
-      "title": "[아이오닉9 전용 시험] HDP·점선",
-      "descr": "테스트용, 아이오닉9에서만 동작합니다(다른 차는 무시). 아이오닉9 계기판이 그리는지 아직 확인 안 된 값을 보내 봅니다.\n0: 끔(기본).\n1: HDP 아이콘(0x162 bit 188)을 인게이지(크루즈 또는 조향) 중에 켭니다.\n2: 카메라가 점선으로 본 차선을 점선 코드(흰 8, 초록 10)로 보냅니다. 10-28~30 차주 보고로는 이 코드에서 선이 안 보였습니다.\n3: 1+2.\n재부팅하면 0으로 돌아갑니다.",
+      "title": "계기판 표시 테스트: HDP·점선(CCNC)",
+      "descr": "테스트용입니다(CCNC). 계기판이 그리는지 아직 확인 안 된 값을 보내 봅니다. 아이오닉9에서 처음 시험했습니다.\n0: 끔(기본).\n1: HDP 아이콘(0x162 bit 188)을 인게이지(크루즈 또는 조향) 중에 켭니다.\n2: 카메라가 점선으로 본 차선을 점선 코드(흰 8, 초록 10)로 보냅니다. 10-28~30 차주 보고로는 이 코드에서 선이 안 보였습니다.\n3: 1+2.\n재부팅하면 0으로 돌아갑니다.",
       "egroup": "Joongyu Lab",
-      "etitle": "[IONIQ 9 only test] HDP & dashed lanes",
-      "edescr": "Test only, IONIQ 9 only (other cars ignore it). Sends values the IONIQ 9 cluster is not confirmed to draw.\n0: off (default).\n1: HDP icon (0x162 bit 188) while cruise or steering is engaged.\n2: lane lines the camera sees as dashed go out as the dashed codes (white 8, green 10). Owner reports 10-28~30 saw no line for these codes.\n3: 1+2.\nBack to 0 after a reboot.",
+      "etitle": "Cluster Display Test: HDP & dashed lanes (CCNC)",
+      "edescr": "Test only (CCNC). Sends values the cluster is not confirmed to draw. First tried on an IONIQ 9.\n0: off (default).\n1: HDP icon (0x162 bit 188) while cruise or steering is engaged.\n2: lane lines the camera sees as dashed go out as the dashed codes (white 8, green 10). Owner reports 10-28~30 saw no line for these codes.\n3: 1+2.\nBack to 0 after a reboot.",
       "cgroup": "Joongyu Lab",
-      "ctitle": "[IONIQ 9 专用测试] HDP·虚线",
-      "cdescr": "仅用于测试，仅 IONIQ 9 有效（其他车型忽略）。发送尚未确认 IONIQ 9 仪表能显示的值。\n0: 关闭（默认）。\n1: 在巡航或转向接管时显示 HDP 图标（0x162 bit 188）。\n2: 摄像头识别为虚线的车道线按虚线代码发送（白 8、绿 10）。10-28~30 车主反馈此代码不显示线。\n3: 1+2。\n重启后恢复为 0。",
+      "ctitle": "仪表显示测试: HDP·虚线 (CCNC)",
+      "cdescr": "仅用于测试（CCNC）。发送尚未确认仪表能显示的值。最初在 IONIQ 9 上测试。\n0: 关闭（默认）。\n1: 在巡航或转向接管时显示 HDP 图标（0x162 bit 188）。\n2: 摄像头识别为虚线的车道线按虚线代码发送（白 8、绿 10）。10-28~30 车主反馈此代码不显示线。\n3: 1+2。\n重启后恢复为 0。",
       "min": 0,
       "max": 3,
       "default": 0,
@@ -2461,10 +2476,10 @@
       "group": "Joongyu Lab",
       "name": "RoundaboutLaneChangeHold",
       "title": "CANFD(CCNC) 회전교차로 Turnlight·차선변경 보류",
-      "descr": "순정 계기판에 회전교차로 표지가 뜬 뒤 20초 동안(60km/h 미만일 때만) CANFD(HDA2)·CAN(CGW1) Turnlight 자동(Kick)을 켜지 않고, 차선변경은 운전자가 그쪽으로 핸들 토크를 줄 때만 시작합니다(터널과 같은 규칙). 그동안 계기판 배경이 빨간색으로 깜빡입니다. 표지는 5초짜리 신호라 20초로 늘려 잡습니다. 0: 끔, 1: 켬(기본).",
+      "descr": "순정 계기판에 회전교차로 표지가 뜬 뒤 20초 동안(60km/h 미만일 때만) CANFD(HDA1·HDA2)·CAN(CGW1) Turnlight 자동(Kick)을 켜지 않고, 차선변경은 운전자가 그쪽으로 핸들 토크를 줄 때만 시작합니다(터널과 같은 규칙). 그동안 계기판 배경이 빨간색으로 깜빡입니다. 표지는 5초짜리 신호라 20초로 늘려 잡습니다. 0: 끔, 1: 켬(기본).",
       "egroup": "Joongyu Lab",
       "etitle": "CANFD(CCNC) Roundabout Turnlight & lane change hold",
-      "edescr": "For 20 s after the stock cluster shows a roundabout sign (below 60 km/h only), the CANFD(HDA2)·CAN(CGW1) Turnlight auto (Kick) stays off and a lane change starts only with the driver's steering torque toward that side (same rule as in a tunnel). The cluster background flashes red meanwhile. The sign itself is a 5 s pulse, hence the 20 s hold. 0: off, 1: on (default).",
+      "edescr": "For 20 s after the stock cluster shows a roundabout sign (below 60 km/h only), the CANFD(HDA1·HDA2)·CAN(CGW1) Turnlight auto (Kick) stays off and a lane change starts only with the driver's steering torque toward that side (same rule as in a tunnel). The cluster background flashes red meanwhile. The sign itself is a 5 s pulse, hence the 20 s hold. 0: off, 1: on (default).",
       "cgroup": "Joongyu Lab",
       "ctitle": "CANFD(CCNC) 环岛 Turnlight·变道保留",
       "cdescr": "原厂仪表显示环岛标志后 20 秒内(仅低于 60km/h)不自动打变道转向灯(Kick), 变道仅在驾驶员向该侧施加方向盘扭矩时开始(与隧道相同)。期间仪表背景红色闪烁。标志本身只持续 5 秒, 因此延长为 20 秒。0: 关闭, 1: 开启(默认)。",
@@ -3482,13 +3497,13 @@
     {
       "group": "Joongyu Lab",
       "name": "CanfdBlinkerKick",
-      "title": "CANFD(HDA2)·CAN(CGW1) Turnlight 자동",
+      "title": "CANFD(HDA1·HDA2)·CAN(CGW1) Turnlight 자동",
       "descr": "깜빡이 없이 핸들로 차선을 넘기 시작하면 그쪽 깜빡이를 약 1초 켭니다(D단).\nCAN-FD(HDA2)·CGW1 일반 CAN 차용입니다(아이오닉5 PE·팰리세이드 확인).\n켜면 「주차ECU 경유 Turnlight」는 꺼집니다.\n주의: 다른 차종은 실차 미확인이며 CAN 오류가 날 수 있습니다.",
       "egroup": "Joongyu Lab",
-      "etitle": "CANFD(HDA2)·CAN(CGW1) Turnlight auto",
+      "etitle": "CANFD(HDA1·HDA2)·CAN(CGW1) Turnlight auto",
       "edescr": "When you steer across a lane line without the blinker, flashes that side's blinker for about 1 s (in D).\nFor CAN-FD (HDA2) and classic CAN cars with CGW1 (seen on IONIQ 5 PE and Palisade).\nTurning it on switches off \"Turnlight via parking ECU\".\nCaution: unverified on other cars; CAN errors are possible.",
       "cgroup": "Joongyu Lab",
-      "ctitle": "CANFD(HDA2)·CAN(CGW1) Turnlight 自动",
+      "ctitle": "CANFD(HDA1·HDA2)·CAN(CGW1) Turnlight 自动",
       "cdescr": "未打转向灯而用方向盘开始越过车道线时，打开该侧转向灯约1秒(D挡)。\n适用于 CAN-FD(HDA2) 及带 CGW1 的普通 CAN 车型(IONIQ 5 PE、Palisade 已确认)。\n开启后「经泊车ECU Turnlight」会关闭。\n注意: 其他车型尚未实车验证，可能出现 CAN 错误。",
       "min": 0,
       "max": 1,
@@ -3500,13 +3515,13 @@
     {
       "group": "Joongyu Lab",
       "name": "CanfdBlinkerKickMode",
-      "title": "CANFD(HDA2)·CAN(CGW1) 송신 방식",
+      "title": "CANFD(HDA1·HDA2)·CAN(CGW1) 송신 방식",
       "descr": "「Turnlight 자동」의 송신 방식입니다.\n0: 주차 ECU 응답 때만(아이오닉5 PE는 안 켜짐)\n1: 순정 신호 뒤에 붙여 보냄(기본)\n2: 25 Hz 직접 송신\n3: 100 Hz 직접 송신(비교용)\n주의: 2·3은 CAN 오류가 날 수 있습니다.",
       "egroup": "Joongyu Lab",
-      "etitle": "CANFD(HDA2)·CAN(CGW1) send mode",
+      "etitle": "CANFD(HDA1·HDA2)·CAN(CGW1) send mode",
       "edescr": "How \"Turnlight auto\" sends.\n0: Only when the parking ECU answers (does not light on IONIQ 5 PE)\n1: Sent right behind the stock frame (default)\n2: Direct 25 Hz\n3: Direct 100 Hz (for comparison)\nCaution: 2 and 3 can cause CAN errors.",
       "cgroup": "Joongyu Lab",
-      "ctitle": "CANFD(HDA2)·CAN(CGW1) 发送方式",
+      "ctitle": "CANFD(HDA1·HDA2)·CAN(CGW1) 发送方式",
       "cdescr": "「Turnlight 自动」的发送方式。\n0: 仅在泊车 ECU 响应时(IONIQ 5 PE 不亮)\n1: 紧跟原厂帧发送(默认)\n2: 25 Hz 直接发送\n3: 100 Hz 直接发送(对比用)\n注意: 2·3 可能出现 CAN 错误。",
       "min": 0,
       "max": 3,
@@ -3516,13 +3531,13 @@
     {
       "group": "Joongyu Lab",
       "name": "CanfdBlinkerKickModelMode",
-      "title": "CANFD(HDA2)·CAN(CGW1) 모델 차로변경 Turnlight",
+      "title": "CANFD(HDA1·HDA2)·CAN(CGW1) 모델 차로변경 Turnlight",
       "descr": "리모컨·앱·음성·내비 차로변경 때도 깜빡이를 켭니다(「Turnlight 자동」 필요).\n0: 새 차로에 들어설 때까지(기본)\n1: 끔\n2/3/4: 3/5/7번\n주의: 시작 후 최소 12초간 같은 쪽 레버가 무시될 수 있습니다.",
       "egroup": "Joongyu Lab",
-      "etitle": "CANFD(HDA2)·CAN(CGW1) Turnlight for model lane changes",
+      "etitle": "CANFD(HDA1·HDA2)·CAN(CGW1) Turnlight for model lane changes",
       "edescr": "Also lights the blinker for remote, app, voice and navigation lane changes (needs \"Turnlight auto\").\n0: Until the car is in the new lane (default)\n1: Off\n2/3/4: 3/5/7 flashes\nCaution: the same-side lever may be ignored for at least 12 s after it starts.",
       "cgroup": "Joongyu Lab",
-      "ctitle": "CANFD(HDA2)·CAN(CGW1) 模型变道 Turnlight",
+      "ctitle": "CANFD(HDA1·HDA2)·CAN(CGW1) 模型变道 Turnlight",
       "cdescr": "遥控·App·语音·导航变道时也打开转向灯(需要「Turnlight 自动」)。\n0: 直到进入新车道(默认)\n1: 关闭\n2/3/4: 闪 3/5/7 次\n注意: 开始后至少 12 秒内同侧拨杆可能被忽略。",
       "min": 0,
       "max": 4,

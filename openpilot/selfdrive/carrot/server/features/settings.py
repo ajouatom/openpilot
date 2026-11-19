@@ -15,7 +15,7 @@ from ..services.popular_values import read_popular_values_memory, schedule_popul
 from ..services.setting_favorites import read_setting_favorites
 from ..services.setting_profiles import read_setting_profiles
 from ..services.setting_unit_index import read_setting_unit_index, update_setting_unit_index
-from ..services.settings import (current_car_fingerprint, current_hda1_ccnc, current_vehicle_settings_context, filter_settings_catalog_for_brand,
+from ..services.settings import (current_hda1_ccnc, current_vehicle_settings_context, filter_settings_catalog_for_brand,
                                  get_settings_cached, settings_cache)
 from ..services.ssh_keys import get_ssh_key_status
 
@@ -28,7 +28,7 @@ def _settings_catalog_payload(cache_parts: tuple | None = None, vehicle_brand: s
     vehicle_brand, ray_pedal_control = current_vehicle_settings_context()
   groups, groups_list, categories, _hidden_names = filter_settings_catalog_for_brand(
     groups, groups_list, settings_cache.get("categories"), vehicle_brand, ray_pedal_control=ray_pedal_control,
-    car_fingerprint=current_car_fingerprint(), hda1_ccnc=current_hda1_ccnc(),
+    hda1_ccnc=current_hda1_ccnc(),
   )
   return {
     "path": path,
