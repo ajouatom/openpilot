@@ -206,6 +206,8 @@ compile() {
   status "Compiling with $jobs jobs"
   # The compiler, not the display or recovery server, is what the kernel should
   # stop when memory runs out; a smaller job count then continues its results.
+  # Progress and diagnostics stay on stderr; the JSON list of every unit this
+  # build used goes to a file, so device_cleanup.sh can drop all other outputs.
   while IFS= read -r line; do
     echo "$line" >> "$log"
     case $line in
@@ -214,8 +216,6 @@ compile() {
         [[ -n $ui ]] && echo "Compiling ${line##*Compiling } · $done" >> "$status_file"
         ;;
     esac
-  # Progress and diagnostics stay on stderr; the JSON list of every unit this
-  # build used goes to a file, so device_cleanup.sh can drop all other outputs.
   done < <(
     echo 1000 > /proc/self/oom_score_adj
     exec taskset -c 0-7 cargo --config 'source.crates-io.replace-with="device-vendor"' \
@@ -225,9 +225,13 @@ compile() {
       --target aarch64-unknown-linux-gnu -j "$jobs" "${arguments[@]}" 2>&1 > "$store/artifacts.jsonl"
     )
   wait $!
+  local result=$?
+  compiled=$((compiled + done))
+  return $result
 }
 
 built=
+compiled=0
 for jobs in 6 4 3 2; do
   if compile "$jobs"; then
     built=1
@@ -250,6 +254,8 @@ install -m 755 rust/tools/device_stage_update.sh rust/bin/openpilot-runtime-inst
 rm -rf rust/.runtime-packages rust/.runtime-active rust/.runtime-bootstrap \
   rust/.runtime-install-rollback rust/.runtime-install-journal.json rust/runtime-manifest.json
 echo "$head" > "$stamp"
-status "Build complete in $((SECONDS - started))s"
+# One line the startup report carries (carrot_man appends this log's status
+# lines): an update that kept its build cache compiles only what changed.
+status "Build complete in $((SECONDS - started))s: $compiled crates compiled for ${head:0:9}"
 # Only this version stays: older build outputs, checkouts and history go.
 bash rust/tools/device_cleanup.sh now "$root" "$store" || status 'Update cleanup failed'

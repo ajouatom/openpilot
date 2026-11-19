@@ -95,6 +95,8 @@ trim_git() {
 
 case $mode in
   now)
+    # One update's record: the startup report shows it until the next update.
+    : > "$log"
     started=$(free_mb)
     if [[ -f $store/artifacts.jsonl ]]; then
       python3 -I "$root/rust/tools/device_sweep_target.py" "$store/target" "$store/artifacts.jsonl" >> "$log" 2>&1
