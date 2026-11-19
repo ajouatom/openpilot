@@ -118,7 +118,8 @@ pub fn badge(context: &Context, draw: &mut dyn Draw, rect: Rect) -> Result<(), E
         || status.usbgpu_present
         || status.usbgpu_active
         || status.usbgpu_loading
-        || status.usbgpu_startup_failed)
+        || status.usbgpu_startup_failed
+        || status.internal_model_badge.is_some())
     {
         return Ok(());
     }
@@ -142,6 +143,18 @@ pub fn badge(context: &Context, draw: &mut dyn Draw, rect: Rect) -> Result<(), E
     } else {
         "eGPU"
     };
+    // The internal model's badge has the lowest priority: any eGPU state,
+    // delivery or Jetlink badge replaces it.
+    if !(status.usbgpu_present
+        || status.usbgpu_active
+        || status.usbgpu_loading
+        || status.usbgpu_startup_failed)
+    {
+        if let Some(badge) = &status.internal_model_badge {
+            text = &badge.text;
+            style = &badge.style;
+        }
+    }
     if !(status.usbgpu_active || status.usbgpu_loading || status.usbgpu_startup_failed) {
         if let Some(badge) = &status.delivery_badge {
             text = &badge.text;

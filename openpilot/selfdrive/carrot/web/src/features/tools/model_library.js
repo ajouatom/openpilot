@@ -3,6 +3,8 @@ const EN = {
   title: "External driving model", internal: "Internal model",
   internal_help: "The comma's own driving model, used when no eGPU or Jetlink host runs the model. Applies from the next ignition.",
   internal_saved: "Saved. The internal model changes at the next ignition.",
+  internal_running: "Last drive ran", internal_pending: "applies at the next ignition",
+  internal_failed: "could not be loaded; the drive ran on CD210", internal_failed_short: "Cheddar failed",
   help: "One choice for eGPU and Jetlink hosts. eGPU applies it after the next reboot. A Jetlink App (phone, tablet, Mac) or Jetson switches to it while parked, at its next connection; if the host lacks the model, the comma downloads it and sends it over the cable. A model chosen later in the App wins over this one.",
   change: "Change model", close: "Close", pending_apply: "Apply after restart",
   current: "eGPU this boot", next: "Model", saved: "Saved. eGPU: reboot to apply. Jetlink host: switches while parked.",
@@ -44,6 +46,19 @@ function hostLine(library, host) {
   const preparing = progressText(host.preparation);
   return `${t(preparing ? "host_preparing" : "host_running")}: ${running}${preparing ? ` · ${preparing}` : ""}`;
 }
+function internalModelName(internal, id) {
+  return internal?.models?.find(m => m.id === id)?.name || id || "CD210";
+}
+// What drivingd loaded on the last start (`internal_model.last`), so a
+// choice that failed to load is visible without reading logs.
+function internalLastLine(internal) {
+  const last = internal?.last;
+  if (!last?.running) return "";
+  const running = `${t("internal_running")}: ${internalModelName(internal, last.running)}`;
+  if (last.error) return `${running} · Cheddar ${t("internal_failed")} (${last.error})`;
+  if (last.selected !== internal.selected) return `${running} · ${internalModelName(internal, internal.selected)} ${t("internal_pending")}`;
+  return running;
+}
 export function renderLibrary(library, force = false, host = null) {
   if (!library?.models) return;
   const root = document.getElementById("externalModelLibrary");
@@ -74,8 +89,10 @@ export function renderLibrary(library, force = false, host = null) {
   root.querySelector("strong").textContent = selected?.name || library.selected;
   const card = document.getElementById("egpuModelCard");
   const internal = library.internal_model;
-  const internalName = internal?.models?.find(m => m.id === internal.selected)?.name || "CD210";
-  const state = card && !card.hidden ? document.getElementById("egpuModelState").textContent : `${t("internal")}: ${internalName}`;
+  const internalName = internalModelName(internal, internal?.selected);
+  const failed = internal?.last?.error && internal.last.selected === internal.selected;
+  const state = card && !card.hidden ? document.getElementById("egpuModelState").textContent
+    : `${t("internal")}: ${failed ? `CD210 · ${t("internal_failed_short")}` : internalName}`;
   const amount = card && !card.hidden ? document.getElementById("egpuModelAmount").textContent : "";
   root.querySelector("p").textContent = library.reboot_required
     ? `${t("pending_apply")} · ${t("current")} ${effectiveName} · ${state}`
@@ -109,7 +126,10 @@ export function renderLibrary(library, force = false, host = null) {
       if (!saved) renderLibrary(library, true, host);
       internalSelect.disabled = false;
     });
-    editor.append(internalLabel, text("p", t("internal_help")));
+    editor.append(internalLabel);
+    const lastLine = internalLastLine(internal);
+    if (lastLine) editor.append(text("p", lastLine));
+    editor.append(text("p", t("internal_help")));
   } else {
     editor.append(text("p", `${t("internal")}: ${internalName}`));
   }

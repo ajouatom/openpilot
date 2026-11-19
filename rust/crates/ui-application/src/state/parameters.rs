@@ -80,7 +80,25 @@ pub struct SlowParams {
     pub recovery_badge: Option<Badge>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub jetlink_badge: Option<Badge>,
+    /// Cheddar running (white) or chosen but not loaded (red); none for CD210.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub internal_model_badge: Option<Badge>,
 }
+
+/// The badge for drivingd's InternalDrivingModelStatus.
+fn internal_model_badge(bytes: Option<&[u8]>) -> Option<Badge> {
+    let status: serde_json::Value = serde_json::from_slice(bytes?).ok()?;
+    let badge = |text: &str, style: &str| Badge {
+        text: text.into(),
+        style: style.into(),
+    };
+    match (status["selected"].as_str(), status["running"].as_str()) {
+        (_, Some("cheddar")) => Some(badge("CHEDDAR", "ready")),
+        (Some("cheddar"), _) => Some(badge("CHEDDAR ERROR", "error")),
+        _ => None,
+    }
+}
+
 impl SlowParams {
     pub fn refresh(&mut self, params: &impl Read, models: ModelStatus) -> Result<(), Error> {
         if let Some(bytes) = params.bytes("CarParamsPersistent")? {
@@ -108,6 +126,34 @@ impl SlowParams {
         self.usbgpu_loading = params.boolean("UsbGpuLoading")?;
         self.usbgpu_active = params.boolean("UsbGpuActive")?;
         self.usbgpu_startup_failed = params.boolean("UsbGpuStartupFailed")?;
+        self.internal_model_badge =
+            internal_model_badge(params.bytes("InternalDrivingModelStatus")?.as_deref());
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod internal_model_badge_tests {
+    use super::internal_model_badge;
+
+    fn badge(json: &str) -> Option<(String, String)> {
+        internal_model_badge(Some(json.as_bytes())).map(|badge| (badge.text, badge.style))
+    }
+
+    #[test]
+    fn shows_cheddar_and_a_failed_choice_but_not_cd210() {
+        assert_eq!(
+            badge(r#"{"selected":"cheddar","running":"cheddar","error":null}"#),
+            Some(("CHEDDAR".into(), "ready".into()))
+        );
+        assert_eq!(
+            badge(r#"{"selected":"cheddar","running":"cd210","error":"load: x"}"#),
+            Some(("CHEDDAR ERROR".into(), "error".into()))
+        );
+        assert_eq!(
+            badge(r#"{"selected":"cd210","running":"cd210","error":null}"#),
+            None
+        );
+        assert_eq!(internal_model_badge(None).map(|badge| badge.text), None);
     }
 }

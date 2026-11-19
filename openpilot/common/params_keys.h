@@ -190,6 +190,7 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"ShowPlotMode", {PERSISTENT, INT, "0"}},
     {"ShowNavMap", {PERSISTENT, INT, "0"}},
     {"InternalDrivingModel", {PERSISTENT, INT, "0"}},
+    {"InternalDrivingModelStatus", {CLEAR_ON_MANAGER_START, JSON}},
     {"TimezoneName", {PERSISTENT, STRING, ""}},                // 로컬 타임존 IANA 이름 (예: "Asia/Seoul"), 앱/WiFi/GPS로 해석되면 기록
     {"TimezoneSource", {PERSISTENT, STRING, ""}},              // 타임존 출처 우선순위 추적 ("app" > "wifi" > "gps")
     {"CarrotTireTrajectory", {PERSISTENT, INT, "0"}},

@@ -145,3 +145,24 @@ test('internal model choice lists CD210 and Cheddar and saves with the internal 
   assert.match(root.querySelector('p').textContent, /Internal model: Cheddar/);
   assert.equal(editor.dataset.busy, undefined);
 });
+
+test('internal model shows what the last drive ran, including a Cheddar load failure', t => {
+  const old = globalThis.document;
+  t.after(() => { globalThis.document = old; });
+  const models = [{ id: 'cd210', name: 'CD210' }, { id: 'cheddar', name: 'Cheddar' }];
+  const texts = editor => editor.children.filter(e => e.tag === 'p').map(e => e.textContent);
+  let { root, editor } = setupDocument();
+  renderLibrary({ ...data, reboot_required: false, internal_model: { selected: 'cheddar', models,
+    last: { selected: 'cheddar', running: 'cd210', error: 'model files: missing' } } });
+  assert.match(root.querySelector('p').textContent, /^Internal model: CD210 · Cheddar failed/);
+  assert.ok(texts(editor).includes('Last drive ran: CD210 · Cheddar could not be loaded; the drive ran on CD210 (model files: missing)'));
+  ({ root, editor } = setupDocument());
+  renderLibrary({ ...data, reboot_required: false, internal_model: { selected: 'cheddar', models,
+    last: { selected: 'cheddar', running: 'cheddar', error: null } } });
+  assert.match(root.querySelector('p').textContent, /^Internal model: Cheddar/);
+  assert.ok(texts(editor).includes('Last drive ran: Cheddar'));
+  ({ root, editor } = setupDocument());
+  renderLibrary({ ...data, reboot_required: false, internal_model: { selected: 'cheddar', models,
+    last: { selected: 'cd210', running: 'cd210', error: null } } });
+  assert.ok(texts(editor).includes('Last drive ran: CD210 · Cheddar applies at the next ignition'));
+});

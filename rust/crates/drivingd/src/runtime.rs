@@ -150,6 +150,15 @@ impl<'a> DrivingRuntime<'a> {
         })
     }
 
+    /// `cd210` or `cheddar`, as InternalDrivingModelStatus reports it.
+    pub fn model_id(&self) -> &'static str {
+        if self.recurrent {
+            "cheddar"
+        } else {
+            "cd210"
+        }
+    }
+
     pub fn reset_internal(&mut self) -> Result<(), Error> {
         match &mut self.backend {
             Backend::Cpu(model) => model.reset_mutable()?,

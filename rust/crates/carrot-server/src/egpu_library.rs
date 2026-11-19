@@ -74,18 +74,27 @@ const INTERNAL_KEY: &str = "InternalDrivingModel";
 const INTERNAL_MODELS: [&str; 2] = ["cd210", "cheddar"];
 
 fn internal_status() -> serde_json::Value {
-    let value = openpilot_params::Params::for_runtime()
-        .ok()
-        .and_then(|params| params.get(INTERNAL_KEY).ok().flatten())
-        .unwrap_or_default();
+    let params = openpilot_params::Params::for_runtime().ok();
+    let read = |key| {
+        params
+            .as_ref()
+            .and_then(|params| params.get(key).ok().flatten())
+    };
+    let value = read(INTERNAL_KEY).unwrap_or_default();
     let selected = if value.trim_ascii() == b"1" {
         "cheddar"
     } else {
         "cd210"
     };
+    // What drivingd actually loaded on the last start: {selected, running,
+    // error}. Missing until the first drive after the comma starts.
+    let last = read("InternalDrivingModelStatus")
+        .and_then(|bytes| serde_json::from_slice::<serde_json::Value>(&bytes).ok())
+        .unwrap_or(serde_json::Value::Null);
     serde_json::json!({
         "selected": selected,
         "models": [{"id": "cd210", "name": "CD210"}, {"id": "cheddar", "name": "Cheddar"}],
+        "last": last,
     })
 }
 

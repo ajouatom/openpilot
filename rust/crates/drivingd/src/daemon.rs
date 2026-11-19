@@ -63,13 +63,14 @@ pub fn run(
         .layout()
         .ok_or(Error::Contract("connected camera has no layout"))?;
     // InternalDrivingModel 1: Cheddar, shipped next to CD210's catalog. Any
-    // failure to load it keeps driving on CD210.
-    let cheddar = if parameters::integer(&params, "InternalDrivingModel").unwrap_or(0) == 1 {
+    // failure to load it keeps driving on CD210, and the screen badge and
+    // Carrot Web show it through InternalDrivingModelStatus.
+    let wants_cheddar = parameters::integer(&params, "InternalDrivingModel").unwrap_or(0) == 1;
+    let mut cheddar_error = None;
+    let cheddar = if wants_cheddar {
         let path = options.catalog.with_file_name("driving-models-cheddar");
         Catalog::load(&path)
-            .map_err(|error| {
-                eprintln!("Cheddar catalog unavailable, using CD210: {error}");
-            })
+            .map_err(|error| cheddar_error = Some(format!("model files: {error}")))
             .ok()
     } else {
         None
@@ -80,17 +81,30 @@ pub fn run(
     {
         Some(Ok(runtime)) => runtime,
         Some(Err(error)) => {
-            logger.emit(
-                log_site!(),
-                Record::text(
-                    Level::Error,
-                    format!("Cheddar failed to load, using CD210: {error}"),
-                ),
-            )?;
+            cheddar_error = Some(format!("load: {error}"));
             process::model(&catalog, &layout, logger)?
         }
         None => process::model(&catalog, &layout, logger)?,
     };
+    if let Some(error) = &cheddar_error {
+        logger.emit(
+            log_site!(),
+            Record::text(
+                Level::Error,
+                format!("Cheddar unavailable, using CD210: {error}"),
+            ),
+        )?;
+    }
+    params.put(
+        "InternalDrivingModelStatus",
+        serde_json::json!({
+            "selected": if wants_cheddar { "cheddar" } else { "cd210" },
+            "running": runtime.model_id(),
+            "error": cheddar_error,
+        })
+        .to_string()
+        .as_bytes(),
+    )?;
     let camera = [
         u32::try_from(layout.width).map_err(|_| Error::Contract("camera width"))?,
         u32::try_from(layout.height).map_err(|_| Error::Contract("camera height"))?,
