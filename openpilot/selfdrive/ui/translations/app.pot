@@ -1516,3 +1516,23 @@ msgstr ""
 #: openpilot/selfdrive/selfdrived/events.py
 msgid "Park safely before rebooting your device"
 msgstr ""
+
+#: openpilot/selfdrive/ui/layouts/settings/toggles.py
+msgid "Vehicle (manual)"
+msgstr ""
+
+#: openpilot/selfdrive/ui/layouts/settings/toggles.py
+msgid "Porter II EV"
+msgstr ""
+
+#: openpilot/selfdrive/ui/layouts/settings/toggles.py
+msgid "Ioniq 5 HDA2"
+msgstr ""
+
+#: openpilot/selfdrive/ui/layouts/settings/toggles.py
+msgid "Porter II EV: CAMERA SCC 0, radar tracks 0, HDA2 0. Ioniq 5 HDA2: 2, 3, 1. Only the vehicle and these three settings change; other manual settings stay unchanged. Select while offroad, choose the matching branch manually and restart before driving."
+msgstr ""
+
+#: openpilot/selfdrive/ui/layouts/settings/toggles.py
+msgid "Vehicle selection could not finish. Restart before driving."
+msgstr ""

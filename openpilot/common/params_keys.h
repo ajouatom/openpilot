@@ -170,6 +170,8 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"SearchInput", {PERSISTENT, INT}},
 
     {"CarSelected3", {PERSISTENT, STRING, "MOCK"}},
+    {"ManualVehicleSelectionPending", {PERSISTENT | DONT_LOG, JSON, "{}"}},
+    // Retired automatic-switch keys retained for migration/older branch compatibility.
     {"AutoVehicleSwitch", {PERSISTENT, BOOL, "0"}},
     {"AutoVehicleSession", {CLEAR_ON_MANAGER_START | CLEAR_ON_ONROAD_TRANSITION, BOOL}},
     {"AutoVehicleReady", {CLEAR_ON_MANAGER_START | CLEAR_ON_ONROAD_TRANSITION, BOOL}},

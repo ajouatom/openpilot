@@ -190,13 +190,6 @@ class Car:
     self.params.put_nonblocking("CarParamsCache", cp_bytes)
     self.params.put_nonblocking("CarParamsPersistent", cp_bytes)
 
-    if self.params.get_bool("AutoVehicleSession"):
-      # Release settings consumers only after restore and CP construction finish.
-      from openpilot.common.auto_vehicle_branch import finish_identification
-      finish_identification(self.params, self.CP.carFingerprint)
-      self.params.put("AutoVehicleResolved", self.CP.carFingerprint)
-      self.params.put_bool("AutoVehicleReady", True)
-
     self.mock_carstate = MockCarState()
     self.v_cruise_helper = VCruiseCarrot(self.CP) #VCruiseHelper(self.CP)
 

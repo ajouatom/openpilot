@@ -427,7 +427,6 @@
           "en": "Hyundai·Kia",
           "zh": "现代·起亚",
           "params": [
-            "AutoVehicleSwitch",
             "HyundaiCameraSCC",
             "IsLdwsCar",
             "HapticFeedbackWhenSpeedCamera"
@@ -3092,22 +3091,6 @@
       "min": 80,
       "max": 100,
       "default": 89,
-      "unit": 1
-    },
-    {
-      "group": "시작",
-      "name": "AutoVehicleSwitch",
-      "title": "포터·아이오닉5 차종·브랜치 자동 전환",
-      "descr": "기본 OFF. 포터2 EV는 c3-pht-porter, 2022~24 아이오닉5 HDA2는 c3-pht를 사용합니다. 현재 포터 설정에서 ON 후 재시작해 일곱 설정의 기준값을 먼저 저장하세요. 시작 시 정확한 차종을 확인하고, 브랜치가 다르면 P단·네 바퀴 정지 1초·Panda 출력 차단을 확인한 뒤 전환·재부팅합니다. 주행 중에는 전환하지 않습니다. 최초 다른 브랜치 설치에는 인터넷과 parkhantae/openpilot 원격 설정이 필요하며, 이후 같은 전환 코드가 설치된 로컬 브랜치는 오프라인으로 왕복할 수 있습니다. 로컬 수정·충돌·전환 코드 불일치·식별 실패는 자동 제어를 차단하며 강제 초기화하지 않습니다. 아이오닉5는 CAMERA SCC=2, 레이더트랙=3, HDA2=1, CustomSR=140, 포터 자동 SET·저속 취소·전용 GAP은 OFF로 적용하고 포터 복귀 시 저장한 일곱 값을 복원합니다. 차종 변경 때 카메라·조향·차량 파라미터·지연 학습값을 초기화하며 같은 차종 재부팅은 유지합니다. OFF는 다음 시작부터 수동 선택과 현재 설정을 유지하며, 이미 시작한 전환은 실제 재부팅을 마쳐야 합니다. 차량 이동 전 전원을 끄고 맞는 하네스를 사용하세요.",
-      "egroup": "START",
-      "etitle": "Porter–Ioniq 5 Automatic Branch Switch",
-      "edescr": "Default OFF. Porter II EV uses c3-pht-porter; 2022–24 Ioniq 5 HDA2 uses c3-pht. First enable and restart on the Porter to save the seven-setting baseline. At startup, confirm the vehicle; if the branch differs, require Park, four zero-speed wheels for one second and Panda noOutput before checkout and reboot. Never switch during a drive. Initial installation of the other branch requires internet and a parkhantae/openpilot remote; compatible installed local branches can then switch offline. Local changes, conflicts, incompatible handoff code or unresolved identity block automatic control; no forced reset. Ioniq applies CAMERA SCC=2, radar tracks=3, HDA2=1, CustomSR=140 and disables Porter automatic SET, low-speed cancellation and dedicated GAP. Returning to Porter restores the seven values. Actual vehicle changes reset camera, steering, vehicle-parameter and delay learning; same-car restarts retain them. OFF uses manual selection with current values at the next startup; an already-started handoff must finish an OS reboot. Power down before moving the device and use the matching harness.",
-      "cgroup": "启动设置",
-      "ctitle": "波特与IONIQ 5车型及分支自动切换",
-      "cdescr": "默认关闭。波特II EV使用c3-pht-porter，2022–24款IONIQ 5 HDA2使用c3-pht。先在波特当前配置下开启并重启，保存七项设置基准。启动时确认车型；分支不符时须确认P挡、四轮零速持续1秒及Panda禁止输出，再切换并重启。行驶中不切换。首次安装另一分支需要网络及parkhantae/openpilot远程；已安装且转换代码一致的本地分支可离线往返。本地修改、冲突、转换代码不匹配或车型不明确时阻止自动控制，不强制重置。IONIQ使用CAMERA SCC=2、雷达轨迹=3、HDA2=1、CustomSR=140，并关闭波特自动SET、低速取消及专用GAP；返回波特恢复七项值。实际车型变化时重置摄像头、转向、车辆参数和延迟学习，同车型重启保留。关闭后下次启动使用手动选择及当前值；已开始的切换必须完成系统重启。移动车载设备前断电并使用对应线束。",
-      "min": 0,
-      "max": 1,
-      "default": 0,
       "unit": 1
     },
     {

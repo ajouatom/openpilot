@@ -281,7 +281,7 @@ VW MEB(ID.4 포함)에도 수동 조향비와 학습 비율이 적용됩니다. 
 | CANFD·HDA | `CanfdHDA2`, `HyundaiCanfdClusterDirectTx`, `CanfdDebug`, `HDPuse`, `CcncClusterDisplay`, `CcncTrafficBackground` | HDA2 차량, 계기판 직접 송신, 차로변경 깜빡이 자동, CAN FD 디버그·HDP 기능과 CCNC 계기판 표시 옵션 |
 | 레이더 | `EnableRadarTracks`, `RadarTrackFlip`, `EnableCornerRadar`, `CarrotRadarMode`, `CarrotRadarCutInSensitivity` | SCC 레이더, 전방 트랙 좌우 보정, 코너 레이더와 당근레이더 처리·컷인 감도 |
 | 운전자 모니터링 | `DriverMonitoringEnabled`(검색 전용), `DriverMonitoringMode`, `CarrotVisionEnabled`, `MuteDoor`, `MuteSeatbelt` | 운전자 모니터링과 일부 차량 경고음 처리 |
-| 차량 보조 | `AutoVehicleSwitch`, `MaxAngleFrames`, `SpeedFromPCM` | 최대 조향각 관련 프레임과 순정 SCC 속도 제어 방식 |
+| 차량 보조 | `MaxAngleFrames`, `SpeedFromPCM` | 콤마 토글의 수동 차종 선택, 최대 조향각 관련 프레임과 순정 SCC 속도 제어 방식 |
 | 기기 하드웨어 | `CommaPedalEnabled`, `HardwareC3xLite` | ACC 미장착 차량의 Comma Pedal 허용 설정, C3X Lite 하드웨어 구성 |
 
 > [!CAUTION]
@@ -329,23 +329,19 @@ Bosch MRRevo14F 수신을 지원하는 버전에서 Bosch MRRevo14F 후보 차�
 
 `HardwareC3xLite`는 일반 C3/C3X에서는 반드시 꺼 두고 C3X Lite에서만 켠 뒤 기기를 재부팅하세요. 이 설정을 켜면 존재하지 않는 앰프를 초기화하지 않아 I2C 재시도로 인한 시작 지연을 없애고, 경고음을 GPIO 부저로 출력합니다. 또한 `micd`, `soundd`, `loggerd`를 실행하지 않고 `RecordAudio`를 끄므로 이 하드웨어 모드에서는 일반 주행 로그 기록을 사용할 수 없습니다.
 
-### 포터·아이오닉5 차종·브랜치 자동 전환
+### 포터·아이오닉5 수동 선택
 
-**포터·아이오닉5 차종·브랜치 자동 전환** (`AutoVehicleSwitch`)은 기본 OFF입니다. 현재 포터 설정에서 ON으로 저장한 뒤 포터에서 재시작해 일곱 설정의 기준값을 먼저 보관하세요. 정확한 ECU 정보와 HDA2 CAN이 확인된 2022~24 아이오닉5는 `c3-pht`, 확인된 카메라 하네스 전체 CAN 패턴의 포터2 EV는 `c3-pht-porter`를 사용합니다.
+콤마 **설정 → 토글 → 차량 (수동)**에서 **포터2 EV** 또는 **아이오닉5 HDA2**를 선택합니다. 주행 종료 상태에서만 선택할 수 있으며, 차종과 아래 세 설정만 저장합니다.
 
-브랜치가 다르면 시작 단계에서 제어를 보류하고 **P단·네 바퀴 속도 0이 1초 유지·Panda noOutput**을 확인해 브랜치를 바꾸고 재부팅합니다. 주행 중에는 전환하지 않습니다. 양쪽에 동일한 전환 코드가 필요하며, 처음 다른 브랜치를 설치할 때는 인터넷과 `parkhantae/openpilot` 원격 설정이 필요합니다. 설치한 호환 로컬 브랜치는 이후 오프라인 왕복이 가능합니다. 로컬 수정·충돌·전환 코드 불일치·불명확한 식별은 제어를 막고 상태를 남깁니다. 강제 checkout/reset/stash를 수행하지 않습니다.
-
-| 설정 | 아이오닉5 HDA2 | 포터 복귀 |
+| 설정 | 포터2 EV | 아이오닉5 HDA2 |
 |---|---|---|
-| `HyundaiCameraSCC` | `2` | 저장한 포터 값 |
-| `EnableRadarTracks` | `3` | 저장한 포터 값 |
-| `CanfdHDA2` | `1` | 저장한 포터 값 |
-| `CustomSR` | `140` — 조향비 14.0 | 저장한 포터 값 |
-| 포터 자동 SET·30km/h 미만 취소·전용 GAP 사용 | 모두 OFF | 각 항목의 저장한 포터 값 |
+| `HyundaiCameraSCC` | `0` | `2` |
+| `EnableRadarTracks` | `0` | `3` |
+| `CanfdHDA2` | `0` | `1` |
 
-GAP 수치와 다른 설정은 유지합니다. 실제 차종 변경 때 카메라 보정·조향·차량 파라미터·제어 지연 학습값을 초기화하며, 같은 차종 재부팅은 유지합니다. 돌아올 때도 과거 보정을 복원하지 않습니다. OFF는 다음 시작부터 수동 차종 선택과 현재 설정을 유지합니다. 이미 시작한 전환은 실제 OS 재부팅을 마치기 전까지 제어를 보류합니다. 전원을 끄고 각 차량의 하네스로 옮기세요.
+포터는 `c3-pht-porter`, 아이오닉5는 `c3-pht` 브랜치를 직접 선택하고 주행 전에 재시작하세요. 자동 차종 판별·설정 복원·Git 브랜치 전환은 제거되었습니다. 수동 차종 선택은 능동 VIN·펌웨어 조회를 건너뛰며, CAN 버스 확인과 카메라·모델 시작은 계속 필요합니다.
 
-전환에 실패하면 정차한 상태에서 `AutoVehicleBranchStatus`를 확인하고 로컬 변경이나 Git 문제를 해결한 뒤 재시작합니다. 진행 중 기록은 `AutoVehicleBranchHandoff`에 보존됩니다. 임의로 삭제해 제어를 우회하지 마세요. 아이오닉5의 정차 후 뒤밀림을 해결하는 기능은 아닙니다.
+조향비·조향 강도·GAP·포터 전용 토글 등 다른 수동 설정은 유지합니다. 포터 전용 기능은 포터 차종에만 적용되므로 아이오닉5에서는 실행되지 않습니다. 공통 조향 설정은 두 차량에 적용될 수 있으므로 차량에 맞게 확인하세요. 자동 재보정은 수행하지 않으므로 다른 차량의 장착 위치로 옮긴 뒤에는 장치 메뉴에서 캘리브레이션을 초기화하세요.
 
 <a id="display"></a>
 ## 화면 표시

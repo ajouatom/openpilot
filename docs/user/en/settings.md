@@ -277,7 +277,7 @@ These settings describe the car, harness, and device hardware configuration. Do 
 | CAN FD/HDA | `CanfdHDA2`, `HyundaiCanfdClusterDirectTx`, `CanfdDebug`, `HDPuse`, `CcncClusterDisplay`, `CcncTrafficBackground` | HDA2 selection, cluster direct send, lane-change auto blinker, CAN FD diagnostics, HDP, and CCNC cluster display options |
 | Radar | `EnableRadarTracks`, `RadarTrackFlip`, `EnableCornerRadar`, `CarrotRadarMode`, `CarrotRadarCutInSensitivity` | SCC radar, front-track orientation, corner radar, and Carrot Radar processing and cut-in sensitivity |
 | Driver monitoring | `DriverMonitoringEnabled` (search only), `DriverMonitoringMode`, `CarrotVisionEnabled`, `MuteDoor`, `MuteSeatbelt` | Driver monitoring and selected vehicle alerts |
-| Vehicle assistance | `AutoVehicleSwitch`, `MaxAngleFrames`, `SpeedFromPCM` | Steering-angle frames and stock-SCC speed control |
+| Vehicle assistance | `MaxAngleFrames`, `SpeedFromPCM` | Manual vehicle selection in comma Toggles, steering-angle frames and stock-SCC speed control |
 | Device hardware | `CommaPedalEnabled`, `HardwareC3xLite` | Comma Pedal permission for vehicles without ACC, and C3X Lite hardware configuration |
 
 > [!CAUTION]
@@ -335,23 +335,19 @@ A saved change takes effect at the **next vehicle-parameter initialization**; it
 
 `HardwareC3xLite` must remain off on standard C3 and C3X hardware. Enable it only on a C3X Lite, then reboot the device. The setting skips the unavailable amplifier so startup is not delayed by I2C retries, uses the GPIO buzzer for alerts, disables `micd`, `soundd`, and `loggerd`, and turns off `RecordAudio`. Normal route logging is unavailable while this hardware mode is enabled.
 
-### Porter–Ioniq 5 automatic vehicle and branch switch
+### Porter–Ioniq 5 manual vehicle selection
 
-**Porter–Ioniq 5 Automatic Branch Switch** (`AutoVehicleSwitch`) defaults to OFF. First enable and restart on the Porter with its current configuration to save the seven-setting baseline. A 2022–24 Ioniq 5 with exact firmware identification and actual HDA2 CAN uses `c3-pht`; a Porter II EV with the complete observed camera-harness CAN signature uses `c3-pht-porter`.
+On the comma, open **Settings → Toggles → Vehicle (manual)** and select **Porter II EV** or **Ioniq 5 HDA2**. Selection is available only offroad and saves the vehicle and these three settings.
 
-If the branch differs, startup holds control and requires **Park, four zero-speed wheels for one second and Panda noOutput** before checkout and reboot. No mid-drive switching occurs. Both branches need identical handoff code. Initial installation of the other branch requires internet and a `parkhantae/openpilot` remote; compatible installed local branches can then switch offline. Local edits, conflicts, incompatible handoff code and unresolved identification block control and leave status information. No forced checkout/reset/stash is used.
-
-| Setting | Ioniq 5 HDA2 | Return to Porter |
+| Setting | Porter II EV | Ioniq 5 HDA2 |
 |---|---|---|
-| `HyundaiCameraSCC` | `2` | Saved Porter value |
-| `EnableRadarTracks` | `3` | Saved Porter value |
-| `CanfdHDA2` | `1` | Saved Porter value |
-| `CustomSR` | `140` — steering ratio 14.0 | Saved Porter value |
-| Porter automatic SET, below-30 cancellation and dedicated GAP | All OFF | Each saved Porter value |
+| `HyundaiCameraSCC` | `0` | `2` |
+| `EnableRadarTracks` | `0` | `3` |
+| `CanfdHDA2` | `0` | `1` |
 
-GAP numbers and other settings remain unchanged. Actual vehicle changes reset camera calibration and learned steering, vehicle parameters and control delay; same-car restarts retain them. Returning to a car never restores old calibration. OFF uses manual selection with current settings at the next startup. An already-started handoff holds control until an actual OS reboot completes. Power down before moving the device to the matching harness.
+Manually choose `c3-pht-porter` for the Porter or `c3-pht` for the Ioniq 5, then restart before driving. Automatic identification, preset restoration and Git branch switching have been removed. Manual selection skips active VIN/firmware queries; passive CAN bus detection and camera/model startup are still required.
 
-If switching fails, inspect `AutoVehicleBranchStatus` while parked, resolve local changes or Git errors and restart. `AutoVehicleBranchHandoff` preserves interrupted transactions; do not remove it to bypass control blocking. This feature does not resolve the Ioniq 5 stop-hold rollback issue.
+Other manual settings, including steering ratio, steering strength, GAP and Porter toggles, are preserved. Porter-specific features run only on the Porter and remain inactive on the Ioniq 5. Shared steering settings can affect both cars; check them for the selected vehicle. Calibration is no longer reset automatically: reset calibration in the Device menu after moving to the other vehicle's mounting position.
 
 <a id="display"></a>
 ## Display
