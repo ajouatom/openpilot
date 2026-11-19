@@ -110,3 +110,22 @@ def test_runtime_activation_refuses_an_existing_tinygrad_interpreter(monkeypatch
     runtime.activate(tmp_path)
 
 
+def test_parent_death_removes_owned_shared_storage_before_worker_exit(monkeypatch, tmp_path):
+  from openpilot.selfdrive.modeld import cheddar_worker as worker
+  path = tmp_path / 'owned-shared-buffer'
+  path.write_bytes(b'camera buffer')
+  parents = iter([123, 1])
+  monkeypatch.setattr(worker.os, 'getppid', lambda: next(parents))
+  monkeypatch.setattr(worker.time, 'sleep', lambda delay: None)
+  monkeypatch.setattr(worker.os, 'sched_setscheduler', lambda *args: None, raising=False)
+  monkeypatch.setattr(worker.os, 'SCHED_OTHER', 0, raising=False)
+  monkeypatch.setattr(worker.os, 'sched_param', lambda value: value, raising=False)
+  def exit_worker(code):
+    assert not path.exists()
+    raise SystemExit(code)
+  monkeypatch.setattr(worker.os, '_exit', exit_worker)
+  with pytest.raises(SystemExit) as raised:
+    worker.watch_parent(123, path)
+  assert raised.value.code == 1
+
+

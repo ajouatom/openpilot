@@ -9,13 +9,16 @@ import time
 import traceback
 
 
-def watch_parent(parent):
+def watch_parent(parent, shared_path):
   # The inference thread inherits modeld's core 7 / FIFO 54 scheduling.
   if hasattr(os, 'sched_setscheduler'):
     os.sched_setscheduler(0, os.SCHED_OTHER, os.sched_param(0))
   while os.getppid() == parent:
     time.sleep(.1)
-  os._exit(1)
+  try:
+    shared_path.unlink(missing_ok=True)
+  finally:
+    os._exit(1)
 
 
 def main():
@@ -24,8 +27,8 @@ def main():
   parent = os.getppid()
   if parent == 1:
     return
-  threading.Thread(target=watch_parent, args=(parent,), daemon=True).start()
   pkl, shared_path, width, height = Path(sys.argv[1]), Path(sys.argv[2]), int(sys.argv[3]), int(sys.argv[4])
+  threading.Thread(target=watch_parent, args=(parent, shared_path), daemon=True).start()
   from openpilot.selfdrive.modeld.cheddar_runtime import activate, load_bundle
   activate(pkl.parent / '.cheddar-runtime')
   import numpy as np
