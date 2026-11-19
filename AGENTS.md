@@ -1,5 +1,23 @@
 # Repository memory
 
+- 2026-11-19 late: Owner explicitly requests Jetson-first Fairy Tale testing
+  from ONNX despite official AMD PKL still404; Jetson does not depend on PKL.
+  Owner authorizes reboot/temporary Jetson stop while Park/zero/disabled, then
+  imposes~5min departure cutoff. Orin Nano8GB/MAXN_SUPER, signedN16 host0cb67d46.
+  Fresh vehicle guard and bounded service-restoring supervisor stop inference;
+  original host builds hash-verifiedbc125a ONNX in private scratch. NvMap error12
+  warning occurs, but timing cache and534724608B staged engine prove builder
+  reached plan serialization/write. Repeated SSH heartbeat banner timeout then
+  triggers guard kill; no complete atomic plan or inference timing. Do not infer
+  fatal model incompatibility/OOM-killer cause from warning alone. Original N16
+  service restored, commaactive/ready/error-empty verified; selection/pins unchanged.
+  Removed incomplete1300859716B temp directory after process check. Retain ONNX,
+  spec/timing cache/log in /opt/carrot-jetlink/fairy-test-20261119 for next session.
+  Offline harness uses persistent SSH heartbeat with same4s expiry; not yet device
+  tested. No more device work after cutoff. Hold catalog until native comparison
+  passes; Jetson-only entry must not advertise unavailable eGPU support.
+  Evidence private scratch2026-11-19-fairy-tale and updated review doc.
+
 - 2026-11-19 evening: Owner reconnects comma and authorizes actual Cheddar
   installation plus PR39415 review. Offroad clean tracked checkout fast-forwards
   a9811adce->93c5c6afaf, normal reboot/fresh QCOM SCons build succeeds; installed
