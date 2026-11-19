@@ -63,3 +63,46 @@ pin was changed by this review.
 
 Private source/hash records, replay decoding and CPU checks are retained under
 `.analysis/scratch/2026-11-19-fairy-tale`.
+
+## Independent Jetson attempt, November 19 evening
+
+The owner explicitly requested Jetson-first validation from the available ONNX.
+This does not require the AMD PKL. A successful Jetson validation can support a
+Jetson-only catalog entry, provided delivery and backend availability handling
+are implemented; an absent official PKL must not be advertised as eGPU support.
+The exact official PKL still returned 404 on the subsequent retry.
+
+The owner's Orin Nano 8 GB was reachable in MAXN_SUPER, with TensorRT 10.3 and
+the existing signed N16 host `0cb67d46cc4ac448326cc9b272ebfebdc6fde797`.
+Following explicit authorization, rebooted comma after verifying fresh
+P/zero/inactive state, then temporarily stopped only the Jetson inference
+service. The user imposed a departure deadline of approximately five minutes.
+An independent vehicle-state reader and bounded host supervisor required fresh
+P/zero/disabled samples and restored the original service on completion or
+loss of the heartbeat. No selection or installed runtime pin changed.
+
+The hash-verified ONNX reached TensorRT parsing, tactic generation, timing-cache
+serialization and the staged plan write. The build printed
+`NvMapMemAllocInternalTagged: 1075072515 error 12`. However, this warning did not
+stop the builder from returning a serialized plan: the timing cache existed
+and the staged `engine.plan` had 534,724,608 bytes when interrupted. A repeated
+SSH connection used for heartbeat renewal timed out during banner exchange;
+the host supervisor terminated the benchmark process group and restarted the
+production service. There was no completed atomic plan, deserialization check
+or inference sample. Do not characterize this as proven model incompatibility,
+a completed engine build, or a measured inference deadline failure.
+
+The production service restarted successfully, reloaded the original N16 engine,
+and comma subsequently reported N16 `active=true`, `ready=true`, empty error.
+Cheddar remained available internally. The incomplete temporary build directory
+was removed after checking the test processes were gone (1,300,859,716 bytes).
+Only the verified source, model specification, scripts, log and advisory timing
+cache remain in `/opt/carrot-jetlink/fairy-test-20261119` for a later attempt.
+No further device testing was performed after the departure cutoff.
+
+The offline harness now sends heartbeat messages through one persistent SSH
+session instead of repeatedly negotiating new SSH sessions. The four-second
+remote expiry and fresh vehicle-state requirements are retained. This harness
+revision has not yet been exercised on the Jetson. N16/Light speed 2/Fairy Tale
+timing comparison, device reset/output validation and any catalog promotion
+remain outstanding.
