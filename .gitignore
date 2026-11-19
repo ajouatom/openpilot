@@ -114,5 +114,8 @@ Pipfile
 # Local-only model selector design notes (not shipped)
 docs/MODEL_SELECTOR_*.md
 
+# Extracted internal policy runtime, reproduced from the verified source archive.
+openpilot/selfdrive/modeld/models/.cheddar-runtime/
+
 # Local Windows native CPU test builds
 *.pyd
