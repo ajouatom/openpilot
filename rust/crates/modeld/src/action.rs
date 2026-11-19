@@ -58,7 +58,8 @@ pub fn from_plan(output: PlanActionInput<'_>, previous: Action, inputs: ActionIn
         Some([lateral_acceleration, acceleration]) => {
             // NumPy 2 divides the f32 action by a weak Python scalar in f32.
             // This narrowing preserves its rounded denominator before division.
-            let speed_squared = inputs.v_ego.max(1.0).powi(2) as f32;
+            // carrot a47fd16e5 (commaai 0c40995): low-speed floor 2.5 m/s.
+            let speed_squared = inputs.v_ego.max(2.5).powi(2) as f32;
             (
                 f64::from(acceleration),
                 f64::from(lateral_acceleration / speed_squared),
@@ -134,5 +135,36 @@ fn interpolate(plan: &[[f32; 15]; 33], column: usize, time: f64) -> f64 {
         f64::NAN
     } else {
         f64::from(plan[32][column])
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn direct(v_ego: f64) -> f64 {
+        let plan = [[0.0_f32; 15]; 33];
+        from_plan(
+            PlanActionInput {
+                plan: &plan,
+                direct_action: Some([1.0, 0.0]),
+            },
+            Action::default(),
+            ActionInputs {
+                lat_action_t: 0.2,
+                long_action_t: 0.3,
+                v_ego,
+                lat_smooth_seconds: 0.0,
+                v_ego_stopping: 0.5,
+            },
+        )
+        .desired_curvature
+    }
+
+    #[test]
+    fn direct_action_curvature_uses_the_2_5_m_s_floor() {
+        assert!((direct(1.0) - 1.0 / 6.25).abs() < 1e-7);
+        assert!((direct(2.0) - 1.0 / 6.25).abs() < 1e-7);
+        assert!((direct(5.0) - 1.0 / 25.0).abs() < 1e-7);
     }
 }
