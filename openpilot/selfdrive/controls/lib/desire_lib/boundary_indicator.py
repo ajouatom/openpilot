@@ -4,16 +4,16 @@ This observes a manual maneuver; it never supplies a lane-change desire.
 """
 
 import math
-from openpilot.selfdrive.controls.lib.desire_lib.boundary_lane import adjacent_lane
+from openpilot.selfdrive.controls.lib.desire_lib.boundary_lane import manual_boundary
 
 
 TRACK_SEC = 1.0  # Brief confidence loss during a continuous driver crossing.
-QUIET_SEC = 3.0  # Earliest new request; extinction is required independently.
+QUIET_SEC = 3.0  # Ordinary rearm; short abandoned approaches have a bounded exception.
 ISOLATE_SEC = 12.0  # Keep delayed lamp feedback out of automatic steering.
 
 
 class BoundaryIndicator:
-  def __init__(self, journal=None, *, lane_admission=adjacent_lane, minimum_speed=30 / 3.6):
+  def __init__(self, journal=None, *, lane_admission=manual_boundary, minimum_speed=30 / 3.6):
     self.lane_admission = lane_admission
     self.minimum_speed = minimum_speed
     self.journal = journal if isinstance(journal, dict) else {}
@@ -32,6 +32,7 @@ class BoundaryIndicator:
     self.dark_since = None
     self.request_direction = 0
     self.request_time = 0.0
+    self.short_attempt_end = None
 
   def _reset_geometry(self):
     self.previous = None
@@ -42,6 +43,7 @@ class BoundaryIndicator:
     self.lane_since = [None, None]
 
   def own(self, now, direction):
+    self.short_attempt_end = None
     self.blocked |= direction
     self.block_until = max(self.block_until, now + QUIET_SEC)
     self.isolate_until = max(self.isolate_until, now + ISOLATE_SEC)
@@ -69,6 +71,7 @@ class BoundaryIndicator:
     if self.blocked and now >= self.isolate_until and dark:
       self.blocked = 0
     if not enabled or not valid or busy:
+      self.short_attempt_end = None
       self.request_direction = 0
       self._reset_geometry()
       return
@@ -84,10 +87,14 @@ class BoundaryIndicator:
       or not math.isfinite(cs.steeringTorque)
       or cs.vEgo < self.minimum_speed
     ):
+      self.short_attempt_end = None
       self.request_direction = 0
       self._reset_geometry()
       return
-    if now < self.block_until or (self.blocked and not dark):
+    short = self.short_attempt_end
+    opposite_attempt = (short is not None and 1. <= now-short[0] <= 3. and dark and cs.steeringPressed and
+                        cs.steeringTorque * (1 if short[1] == 1 else -1) < 0)
+    if (now < self.block_until and not opposite_attempt) or (self.blocked and not dark):
       self._reset_geometry()
       # Preserve the same fresh edge after torque release, never replay a timer.
       if not 0 <= now - self.request_time < .2 or not self.lane_admission(cs, md, self.request_direction, now):
