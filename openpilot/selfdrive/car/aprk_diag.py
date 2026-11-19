@@ -9,7 +9,7 @@ from opendbc.car.hyundai.values import HyundaiFlags
 KEY = 'CanfdAprkDiag'
 RESULT = 'CanfdAprkDiagResult'
 CONFLICTS = ('CanfdBlinkerControl', 'CanfdBlinkerKick', 'CanfdBlinkerTest', 'CanfdBlinkerMenuTest',
-             'CanfdBlinkerStalk', 'SpasSteerTest', 'SteerAngleTest')
+             'BlinkerStalkTest', 'SpasSteerTest', 'SteerAngleTest')
 RESERVED = (APRK, 0x165, 0x16A, 0x3C1)
 
 

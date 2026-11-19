@@ -68,6 +68,10 @@ APRK_DEFAULT_SESSION = bytes([0x02, 0x10, 0x01, 0, 0, 0, 0, 0])
 # SPAS2 stayed off ECAN for 0.1 s; they stop the moment a stock frame shows up again. 10-26..30 it never answered on
 # bus 0 (0 of ~140) and every kick overwrote a live stock stream - 21 bus-offs and one CAN error at 112 km/h on 10-30
 # (02_logs/measurements.md §36). The request now also goes to ACAN, where a second SPAS1 stream runs.
+# CanfdBlinkerSpas2Only (Sorento HEV 11-19, 02_logs/measurements.md s70): its parking ECU answers 0x7B1, and 0.51 s into
+# our SPAS1+SPAS2 the ESC turned ACC/FCA/AVH off (back 50 ms after our frames stopped, the ECU still silent). Whether
+# our SPAS1 (stock byte 14 = 0x02, ours 0) or SPAS2 itself (this car has none) trips it is not known yet:
+# 1 leaves the ECU on (no 0x7B1, its own SPAS1 and 0x170 stay) and sends SPAS2 only; 2 silences it as before, SPAS2 only.
 APRK_IDLE, APRK_ASK, APRK_WAIT_QUIET, APRK_ACTIVE, APRK_FAILED = range(5)
 APRK_REPLY_FRAMES = int(0.4 / DT_CTRL)
 APRK_QUIET_NANOS = 100_000_000
@@ -105,10 +109,11 @@ STALK_TAP_MOMENTARY_FRAMES = int(0.35 / DT_CTRL)
 # The stock column module sends 0x3C1 at 5 Hz (200 ms). Sending the same ID faster raises the chance of a
 # same-ID collision with it, which is what took the Azera bus down, so the momentary mode sticks to 5 Hz.
 STALK_MOMENTARY_HZ_DIV = 20
-# HighBeamTest: a stock high-beam push is a ~0.15 s HIGHBEAM_FORWARD pulse on 0x3C1 (05_can/hba_ifs.md, 10-04)
+# BlinkerStalkTest 5/6 (high beam / flash-to-pass): a stock high-beam push is a ~0.15 s HIGHBEAM_FORWARD pulse on 0x3C1
+# (05_can/hba_ifs.md, 10-04)
 HIGHBEAM_PRESS_FRAMES = int(0.15 / DT_CTRL)
 
-# CanfdBlinkerStalk: when APRK can't be silenced, imitate the steering column lever (BLINKER_STALKS, 0x3C1); the BCM
+# BlinkerStalkTest: when APRK can't be silenced, imitate the steering column lever (BLINKER_STALKS, 0x3C1); the BCM
 # blinks from it (09-18 log: 0x413 ALT lamp at 0.4 s while the lever is on). 10-26 logs: COUNTER_ALT goes +1 on every
 # lever change and stays put otherwise; CHECKSUM_MAYBE = CRC8 (poly 0x1D, init 0, xorout 0x65) of bytes 1..7.
 
@@ -296,6 +301,8 @@ class CarController(CarControllerBase):
     self.depart_jerk = False
     self.blinker_control = False
     self.blinker_kick_mode = 1  # CanfdBlinkerKickMode: 0 only after an ack, 1 panda piggyback, 2 direct 25 Hz, 3 direct 100 Hz
+    self.spas2_only = 0  # CanfdBlinkerSpas2Only: 0 SPAS1+SPAS2, 1 ECU left on + SPAS2 only, 2 ECU silenced + SPAS2 only
+    self.aprk_spas2_only = 0  # the value the running APRK session started with
     # set by card's KickOutput only on the CANFD_BLINKER_KICK harness (carrot-wip's kick_compatible); our Kick does not gate on it
     self.kick_output_ready = False
     self.remote_blinker = 0  # card: 3 left / 4 right from a Bluetooth remote blinker press, taken by kick_pulse
@@ -304,15 +311,14 @@ class CarController(CarControllerBase):
     self.model_flashes = 0  # CanfdBlinkerKickModelMode 2/3/4 -> 3/5/7 flashes; 0 = hold through the change
     self.blinker_test = 0  # CanfdBlinkerMenuTest: 1 left, 2 right (menu test, any speed/gear)
     self.hazard_test = 0  # CanfdHazardTest (remote hazard, 2 = fast flash): SPAS2 hazards when no camera 0x1ea carries bit 104
-    self.blinker_stalk = 0  # CanfdBlinkerStalk: 1 left, 2 right (0x3C1 replay)
+    self.blinker_stalk = 0  # BlinkerStalkTest: 1 left, 2 right (0x3C1 replay)
     self.highbeam_frame = None       # frame the latest push started
-    self.highbeam_kind = 1           # 1 high beam, 2 flash-to-pass (HighBeamTest 2)
-    self.highbeam_test = 0           # HighBeamTest: 1 high beam / 2 flash-to-pass once now (all cars), back to 0 re-arms
-    self.highbeam_test_sent = False
+    self.highbeam_kind = 1           # 1 high beam, 2 flash-to-pass
+    self.highbeam_test = 0           # BlinkerStalkTest 5/6 -> 1/2: one high beam / flash-to-pass now (all cars)
+    self.highbeam_test_sent = 0      # the kind last sent; a new value (or 0 in between) sends again
     # CanfdBvmView: 0 off, 1 left, 2 right, 3 both. Spoofs the cluster camera view status (0x400 byte4) so the
     # blind-spot camera is shown without the turn signal. Display-only message, nothing else uses it.
     self.bvm_view = 0
-    self.bvm_raw = 0   # CanfdBvmRaw: 1..255 = byte4 value sent as-is, overrides bvm_view
     self.bvm_alt_time = 10  # CanfdBvmAltTime: 0.1 s per side in CanfdBvmView 4
     self.bvm_reverse = 0    # CanfdBvmReverse: 1 left, 2 right while the gear is R (owns the view there)
     self.palisade_cgw_test = PalisadeCgwTest()
@@ -377,7 +383,7 @@ class CarController(CarControllerBase):
     self.steerDeltaDownOrg = self.steerDeltaDown = self.steerDeltaDownLC = self.params.STEER_DELTA_DOWN
 
   def stalk_blinkers(self, CS):
-    # CanfdBlinkerStalk 1/2 hold the lever, 3/4 replay GV80's momentary tap. Both start with the BLINKER_TAP edge.
+    # BlinkerStalkTest 1/2 hold the lever, 3/4 replay GV80's momentary tap. Both start with the BLINKER_TAP edge.
     if self.blinker_stalk not in (1, 2, 3, 4):
       self.stalk_counter = self.stalk_source_counter = self.stalk_values = None
       self.stalk_press_side = 0
@@ -410,18 +416,19 @@ class CarController(CarControllerBase):
     return [CanData(addr, bytes([stalk_checksum(dat[1:])]) + bytes(dat[1:]), bus)]
 
   def highbeam_elapsed(self, ready):
-    """Frames since the current HighBeamTest signal started, None before the first one. HighBeamTest (user 11-18)
-    sends once when the menu value becomes 1 (high beam) or 2 (flash-to-pass), at any gear/speed/engagement, so users
-    can check it without engaging or a remote; carcontroller writes no params, so setting the value back to 0 re-arms
-    it. Not ready (message not seen yet): it stays pending. The engage push (CanfdHighBeamOnEngage) was removed 11-18."""
+    """Frames since the current high-beam signal started, None before the first one. BlinkerStalkTest 5 (high beam)
+    or 6 (flash-to-pass) sends once when the menu value becomes it, at any gear/speed/engagement, so users can check it
+    without engaging or a remote (user 11-18; HighBeamTest merged into BlinkerStalkTest 11-19). carcontroller writes
+    no params: the same value never repeats, a different value (5 <-> 6) or 0 in between sends again. Not ready
+    (message not seen yet): it stays pending. The engage push (CanfdHighBeamOnEngage) was removed 11-18."""
     if not self.highbeam_test:
-      self.highbeam_test_sent = False
-    if self.highbeam_test in (1, 2) and not self.highbeam_test_sent and ready:
-      self.highbeam_frame, self.highbeam_kind, self.highbeam_test_sent = self.frame, self.highbeam_test, True
+      self.highbeam_test_sent = 0
+    if self.highbeam_test in (1, 2) and self.highbeam_test != self.highbeam_test_sent and ready:
+      self.highbeam_frame, self.highbeam_kind, self.highbeam_test_sent = self.frame, self.highbeam_test, self.highbeam_test
     return None if self.highbeam_frame is None else self.frame - self.highbeam_frame
 
   def cgw_highbeam(self, CS):
-    """HighBeamTest on classic CAN (user 11-18): the lever is not on CAN there, so this is the BCM's own CGW1 (0x541)
+    """BlinkerStalkTest 5/6 on classic CAN (user 11-18): the lever is not on CAN there, so this is the BCM's own CGW1 (0x541)
     with CF_Gway_HeadLampHigh (1: byte4 0x01) or CF_Gway_PassingSW (2: byte6 0x08) set for 0.15 s. CGW1 is the
     gateway's status broadcast: forged CGW1 lit the K5 DL3 cluster, never the exterior lamps (11-14). panda sends it
     behind the stock frame inside the kick's CGW1 trial (safety_hyundai.h hyundai_cgw_highbeam_fits)."""
@@ -437,7 +444,7 @@ class CarController(CarControllerBase):
     return [CanData(0x541, bytes(data), 0)]
 
   def highbeam_push(self, CS):
-    """HighBeamTest on CAN-FD (user 11-18): the high-beam lever once like the driver would on 0x3C1, 1 pushed
+    """BlinkerStalkTest 5/6 on CAN-FD (user 11-18): the high-beam lever once like the driver would on 0x3C1, 1 pushed
     (HIGHBEAM_FORWARD, byte2 bit 0x04) or 2 pulled (HIGHBEAM_BACKWARD flash-to-pass, byte3 bit 0x04), released 0.15 s
     later; panda's 0x3C1 shape check allows both. Each frame is the stock frame with that bit and COUNTER_ALT +1 per
     lever change (stalk_blinkers). Possibly ignored: our turn-signal replay on this id reached the bus but not the BCM
@@ -467,8 +474,10 @@ class CarController(CarControllerBase):
       # Floor 0.2 s = one 5 Hz frame per side: switching faster needs a faster same-ID copy than stock (collision risk)
       period = max(20, int(self.bvm_alt_time * 0.1 / DT_CTRL))
       val = 3 if (self.frame // period) % 2 == 0 else 6
+    elif self.bvm_view >= 11:
+      val = self.bvm_view - 10  # 11..16: byte 4 = 1..6 as-is (car: 1..3 left, 4..6 right); was CanfdBvmRaw until 11-19
     else:
-      val = self.bvm_raw if self.bvm_raw else {1: 3, 2: 6, 3: 7}.get(self.bvm_view, 0)
+      val = {1: 3, 2: 6, 3: 7}.get(self.bvm_view, 0)
     if self.frame % 20 != 0:
       return []
     return [CanData(0x400, bytes([0, 0, 0, 0, val, 0, 0, 0]), self.CAN.ECAN)]
@@ -600,6 +609,7 @@ class CarController(CarControllerBase):
     # (DBC "hazards") asks for them instead, any gear, while the test is on. A car with 0x1ea keeps bit 104 (hyundaicanfd).
     hazard = bool(self.hazard_test) and getattr(CS, "adrv_0x1ea", None) is None
     want = self.blinker_test in (1, 2) or kick or remote or spas or hazard
+    spas2_only = 0 if spas else self.spas2_only  # SpasSteerTest: its request is SPAS1 itself
     now, stock, ack = getattr(CS, "can_nanos", 0), getattr(CS, "aprk_stock_nanos", 0), getattr(CS, "aprk_ack_nanos", 0)
 
     def give_back():
@@ -609,8 +619,18 @@ class CarController(CarControllerBase):
 
     if not want:
       ret = give_back()
+    elif self.aprk_state != APRK_IDLE and spas2_only != self.aprk_spas2_only:
+      # the value changed mid-session, or SpasSteerTest joined/left a SPAS2-only one: end it (10 01 if the ECU was
+      # silenced) and start over next frame, so one run is never half one value and half another (review 11-19)
+      ret += [CanData(APRK_ADDR, APRK_DEFAULT_SESSION, bus) for bus in self.aprk_buses]
+      self.aprk_state, self.aprk_buses = APRK_IDLE, ()
+    elif self.aprk_state == APRK_IDLE and spas2_only == 1:
+      # no handshake: aprk_buses stays empty, so no tester present and no 10 01 restore; not acked, so a stock frame
+      # never ends it (KickMode 2 still thins it to 25 Hz)
+      self.aprk_state, self.aprk_frame, self.aprk_nanos, self.aprk_acked = APRK_ACTIVE, self.frame, now, False
+      self.aprk_spas2_only = 1
     elif self.aprk_state == APRK_IDLE:
-      self.aprk_buses = (self.CAN.ECAN, self.CAN.ACAN)
+      self.aprk_buses, self.aprk_spas2_only = (self.CAN.ECAN, self.CAN.ACAN), spas2_only
       ret += [CanData(APRK_ADDR, APRK_EXT_SESSION, bus) for bus in self.aprk_buses]
       self.aprk_state, self.aprk_frame, self.aprk_nanos = APRK_ASK, self.frame, now
     elif self.aprk_state == APRK_ASK:
@@ -652,7 +672,8 @@ class CarController(CarControllerBase):
       left = (pulse and self.blinker_side == 3) or self.blinker_test == 1
       right = (pulse and self.blinker_side == 4) or self.blinker_test == 2
       ret.extend(hyundaicanfd.create_spas_messages(self.packer, self.CAN, self.frame, left, right, getattr(CS, "spas2", None),
-                                                         hazard and hyundaicanfd.hazard_request(self.hazard_test, self.frame)))
+                                                         hazard and hyundaicanfd.hazard_request(self.hazard_test, self.frame),
+                                                         spas1=not spas2_only))
     return ret
 
   def update(self, CC, CS, now_nanos):
@@ -679,7 +700,6 @@ class CarController(CarControllerBase):
       self.steer_angle_test = params.get_int("SteerAngleTest")
       self.spas_steer_test = params.get_int("SpasSteerTest")
       self.hazard_test = params.get_int("CanfdHazardTest")
-      self.highbeam_test = params.get_int("HighBeamTest")
       steerMax = params.get_int("CustomSteerMax")
       steerDeltaUp = params.get_int("CustomSteerDeltaUp")
       steerDeltaDown = params.get_int("CustomSteerDeltaDown")
@@ -713,12 +733,15 @@ class CarController(CarControllerBase):
         self.canfd_stopping.unheld_brake = params.get_int("StopGoLongAssist") >= 1  # stop guard level (stopping.py)
       self.blinker_control = params.get_bool("CanfdBlinkerKick")
       self.blinker_kick_mode = params.get_int("CanfdBlinkerKickMode")
+      self.spas2_only = params.get_int("CanfdBlinkerSpas2Only")
       model_mode = params.get_int("CanfdBlinkerKickModelMode")  # 0 hold, 1 off, 2/3/4: 3/5/7 flashes
       self.blinker_kick_model, self.model_flashes = model_mode != 1, MODEL_FLASH_COUNTS.get(model_mode, 0)
       self.blinker_test = params.get_int("CanfdBlinkerMenuTest")
-      self.blinker_stalk = params.get_int("CanfdBlinkerStalk")
-      self.bvm_view = params.get_int("CanfdBvmView")
-      self.bvm_raw = params.get_int("CanfdBvmRaw")
+      stalk = params.get_int("BlinkerStalkTest")  # 1-4 lever replay (CAN-FD), 5/6 one high beam / flash-to-pass
+      self.blinker_stalk = stalk if stalk in (1, 2, 3, 4) else 0
+      self.highbeam_test = stalk - 4 if stalk in (5, 6) else 0
+      view = params.get_int("CanfdBvmView")  # 1-4 views, 11-16 byte 4 = 1..6; anything else sends nothing
+      self.bvm_view = view if view in (1, 2, 3, 4) or 11 <= view <= 16 else 0
       self.bvm_alt_time = params.get_int("CanfdBvmAltTime")
       self.bvm_reverse = params.get_int("CanfdBvmReverse")
       self.palisade_blinker_test = params.get_int("PalisadeBlinkerTest")
@@ -1017,7 +1040,7 @@ class CarController(CarControllerBase):
       # blind-spot camera view (no turn signal needed); CanfdBvmReverse owns it while in R. Gate kept here: sending
       # whenever bvm_reverse is set would put byte 4 = 0 on the bus at 5 Hz outside R too.
       reverse = self.bvm_reverse in (1, 2) and CS.out.gearShifter == structs.CarState.GearShifter.reverse
-      if reverse or self.bvm_view or self.bvm_raw:
+      if reverse or self.bvm_view:
         can_sends.extend(self.bvm_view_msg(reverse))
 
       # blinkers

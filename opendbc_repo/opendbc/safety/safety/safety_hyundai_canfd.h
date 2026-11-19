@@ -51,7 +51,7 @@ const CanMsg HYUNDAI_CANFD_HDA2_LONG_TX_MSGS[] = {
   {0x7B1, 1, 8},  // same on bus 1, where a second SPAS1 stream runs (SpasSteerTest)
   {0x165, 0, 24}, // SPAS1, sent while APRK is silenced
   {0x16A, 0, 32}, // SPAS2 BLINKER_CONTROL, sent while APRK is silenced
-  {0x3C1, 0, 8},  // BLINKER_STALKS replay (CanfdBlinkerStalk)
+  {0x3C1, 0, 8},  // BLINKER_STALKS replay (BlinkerStalkTest)
   {0x400, 0, 8},  // SVM_STATUS_400 BVM_VIEW spoof (CanfdBvmView)
   {0x12A, 1, 16}, // LFA
   {0x160, 1, 16}, // ADRV_0x160
@@ -106,7 +106,7 @@ const CanMsg HYUNDAI_CANFD_HDA1_TX_MSGS[] = {
   {0x1E0, 0, 16}, // LFAHDA_CLUSTER
   {0x160, 0, 16}, // ADRV_0x160
   {0x7D0, 0, 8},  // tester present for radar ECU disable
-  {0x3C1, 0, 8},  // BLINKER_STALKS replay (CanfdBlinkerStalk)
+  {0x3C1, 0, 8},  // BLINKER_STALKS replay (BlinkerStalkTest)
   {0x400, 0, 8},  // SVM_STATUS_400 BVM_VIEW spoof (CanfdBvmView)
   // joongyu01 11-17 (user): the parking ECU / SPAS ids of the HDA2 list on HDA1 too. Before, HDA1 had only the
   // piggyback copy of SPAS frames (held before this allowlist); KickMode 0 (APRK pause) and 2/3 (direct) never left.
@@ -645,7 +645,7 @@ static bool hyundai_canfd_tx_hook(const CANPacket_t *to_send_const) {
   bool violation = false;
 
   // carrot-wip SPAS path (CANFD_SPAS_BLINKERS) owns these ids only when enabled; otherwise our checks below apply
-  // (CanfdBlinkerKick/MenuTest 0x7B1/0x165/0x16A, CanfdBlinkerStalk 0x3C1)
+  // (CanfdBlinkerKick/MenuTest 0x7B1/0x165/0x16A, BlinkerStalkTest 0x3C1)
   if (hyundai_spas_enabled) {
     // only turn-lever frames belong to the SPAS stalk trial (it refuses any frame without one side); a frame with no
     // blinker bit (HighBeamTest push/pull, 11-18) takes the shape check below like on any other CAN-FD car

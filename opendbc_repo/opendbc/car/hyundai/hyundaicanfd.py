@@ -639,10 +639,11 @@ def create_spas_steer(packer, CAN, mode, angle):
   return [packer.make_can_msg("SPAS1", CAN.ECAN, {"BYTE3": 0x4b, "NEW_SIGNAL_2": mode, "NEW_SIGNAL_1": angle})]
 
 
-def create_spas_messages(packer, CAN, frame, left_blink, right_blink, spas2_template=None, hazard=False):
+def create_spas_messages(packer, CAN, frame, left_blink, right_blink, spas2_template=None, hazard=False, spas1=True):
   ret = []
 
-  ret.append(packer.make_can_msg("SPAS1", CAN.ECAN, {}))
+  if spas1:  # CanfdBlinkerSpas2Only leaves SPAS1 to the parking ECU (or to nobody)
+    ret.append(packer.make_can_msg("SPAS1", CAN.ECAN, {}))
 
   blink = 0
   if hazard:

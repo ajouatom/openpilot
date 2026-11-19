@@ -20,6 +20,7 @@
               "zh": "SPAS (CAN-FD·CCNC, 泊车ECU路径)",
               "params": [
                 "CanfdBlinkerMenuTest",
+                "CanfdBlinkerSpas2Only",
                 "CanfdBlinkerTest",
                 "CanfdAprkDiag"
               ]
@@ -35,11 +36,11 @@
             },
             {
               "id": "LAB_BLINKER_TEST_STALK",
-              "ko": "레버 0x3C1",
-              "en": "Lever 0x3C1",
-              "zh": "拨杆 0x3C1",
+              "ko": "레버·상향등 (0x3C1·CGW1)",
+              "en": "Lever·High Beam (0x3C1·CGW1)",
+              "zh": "拨杆·远光 (0x3C1·CGW1)",
               "params": [
-                "CanfdBlinkerStalk"
+                "BlinkerStalkTest"
               ]
             },
             {
@@ -48,8 +49,7 @@
               "en": "Hazard & High Beam",
               "zh": "危险警示灯·远光灯",
               "params": [
-                "CanfdHazardTest",
-                "HighBeamTest"
+                "CanfdHazardTest"
               ]
             }
           ]
@@ -135,8 +135,7 @@
           "params": [
             "CanfdBvmReverse",
             "CanfdBvmView",
-            "CanfdBvmAltTime",
-            "CanfdBvmRaw"
+            "CanfdBvmAltTime"
           ]
         },
         {
@@ -2411,22 +2410,6 @@
     },
     {
       "group": "Joongyu Lab",
-      "name": "HighBeamTest",
-      "title": "상향등 신호 1회 보내기",
-      "descr": "상향등 신호가 차에 들어가는지 볼 때 고릅니다. 기어·속도와 상관없이 한 번만 보내며, 다시 하려면 0으로 돌렸다가 고릅니다.\n1: 상향등(CAN-FD 0x3C1 레버 밀기, 일반 CAN CGW1 상향등 비트)\n2: 패싱(CAN-FD 0x3C1 레버 당기기, 일반 CAN CGW1 패싱 비트)\n주의: 오토 상향등이 없는 차는 상향등이 바로 켜지거나 번쩍일 수 있습니다.",
-      "egroup": "Joongyu Lab",
-      "etitle": "Send one high-beam signal",
-      "edescr": "Pick to check whether a high-beam signal reaches the car. It sends once at any gear or speed; set 0 and pick again to repeat.\n1: High beam (CAN-FD 0x3C1 lever push, classic CAN CGW1 high-beam bit)\n2: Flash-to-pass (CAN-FD 0x3C1 lever pull, classic CAN CGW1 passing bit)\nCaution: cars without Auto High Beam may switch or flash the high beam at once.",
-      "cgroup": "Joongyu Lab",
-      "ctitle": "发送一次远光信号",
-      "cdescr": "检查远光信号是否传到车辆时选择。不论挡位和车速只发送一次，重复时先设为 0 再选择。\n1: 远光(CAN-FD 0x3C1 推拨杆，普通 CAN CGW1 远光位)\n2: 超车灯(CAN-FD 0x3C1 拉拨杆，普通 CAN CGW1 超车位)\n注意: 没有自动远光的车可能会立即开启或闪烁远光。",
-      "min": 0,
-      "max": 2,
-      "default": 0,
-      "unit": 1
-    },
-    {
-      "group": "Joongyu Lab",
       "name": "Ioniq9ClusterTest",
       "visible_cars": ["HYUNDAI_IONIQ_9"],
       "title": "[아이오닉9 전용 시험] HDP·점선",
@@ -3589,6 +3572,22 @@
     },
     {
       "group": "Joongyu Lab",
+      "name": "CanfdBlinkerSpas2Only",
+      "title": "CANFD(HDA1·HDA2) Kick SPAS2만 송신",
+      "descr": "주차 ECU가 응답하고, 깜빡이 시험 중 크루즈 오류가 뜨는 차(쏘렌토 HEV)용입니다. Kick과 명령 시험에 모두 적용됩니다.\n0: 끔(기본)\n1: 주차 ECU 유지, SPAS2만\n2: 주차 ECU 정지, SPAS2만",
+      "egroup": "Joongyu Lab",
+      "etitle": "CANFD(HDA1·HDA2) Kick SPAS2-only send",
+      "edescr": "For cars whose parking ECU answers and that show a cruise fault during the blinker test (Sorento HEV). Applies to both Kick and the command test.\n0: Off (default)\n1: Keep the parking ECU, SPAS2 only\n2: Silence the parking ECU, SPAS2 only",
+      "cgroup": "Joongyu Lab",
+      "ctitle": "CANFD(HDA1·HDA2) Kick 仅发送 SPAS2",
+      "cdescr": "适用于泊车 ECU 有响应、转向灯测试时出现巡航故障的车(索兰托 HEV)。Kick 与命令测试均适用。\n0: 关(默认)\n1: 保持泊车 ECU,仅 SPAS2\n2: 停止泊车 ECU,仅 SPAS2",
+      "min": 0,
+      "max": 2,
+      "default": 0,
+      "unit": 1
+    },
+    {
+      "group": "Joongyu Lab",
       "name": "PaddleSignalPriority",
       "title": "패들 정지: 신호 우선",
       "descr": "패들시프트모드 2에서 − 패들로 정지할 때, 달리는 앞차가 있어도 빨간불이면 정지선에 섭니다.\n0: 끔(앞차 기준으로 섬)\n1: 켬(기본)",
@@ -3621,17 +3620,17 @@
     },
     {
       "group": "Joongyu Lab",
-      "name": "CanfdBlinkerStalk",
-      "title": "CANFD(0x3C1) 레버 재생",
-      "descr": "깜빡이 레버 신호를 흉내 내는 시험입니다(CAN-FD).\n1/2: 왼쪽/오른쪽 유지 · 3/4: 왼쪽/오른쪽 탭\n주의: 아이오닉5 PE에서는 켜지지 않았습니다. 주행 중에도 동작합니다.",
+      "name": "BlinkerStalkTest",
+      "title": "레버 재생·상향등 (CAN-FD 0x3C1 · CAN CGW1)",
+      "descr": "깜빡이·상향등 레버 신호를 흉내 내는 시험입니다.\n1/2: 왼쪽/오른쪽 유지 · 3/4: 왼쪽/오른쪽 탭 (CAN-FD 0x3C1, 주행 중에도 동작)\n5: 상향등 1회 · 6: 패싱 1회 (CAN-FD 0x3C1 밀기/당기기, 일반 CAN CGW1 비트). 값을 바꿀 때마다 한 번 보냅니다.\n주의: 1~4는 아이오닉5 PE에서 켜지지 않았습니다. 5는 오토 상향등이 없는 차에서 상향등을 바로 켤 수 있습니다.",
       "egroup": "Joongyu Lab",
-      "etitle": "CANFD(0x3C1) Lever replay",
-      "edescr": "Test that imitates the blinker lever signal (CAN-FD).\n1/2: Left/right hold · 3/4: Left/right tap\nCaution: it did not light on the IONIQ 5 PE. It also runs while driving.",
+      "etitle": "Lever replay·high beam (CAN-FD 0x3C1 · CAN CGW1)",
+      "edescr": "Test that imitates the blinker and high-beam lever signals.\n1/2: Left/right hold · 3/4: Left/right tap (CAN-FD 0x3C1, also while driving)\n5: One high beam · 6: One flash-to-pass (CAN-FD 0x3C1 push/pull, classic CAN CGW1 bits). Sends once each time the value changes.\nCaution: 1–4 did not light on the IONIQ 5 PE. 5 can switch the high beam on at once on cars without Auto High Beam.",
       "cgroup": "Joongyu Lab",
-      "ctitle": "CANFD(0x3C1) 拨杆回放",
-      "cdescr": "模拟转向灯拨杆信号的测试(CAN-FD)。\n1/2: 左/右保持 · 3/4: 左/右轻触\n注意: 在 IONIQ 5 PE 上未点亮。行驶中也会工作。",
+      "ctitle": "拨杆回放·远光 (CAN-FD 0x3C1 · CAN CGW1)",
+      "cdescr": "模拟转向灯和远光拨杆信号的测试。\n1/2: 左/右保持 · 3/4: 左/右轻触 (CAN-FD 0x3C1，行驶中也工作)\n5: 远光一次 · 6: 超车灯一次 (CAN-FD 0x3C1 推/拉，普通 CAN CGW1 位)。每次改变数值发送一次。\n注意: 1~4 在 IONIQ 5 PE 上未点亮。没有自动远光的车选 5 可能立即开启远光。",
       "min": 0,
-      "max": 4,
+      "max": 6,
       "default": 0,
       "unit": 1
     },
@@ -3639,15 +3638,15 @@
       "group": "Joongyu Lab",
       "name": "CanfdBvmView",
       "title": "계기판 사각지대 카메라 보기",
-      "descr": "0: 끔, 1: 왼쪽, 2: 오른쪽, 3: 양쪽(7 전송, 차에서 반응 없음), 4: 왼쪽·오른쪽 번갈아(간격은 '사각지대 카메라 교대 간격', 기본 1초·최소 0.2초). 깜빡이를 켜지 않고 계기판 사각지대 카메라 화면만 띄웁니다. 뷰 상태 메시지(0x400 byte4)를 순정과 같은 5Hz로 대신 보냅니다. 화면 표시 전용이며 조향·제동과 무관합니다. 계기판 카메라 창은 하나뿐이라 양쪽 동시 표시는 안 됩니다. 재부팅하면 0.",
+      "descr": "0: 끔, 1: 왼쪽, 2: 오른쪽, 3: 양쪽(7 전송, 차에서 반응 없음), 4: 왼쪽·오른쪽 번갈아(간격은 '사각지대 카메라 교대 간격', 기본 1초·최소 0.2초), 11~16: 0x400 byte4에 1~6을 그대로(차는 좌 1~3, 우 4~6). 깜빡이를 켜지 않고 계기판 사각지대 카메라 화면만 띄웁니다. 뷰 상태 메시지(0x400 byte4)를 순정과 같은 5Hz로 대신 보냅니다. 화면 표시 전용이며 조향·제동과 무관합니다. 계기판 카메라 창은 하나뿐이라 양쪽 동시 표시는 안 됩니다. 재부팅하면 0.",
       "egroup": "Joongyu Lab",
       "etitle": "Cluster Blind-Spot Camera View",
-      "edescr": "0: Off, 1: Left, 2: Right, 3: Both (sends 7, no reaction on the car), 4: Left and right alternating (interval: Blind-Spot Camera Alternate Interval, default 1 s). Shows the cluster blind-spot camera without turning the blinker on by sending the view status message (0x400 byte 4) at the stock 5 Hz. Display only, unrelated to steering or braking. The cluster has a single camera window, so both sides cannot be shown at once. Resets to 0 on reboot.",
+      "edescr": "0: Off, 1: Left, 2: Right, 3: Both (sends 7, no reaction on the car), 4: Left and right alternating (interval: Blind-Spot Camera Alternate Interval, default 1 s), 11..16: byte 4 of 0x400 = 1..6 as-is (the car uses 1..3 left, 4..6 right). Shows the cluster blind-spot camera without turning the blinker on by sending the view status message (0x400 byte 4) at the stock 5 Hz. Display only, unrelated to steering or braking. The cluster has a single camera window, so both sides cannot be shown at once. Resets to 0 on reboot.",
       "cgroup": "Joongyu Lab",
       "ctitle": "仪表盘盲区摄像头画面",
-      "cdescr": "0: 关闭, 1: 左, 2: 右, 3: 两侧(发送 7，实车无反应), 4: 左右交替(间隔见「盲区摄像头交替间隔」，默认 1 秒)。不打开转向灯，只显示仪表盘盲区摄像头画面，方法是以原厂同样的 5Hz 代发画面状态消息(0x400 第4字节)。仅用于显示，与转向、制动无关。仪表盘只有一个摄像头窗口，无法同时显示两侧。重启后恢复为 0。",
+      "cdescr": "0: 关闭, 1: 左, 2: 右, 3: 两侧(发送 7，实车无反应), 4: 左右交替(间隔见「盲区摄像头交替间隔」，默认 1 秒)，11~16: 0x400 第4字节原样写入 1~6(车辆左 1~3、右 4~6)。不打开转向灯，只显示仪表盘盲区摄像头画面，方法是以原厂同样的 5Hz 代发画面状态消息(0x400 第4字节)。仅用于显示，与转向、制动无关。仪表盘只有一个摄像头窗口，无法同时显示两侧。重启后恢复为 0。",
       "min": 0,
-      "max": 4,
+      "max": 16,
       "default": 0,
       "unit": 1
     },
@@ -3687,22 +3686,6 @@
         "en": ["Off", "Left", "Right"],
         "zh": ["关闭", "左", "右"]
       }
-    },
-    {
-      "group": "Joongyu Lab",
-      "name": "CanfdBvmRaw",
-      "title": "사각지대 카메라 뷰 값 직접 지정",
-      "descr": "0: 끔, 1~255: 0x400 byte4 에 그 값을 그대로 실어 보냅니다. 차량이 쓰는 값은 좌 1~3, 우 4~6 이고 7 이상은 관측된 적이 없습니다. 위의 '계기판 사각지대 카메라 보기' 보다 우선합니다. 화면 표시 전용. 재부팅하면 0.",
-      "egroup": "Joongyu Lab",
-      "etitle": "Blind-Spot Camera Raw View Id",
-      "edescr": "0: Off, 1..255: send that value as byte 4 of 0x400. The car uses 1..3 for left and 4..6 for right; nothing above 6 has ever been observed. Takes priority over the camera view entry above. Display only. Resets to 0 on reboot.",
-      "cgroup": "Joongyu Lab",
-      "ctitle": "盲区摄像头画面值直接指定",
-      "cdescr": "0: 关闭, 1~255: 将该值原样写入 0x400 第4字节。车辆实际使用 1~3(左)、4~6(右)，从未观测到 7 以上。优先于上方的摄像头画面选项。仅用于显示。重启后恢复为 0.",
-      "min": 0,
-      "max": 255,
-      "default": 0,
-      "unit": 1
     },
     {
       "group": "시작",

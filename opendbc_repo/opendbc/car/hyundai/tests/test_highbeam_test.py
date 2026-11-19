@@ -12,7 +12,7 @@ CGW1 = bytes([0x01, 0x00, 0x00, 0x80, 0x00, 0x00, 0x00, 0x00])  # classic stock 
 
 def make_cc(test=0):
   cc = CarController.__new__(CarController)  # only the high-beam state, no CP/packer setup
-  cc.__dict__.update(highbeam_frame=None, highbeam_kind=1, highbeam_test=test, highbeam_test_sent=False, frame=0,
+  cc.__dict__.update(highbeam_frame=None, highbeam_kind=1, highbeam_test=test, highbeam_test_sent=0, frame=0,
                      cgw_last_tx=-1000, cgw_trial=0, CAN=SimpleNamespace(ECAN=0), packer=CANPacker('hyundai_canfd_generated'))
   return cc
 
@@ -45,14 +45,15 @@ def test_canfd_push_once_then_rearm_at_zero():
     assert dat[0] == stalk_checksum(dat[1:])
     # panda's 0x3C1 shape check (safety_hyundai_canfd.h): byte2 within 0x34, byte3 within 0x44, byte4 stock forms, tail 0
     assert dat[2] & ~0x34 == 0 and dat[3] & ~0x44 == 0 and dat[4] in (0x00, 0x01, 0x10, 0x41) and dat[5:] == bytes(3)
-  assert drive(cc, 100) == []                              # value stays 1: no repeat
-  cc.highbeam_test = 2                                     # straight from 1 to 2: still nothing until 0
-  assert drive(cc, 50) == []
-  cc.highbeam_test = 0
-  assert drive(cc, 10) == []
-  cc.highbeam_test = 2                                     # flash-to-pass: HIGHBEAM_BACKWARD (byte3 bit2)
+  assert drive(cc, 100) == []                              # value stays (BlinkerStalkTest 5): no repeat
+  cc.highbeam_test = 2                                     # 5 -> 6 directly: flash-to-pass, HIGHBEAM_BACKWARD (byte3 bit2)
   (_, (_, press, _)), (_, (_, release, _)) = drive(cc, 100)
   assert press[2] == 0x30 and press[3] == 0x04 and release[3] == 0x00
+  assert drive(cc, 100) == []
+  cc.highbeam_test = 0                                     # 0 in between re-arms the same value
+  assert drive(cc, 10) == []
+  cc.highbeam_test = 2
+  assert len(drive(cc, 100)) == 2
 
 
 def test_off_or_pending_until_the_stalk_message_is_seen():

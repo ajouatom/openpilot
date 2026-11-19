@@ -42,8 +42,8 @@ class Ecu:
       self.stock = now
 
 
-def make_cc(control=True, test=0, spas=0, ecu=None, mode=1, model=True):
-  cc = SimpleNamespace(blinker_control=control, blinker_test=test, blinker_kick_mode=mode, aprk_state=0, aprk_frame=0, aprk_nanos=0, aprk_acked=False,
+def make_cc(control=True, test=0, spas=0, ecu=None, mode=1, model=True, spas2_only=0):
+  cc = SimpleNamespace(blinker_control=control, blinker_test=test, blinker_kick_mode=mode, spas2_only=spas2_only, aprk_spas2_only=0, aprk_state=0, aprk_frame=0, aprk_nanos=0, aprk_acked=False,
                          lane_crossing=Crossing(), blinker_side=0, blinker_pulse_end=0, frame=0, yellow_until=[0, 0],
                          blinker_kick_model=model, lane_change_prev="off", model_pulse=False, blinker_pulse_start=0, model_hold={}, model_flashes=0, cgw_kick=False, cgw_trial=0, cgw_last_tx=-carcontroller.CGW_REARM_FRAMES,
                          remote_blinker=0, remote_pulse=False, hazard_test=False,
@@ -274,6 +274,70 @@ def test_spas_steer_test_parked_only():
   assert uds(run(cc, 1, out(held=True))) == [(DEFAULT, 0), (DEFAULT, 1)]
   assert run(cc, 1, out(gear=D)) == []
 
+
+
+def spas1(sent):
+  return [m for m in sent if m[0] == 0x165]
+
+
+def test_spas2_only_1_leaves_the_parking_ecu_on():
+  # CanfdBlinkerSpas2Only 1 (Sorento HEV 11-19, 02_logs s70): no 0x7B1 at all, the ECU keeps its own SPAS1, ours is SPAS2 only
+  cc = make_cc(control=False, test=1, spas2_only=1)
+  sent = step(cc, 20, P, 0)
+  assert uds(sent) == [] and spas1(sent) == [] and not cc.ecu.quiet and cc.ecu.stock > 0
+  assert spas2(cc, sent) == [3] * 19  # none on the switch frame; the stock stream does not end it
+  cc.blinker_test = 0
+  assert step(cc, 1, P, 0) == [] and cc.aprk_state == carcontroller.APRK_IDLE  # nothing to give back
+  # a driving kick: the whole pulse, no handshake wait
+  cc = make_cc(spas2_only=1)
+  sent = step(cc, carcontroller.BLINKER_PULSE_FRAMES + 10, D, 60, cross=3)
+  assert uds(sent) == [] and spas1(sent) == [] and set(spas2(cc, sent)) == {3}
+  assert abs(len(spas2(cc, sent)) - (carcontroller.BLINKER_PULSE_FRAMES - 1)) <= 1
+
+
+def test_spas2_only_2_silences_the_ecu_and_sends_spas2_only():
+  cc = make_cc(control=False, test=2, spas2_only=2)
+  sent = step(cc, 30, P, 0)
+  assert uds(sent)[:4] == [(EXT, 0), (EXT, 1), (QUIET, 0), (QUIET, 1)] and cc.ecu.quiet
+  assert spas1(sent) == [] and set(spas2(cc, sent)) == {4}
+  cc.blinker_test = 0
+  assert uds(step(cc, 1, P, 0)) == [(DEFAULT, 0), (DEFAULT, 1)]
+  # 0 (default): SPAS1 and SPAS2 together, as before
+  cc = make_cc(control=False, test=2)
+  sent = step(cc, 30, P, 0)
+  assert len(spas1(sent)) == len(spas2(cc, sent)) > 0
+
+
+def test_spas2_only_leaves_spas_steer_test_alone():
+  cc = make_cc(control=False, spas=90, spas2_only=1)
+  out = lambda: SimpleNamespace(out=SimpleNamespace(
+    gearShifter=P, standstill=True, steeringPressed=False, steeringAngleDeg=0., leftBlinker=False,
+    rightBlinker=False, steeringTorque=0, leftLaneLine=0, rightLaneLine=0))
+  sent = run(cc, 40, out)
+  assert uds(sent)[:4] == [(EXT, 0), (EXT, 1), (QUIET, 0), (QUIET, 1)] and spas1(sent) and spas2(cc, sent) == []
+  # joining a running SPAS2-only session (MenuTest, value 1): that session ends and the steering test takes the handshake
+  cc = make_cc(control=False, test=1, spas2_only=1)
+  assert uds(step(cc, 30, P, 0)) == []
+  cc.spas_steer_test = 90
+  sent = run(cc, 40, out)
+  first = next(i for i, m in enumerate(sent) if m[0] == 0x165)
+  assert uds(sent[:first])[:4] == [(EXT, 0), (EXT, 1), (QUIET, 0), (QUIET, 1)] and cc.ecu.quiet
+
+
+def test_spas2_only_change_mid_session_starts_over():
+  # 1 -> 2: the ECU gets silenced; 2 -> 1: given back once (10 01), then no 0x7B1; 1 -> 0: handshake before any SPAS1
+  cc = make_cc(control=False, test=1, spas2_only=1)
+  step(cc, 30, P, 0)
+  cc.spas2_only = 2
+  sent = step(cc, 30, P, 0)
+  assert uds(sent)[:4] == [(EXT, 0), (EXT, 1), (QUIET, 0), (QUIET, 1)] and cc.ecu.quiet and spas1(sent) == []
+  cc.spas2_only = 1
+  sent = step(cc, 30, P, 0)
+  assert uds(sent) == [(DEFAULT, 0), (DEFAULT, 1)] and not cc.ecu.quiet and spas1(sent) == [] and spas2(cc, sent)
+  cc.spas2_only = 0
+  sent = step(cc, 30, P, 0)
+  first = next(i for i, m in enumerate(sent) if m[0] == 0x165)
+  assert uds(sent[:first])[:4] == [(EXT, 0), (EXT, 1), (QUIET, 0), (QUIET, 1)]
 
 def test_carstate_sees_stock_frames_and_replies_without_touching_can_validity():
   from opendbc.can import CANParser

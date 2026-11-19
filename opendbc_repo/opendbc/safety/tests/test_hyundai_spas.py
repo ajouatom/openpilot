@@ -356,7 +356,7 @@ def test_stalk_replay_native_guards(flags, fault):
 def test_stalk_requires_opt_in_and_parked_freshness():
   from opendbc.car.hyundai.stalk_trial import replay
   packet = replay(bytes.fromhex('12b0000000000000'), 'right').dat
-  # joongyu01 fork: flags 0 leaves 0x3C1 to CanfdBlinkerStalk's shape check in safety_hyundai_canfd.h
+  # joongyu01 fork: flags 0 leaves 0x3C1 to BlinkerStalkTest's shape check in safety_hyundai_canfd.h
   d = Device(4096)
   assert not d.tx(0x3C1, packet)
 
@@ -432,7 +432,7 @@ def test_spas_steer_request_only_while_stopped():
   assert not Device(16 | 4, 1).tx(APRK, EXTENDED, 1)
 
 
-# HighBeamTest (11-18): a 0x3C1 frame with no blinker bit - the lever pushed (byte2 0x04) or pulled (byte3 0x04) -
+# BlinkerStalkTest 5/6 (HighBeamTest until 11-19, 11-18): a 0x3C1 frame with no blinker bit - the lever pushed (byte2 0x04) or pulled (byte3 0x04) -
 # takes the plain shape check whether the SPAS stalk path is on or off, in any state
 @pytest.mark.parametrize('flags', [0, 4096, 4253])
 def test_highbeam_lever_frames_take_the_shape_check(flags):
