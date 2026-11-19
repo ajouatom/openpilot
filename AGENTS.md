@@ -1,5 +1,25 @@
 # Repository memory
 
+- 2026-11-19: Owner requests official-condition Cheddar comparison and runtime
+  integration, permitting CD210 replacement. Same offroad TICI, core7/FIFO54,
+  performance governors/1689600kHz and GPU IRQ7: 500 synthetic full-image calls
+  CD21021.62ms/p9521.96/max22.19, official Cheddar31.12/31.33/31.63,
+  integrated worker32.59/32.80/32.91; all zero over50ms. Worker confirms affinity
+  and priority. Reset first output and two150-frame changing-image/desire runs
+  match exactly. Power/IRQ restoration read back after timing tests. Isolate
+  exact ec91b74 runtime in the internal worker/compiler; resident state aliases,
+  compiled transfers and acknowledged reset preserve fallback/warmup semantics.
+  Serialize warp JITs independently to prevent a shared-pickle HCQ parameter
+  failure. Native CPU:LLVM compiles actual ONNX;40 alias/separate-state frames
+  agree, production worker passes both camera sizes and reset. Replace default
+  CD210 ONNX with Cheddar; DM/legacy external and external runtime pins remain.
+  CD210-specific optional signal observer stays unavailable for Cheddar.
+  No road-load/thermal or physical-driving validation, installed vehicle changes,
+  Params/control writes. Device disconnected during a later fresh QCOM compile;
+  completion/raw-result retrieval/scratch cleanup await reconnection. Full build
+  and broader CI follow publication. See docs/cheddar_model_review_20261118.md
+  and private scratch2026-11-19-cheddar-integration.
+
 - 2026-11-18: Cheddar GPU follow-up isolates the first QCOM failure to constant
   Gather history expansion: 225 individual selections produce a388368-byte
   shader, requiring3035 load units in a10-bit field. Command uint32 overflow
