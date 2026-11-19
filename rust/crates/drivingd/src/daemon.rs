@@ -62,7 +62,35 @@ pub fn run(
         .client
         .layout()
         .ok_or(Error::Contract("connected camera has no layout"))?;
-    let mut runtime = process::model(&catalog, &layout, logger)?;
+    // InternalDrivingModel 1: Cheddar, shipped next to CD210's catalog. Any
+    // failure to load it keeps driving on CD210.
+    let cheddar = if parameters::integer(&params, "InternalDrivingModel").unwrap_or(0) == 1 {
+        let path = options.catalog.with_file_name("driving-models-cheddar");
+        Catalog::load(&path)
+            .map_err(|error| {
+                eprintln!("Cheddar catalog unavailable, using CD210: {error}");
+            })
+            .ok()
+    } else {
+        None
+    };
+    let mut runtime = match cheddar
+        .as_ref()
+        .map(|cheddar| process::model(cheddar, &layout, logger))
+    {
+        Some(Ok(runtime)) => runtime,
+        Some(Err(error)) => {
+            logger.emit(
+                log_site!(),
+                Record::text(
+                    Level::Error,
+                    format!("Cheddar failed to load, using CD210: {error}"),
+                ),
+            )?;
+            process::model(&catalog, &layout, logger)?
+        }
+        None => process::model(&catalog, &layout, logger)?,
+    };
     let camera = [
         u32::try_from(layout.width).map_err(|_| Error::Contract("camera width"))?,
         u32::try_from(layout.height).map_err(|_| Error::Contract("camera height"))?,

@@ -143,6 +143,21 @@ if [[ -L rust/bin || ! -f $assets_stamp || $(<"$assets_stamp") != "$assets_id" ]
   install_update_helper
   start_ui
 fi
+# The Cheddar internal model ships as its own bundle so adding it did not
+# change the large runtime bundle. Optional: CD210 runs if it is missing.
+cheddar_id=$(bundle_id cheddar)
+cheddar_stamp=rust/bin/.cheddar
+if grep -q ' cheddar\.tar\.zst\.' device-inputs/MANIFEST \
+  && [[ ! -f $cheddar_stamp || $(<"$cheddar_stamp") != "$cheddar_id" ]]; then
+  status 'Preparing Cheddar model'
+  rm -rf rust/bin/driving-models-cheddar
+  if unpack cheddar .; then
+    echo "$cheddar_id" > "$cheddar_stamp"
+  else
+    rm -rf rust/bin/driving-models-cheddar
+    status 'Cheddar model unavailable; CD210 stays the internal model'
+  fi
+fi
 
 export PATH="$sdk/rust/bin:$sdk/capnp/usr/bin:$PATH"
 export CARGO_HOME=$store/cargo-home CARGO_TARGET_DIR=$store/target CARGO_INCREMENTAL=0

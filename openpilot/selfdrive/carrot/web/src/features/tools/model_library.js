@@ -1,6 +1,8 @@
 ﻿"use strict";
 const EN = {
-  title: "External driving model", internal: "Internal model: CD210 (fixed)",
+  title: "External driving model", internal: "Internal model",
+  internal_help: "The comma's own driving model, used when no eGPU or Jetlink host runs the model. Applies from the next ignition.",
+  internal_saved: "Saved. The internal model changes at the next ignition.",
   help: "One choice for eGPU and Jetlink hosts. eGPU applies it after the next reboot. A Jetlink App (phone, tablet, Mac) or Jetson switches to it while parked, at its next connection; if the host lacks the model, the comma downloads it and sends it over the cable. A model chosen later in the App wins over this one.",
   change: "Change model", close: "Close", pending_apply: "Apply after restart",
   current: "eGPU this boot", next: "Model", saved: "Saved. eGPU: reboot to apply. Jetlink host: switches while parked.",
@@ -15,7 +17,7 @@ async function action(kind, model) {
   try {
     const response = await postJson("/api/egpu/model/library", { action: kind, model });
     renderLibrary(response.library, true);
-    if (kind === "select" && typeof showAppToast === "function") showAppToast(t("saved"));
+    if (typeof showAppToast === "function") showAppToast(t(kind === "internal" ? "internal_saved" : "saved"));
     globalThis.CarrotEgpuModel?.refresh();
     return true;
   } catch (error) {
@@ -50,7 +52,7 @@ export function renderLibrary(library, force = false, host = null) {
   const dialog = document.getElementById("modelLibraryDialog");
   const editor = document.getElementById("modelLibraryEditor");
   // Keep the submitted choice stable until its response arrives.
-  if (!force && editor.querySelector("select")?.disabled) return;
+  if (!force && (editor.dataset.busy || editor.querySelector("select")?.disabled)) return;
   const effective = library.models.find(m => m.id === library.effective);
   const selected = library.models.find(m => m.id === library.selected);
   const effectiveName = effective?.name || library.effective_name || library.effective;
@@ -71,7 +73,9 @@ export function renderLibrary(library, force = false, host = null) {
   }
   root.querySelector("strong").textContent = selected?.name || library.selected;
   const card = document.getElementById("egpuModelCard");
-  const state = card && !card.hidden ? document.getElementById("egpuModelState").textContent : t("internal");
+  const internal = library.internal_model;
+  const internalName = internal?.models?.find(m => m.id === internal.selected)?.name || "CD210";
+  const state = card && !card.hidden ? document.getElementById("egpuModelState").textContent : `${t("internal")}: ${internalName}`;
   const amount = card && !card.hidden ? document.getElementById("egpuModelAmount").textContent : "";
   root.querySelector("p").textContent = library.reboot_required
     ? `${t("pending_apply")} · ${t("current")} ${effectiveName} · ${state}`
@@ -81,11 +85,35 @@ export function renderLibrary(library, force = false, host = null) {
   document.getElementById("modelLibraryTitle").textContent = t("title");
   document.getElementById("btnCloseModelLibrary").textContent = t("close");
   const signature = JSON.stringify([library.models, library.selected, library.effective,
-    library.effective_name, library.effective_noo, library.reboot_required, library.app_pick,
+    library.effective_name, library.effective_noo, library.reboot_required, library.app_pick, internal,
     host?.sha256, host?.preparation, t("title")]);
   if (!force && editor.dataset.signature === signature) return;
   editor.dataset.signature = signature;
-  editor.replaceChildren(text("p", t("internal")), text("p", t("help")));
+  editor.replaceChildren();
+  if (internal?.models?.length) {
+    const internalLabel = text("label", t("internal"));
+    const internalSelect = document.createElement("select");
+    internalSelect.setAttribute("aria-label", t("internal"));
+    for (const model of internal.models) {
+      const option = text("option", model.name);
+      option.value = model.id;
+      internalSelect.append(option);
+    }
+    internalSelect.value = internal.selected;
+    internalLabel.append(internalSelect);
+    internalSelect.addEventListener("change", async () => {
+      internalSelect.disabled = true;
+      editor.dataset.busy = "1";
+      const saved = await action("internal", internalSelect.value);
+      delete editor.dataset.busy;
+      if (!saved) renderLibrary(library, true, host);
+      internalSelect.disabled = false;
+    });
+    editor.append(internalLabel, text("p", t("internal_help")));
+  } else {
+    editor.append(text("p", `${t("internal")}: ${internalName}`));
+  }
+  editor.append(text("h3", t("title")), text("p", t("help")));
   editor.append(text("p", `${t("current")} ${effectiveName} · ${t((effective?.noo ?? library.effective_noo) ? "noo" : "no_noo")}`));
   const label = text("label", t("next"));
   const select = document.createElement("select");
@@ -99,7 +127,10 @@ export function renderLibrary(library, force = false, host = null) {
   label.append(select);
   select.addEventListener("change", async () => {
     select.disabled = true;
-    if (!await action("select", select.value)) renderLibrary(library, true, host);
+    editor.dataset.busy = "1";
+    const saved = await action("select", select.value);
+    delete editor.dataset.busy;
+    if (!saved) renderLibrary(library, true, host);
     select.disabled = false;
   });
   editor.append(label);

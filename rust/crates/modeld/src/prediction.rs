@@ -18,6 +18,19 @@ pub struct DrivingPrediction {
     pub direct_action: Option<[f32; 2]>,
 }
 
+/// Lateral acceleration and acceleration, the first two action values.
+/// Cheddar returns four; carrot's modeld reads `action[0,0]` and `action[0,1]`.
+fn direct_action(values: &[f32]) -> Result<[f32; 2], ParseError> {
+    match values {
+        [lateral, acceleration, ..] => Ok([*lateral, *acceleration]),
+        _ => Err(ParseError::Width {
+            name: "action".to_owned(),
+            actual: values.len(),
+            expected: 2,
+        }),
+    }
+}
+
 impl DrivingPrediction {
     pub fn parse(raw: &RawOutputs<'_>) -> Result<Self, ParseError> {
         let plan = raw.normal::<495>("plan")?;
@@ -42,7 +55,7 @@ impl DrivingPrediction {
             desire_state,
             desire_prediction,
             direct_action: if raw.has("action") {
-                Some(raw.array("action")?)
+                Some(direct_action(raw.get("action")?)?)
             } else {
                 None
             },
@@ -93,5 +106,53 @@ impl DriverPrediction {
             right: DriverData::parse(raw, "rhd")?,
             wheel_on_right: sigmoid(raw.array::<1>("wheel_on_right")?[0]),
         })
+    }
+}
+
+#[cfg(test)]
+mod cheddar_tests {
+    use super::*;
+    use std::collections::BTreeMap;
+
+    /// Cheddar's output_slices metadata (outputs [1, 2580]).
+    fn cheddar_slices() -> BTreeMap<String, [usize; 2]> {
+        [
+            ("lane_lines", [0, 528]),
+            ("lane_lines_prob", [528, 536]),
+            ("road_edges", [536, 800]),
+            ("meta", [800, 855]),
+            ("desire_pred", [855, 887]),
+            ("pose", [887, 899]),
+            ("wide_from_device_euler", [899, 905]),
+            ("road_transform", [905, 917]),
+            ("plan", [917, 1907]),
+            ("lead", [1907, 2051]),
+            ("lead_prob", [2051, 2054]),
+            ("desire_state", [2054, 2062]),
+            ("action", [2062, 2066]),
+            ("hidden_state", [2066, 2578]),
+            ("pad", [2578, 2580]),
+        ]
+        .into_iter()
+        .map(|(name, range)| (name.to_owned(), range))
+        .collect()
+    }
+
+    #[test]
+    fn cheddar_layout_parses_and_uses_the_first_two_actions() {
+        let slices = cheddar_slices();
+        let mut values = vec![0.0_f32; 2580];
+        values[2062..2066].copy_from_slice(&[0.25, -0.5, 9.0, 9.0]);
+        values[917 + 15] = 3.0; // plan row 1, x position
+        let raw = RawOutputs::new(&values, &slices).unwrap();
+        let prediction = DrivingPrediction::parse(&raw).unwrap();
+        assert_eq!(prediction.direct_action, Some([0.25, -0.5]));
+        assert_eq!(prediction.plan[1][0], 3.0);
+    }
+
+    #[test]
+    fn a_single_action_value_is_rejected() {
+        assert!(direct_action(&[1.0]).is_err());
+        assert_eq!(direct_action(&[1.0, 2.0]).unwrap(), [1.0, 2.0]);
     }
 }

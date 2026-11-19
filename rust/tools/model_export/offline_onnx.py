@@ -17,6 +17,8 @@ STATIC_OPERATORS: Final = frozenset({
     "Identity", "Cast", "Concat", "Sub", "Div", "Conv", "Gelu", "Mul", "Add", "ReduceMean", "Relu", "Sigmoid",
     "Reshape", "Gemm", "ReduceL2", "Clip", "Expand", "Slice", "Unsqueeze", "Transpose", "GatherND", "MatMul",
     "LayerNormalization", "Squeeze", "Where", "Softmax", "Gather", "MaxPool", "Resize", "GlobalAveragePool", "Flatten", "Constant",
+    # Cheddar: constant split sizes and reduction axes, so shapes stay static.
+    "Split", "ReduceMax",
 })
 
 

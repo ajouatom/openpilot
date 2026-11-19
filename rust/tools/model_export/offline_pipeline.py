@@ -3,9 +3,11 @@ from __future__ import annotations
 from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from dataclasses import dataclass
+import math
 from pathlib import Path
 from typing import Literal, assert_never
 
+import numpy as np
 from tinygrad import Context, Tensor, dtypes
 from tinygrad.engine.realize import capturing
 from tinygrad.uop.ops import Ops, UOp
@@ -121,6 +123,63 @@ def driving_pipeline(loaded: OfflineOnnx, spec: OfflinePipelineSpec, nv12: NV12F
     return OfflinePipeline(spec, OfflineModel(bindings, tuple(initialized)), Metadata.from_original(raw), (prepare, policy_stage))
 
 
+RECURRENT_STATES = ("state_img_q", "state_desire_q", "state_feat_q")
+# desire pulse (8), traffic convention (2), action times (2): the first twelve
+# values of CD210's packed inputs, so drivingd's PolicyInputs layout is shared.
+RECURRENT_PACKED = 12
+
+
+def recurrent_driving_pipeline(loaded: OfflineOnnx, spec: OfflinePipelineSpec, nv12: NV12Frame,
+                               raw: dict) -> OfflinePipeline:
+    """Cheddar: image, desire and feature history live inside the ONNX graph.
+
+    The three state tensors stay resident on the GPU between frames. The policy
+    stage first computes the prediction and every next state from the old
+    state, then copies the next states over it, so no kernel reads a state
+    buffer that another kernel of the same frame has already overwritten.
+    Camera frames are bound in place exactly as for CD210 (no NV12 copy).
+    """
+    shapes = raw["input_shapes"]
+    model_w, model_h = MEDMODEL_INPUT_SIZE
+    if tuple(shapes["new_img"]) != (2, 6, model_h // 2, model_w // 2) or tuple(shapes["desire"]) != (8,):
+        raise ExportError("unsupported recurrent driving input contract")
+    names = {"state_img_q": dtypes.uint8, "state_desire_q": dtypes.float32, "state_feat_q": dtypes.float32}
+    initialized = list(loaded.initialized)
+    states = {}
+    for name, dtype in names.items():
+        states[name] = Tensor.empty(*shapes[name], dtype=dtype, device="QCOM")
+        initialized.append(InitializedBuffer(states[name].uop.base, bytes(math.prod(shapes[name]) * dtype.itemsize)))
+    with Context(DEV="CPU:LLVM"):
+        host = {name: Tensor(np.zeros(shape, dtype=np.float32), device="NPY").realize()
+                for name, shape in (("tfm", (3, 3)), ("big_tfm", (3, 3)), ("packed_npy_inputs", (RECURRENT_PACKED,)))}
+    frame = Tensor.empty(nv12.size, dtype=dtypes.uint8, device="QCOM")
+    big_frame = Tensor.empty(nv12.size, dtype=dtypes.uint8, device="QCOM")
+    frame_skip = ModelConstants.MODEL_RUN_FREQ // ModelConstants.MODEL_CONTEXT_FREQ
+    warp = make_warp(nv12, *MEDMODEL_INPUT_SIZE, frame_skip)
+    prepare, (warped,) = capture_stage("prepare", lambda: (warp(host["tfm"], host["big_tfm"], frame, big_frame),))
+
+    def policy() -> tuple[Tensor, ...]:
+        packed = host["packed_npy_inputs"].to("QCOM")
+        image = warped.to("QCOM")
+        Tensor.realize(packed, image)
+        outputs = loaded.runner({"new_img": image, "desire": packed[0:8], "traffic_convention": packed[8:10].reshape(1, 2),
+                                 "action_t": packed[10:12].reshape(1, 2), **states})
+        model = outputs["outputs"].cast(dtypes.float32).contiguous()
+        following = [outputs[f"next_{name}"].contiguous() for name in RECURRENT_STATES]
+        Tensor.realize(model, *following)
+        Tensor.realize(*(states[name].assign(value) for name, value in zip(RECURRENT_STATES, following, strict=True)))
+        return (model, *(states[name] for name in RECURRENT_STATES))
+
+    policy_stage, (output, *_) = capture_stage("policy", policy)
+    bindings = Bindings({"tfm": host["tfm"], "big_tfm": host["big_tfm"], "frame": frame, "big_frame": big_frame,
+                         "packed_npy_inputs": host["packed_npy_inputs"], **states},
+                        {"model": output, "warped": warped, **states})
+    # Only the flat prediction is a model output for drivingd; next states are
+    # the resident state buffers above.
+    metadata = Metadata.from_original({**raw, "output_shapes": {"outputs": raw["output_shapes"]["outputs"]}})
+    return OfflinePipeline(spec, OfflineModel(bindings, tuple(initialized)), metadata, (prepare, policy_stage))
+
+
 @host_build
 def build_pipeline(spec: OfflinePipelineSpec) -> OfflinePipeline:
     if spec.camera not in {(1928, 1208), (1344, 760)}:
@@ -131,6 +190,10 @@ def build_pipeline(spec: OfflinePipelineSpec) -> OfflinePipeline:
         case "driver":
             return driver_pipeline(loaded, spec, nv12)
         case "driving":
+            with Context(DEV="CPU:LLVM"):
+                raw = make_metadata_dict(spec.model)
+            if "new_img" in raw["input_shapes"]:
+                return recurrent_driving_pipeline(loaded, spec, nv12, raw)
             return driving_pipeline(loaded, spec, nv12)
         case unreachable:
             assert_never(unreachable)

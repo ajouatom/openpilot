@@ -120,5 +120,28 @@ test('shows the model a Jetlink host runs or prepares and the pick sent to it', 
   assert.ok(editor.children.some(x => x.textContent === 'Jetlink host preparing: Flip Flop · NOO not supported · Uploading · 50%'));
   // A phone or tablet switches while parked: its state shows without opening the dialog.
   renderLibrary({ ...data, reboot_required: false }, true, host);
-  assert.equal(root.querySelector('p').textContent, 'Internal model: CD210 (fixed) · Jetlink host running: Flip Flop · NOO not supported');
+  assert.equal(root.querySelector('p').textContent, 'Internal model: CD210 · Jetlink host running: Flip Flop · NOO not supported');
+});
+
+test('internal model choice lists CD210 and Cheddar and saves with the internal action', async t => {
+  const old = { document: globalThis.document, postJson: globalThis.postJson };
+  t.after(() => Object.assign(globalThis, old));
+  const { root, editor } = setupDocument();
+  const internal_model = { selected: 'cd210', models: [{ id: 'cd210', name: 'CD210' }, { id: 'cheddar', name: 'Cheddar' }] };
+  const calls = [];
+  globalThis.postJson = async (url, body) => {
+    calls.push([url, body]);
+    return { library: { ...data, internal_model: { ...internal_model, selected: body.model } } };
+  };
+  renderLibrary({ ...data, reboot_required: false, internal_model });
+  const internal = editor.querySelector('select');
+  assert.deepEqual(internal.children.map(x => x.value), ['cd210', 'cheddar']);
+  assert.equal(internal.value, 'cd210');
+  assert.match(root.querySelector('p').textContent, /^Internal model: CD210/);
+  internal.value = 'cheddar';
+  await internal.events.change();
+  assert.deepEqual(calls, [['/api/egpu/model/library', { action: 'internal', model: 'cheddar' }]]);
+  assert.equal(editor.querySelector('select').value, 'cheddar');
+  assert.match(root.querySelector('p').textContent, /Internal model: Cheddar/);
+  assert.equal(editor.dataset.busy, undefined);
 });

@@ -66,8 +66,28 @@ pub struct DrivingRuntime<'a> {
     output_bytes: Vec<u8>,
     output_values: Vec<f32>,
     hidden: [usize; 2],
+    /// Image, desire and feature history kept inside the graph (Cheddar):
+    /// every call runs the policy, and features are not fed back from here.
+    recurrent: bool,
     usb: Option<UsbModel>,
     internal_dirty: bool,
+}
+
+/// The internal model a bundle runs, for logs and the web status.
+pub fn model_name(bundle: &Bundle) -> &'static str {
+    if is_recurrent(bundle) {
+        "Cheddar"
+    } else {
+        "CD210"
+    }
+}
+
+fn is_recurrent(bundle: &Bundle) -> bool {
+    bundle
+        .descriptor
+        .inputs
+        .iter()
+        .any(|input| input.name == "state_img_q")
 }
 
 impl<'a> DrivingRuntime<'a> {
@@ -87,6 +107,18 @@ impl<'a> DrivingRuntime<'a> {
             .checked_sub(hidden[0])
             .ok_or(Error::Contract("invalid hidden state"))?;
         let inputs = PolicyInputs::new(count)?;
+        // CD210 takes desire, traffic, action times and the fed-back features
+        // (524 values); Cheddar only the first twelve.
+        let packed = bundle
+            .descriptor
+            .inputs
+            .iter()
+            .find(|input| input.name == "packed_npy_inputs")
+            .ok_or(Error::Contract("missing packed policy inputs"))?
+            .bytes()?;
+        if packed % 4 != 0 || packed < 12 * 4 || packed > inputs.packed().len() * 4 {
+            return Err(Error::Contract("invalid packed policy inputs"));
+        }
         let output = bundle
             .descriptor
             .outputs
@@ -108,10 +140,11 @@ impl<'a> DrivingRuntime<'a> {
             bundle,
             backend,
             inputs,
-            input_bytes: vec![0; (count + 12) * 4],
+            input_bytes: vec![0; packed],
             output_bytes: vec![0; output],
             output_values: vec![0.0; output / 4],
             hidden,
+            recurrent: is_recurrent(bundle),
             usb: None,
             internal_dirty: false,
         })
@@ -199,7 +232,9 @@ impl<'a> DrivingRuntime<'a> {
         self.backend.write("packed_npy_inputs", &self.input_bytes)?;
         self.internal_dirty = true;
         self.backend.execute("prepare")?;
-        if prepare_only {
+        // Cheddar advances its whole history inside the graph, so a catch-up
+        // call is a complete current-frame policy (carrot's CheddarModelState).
+        if prepare_only && !self.recurrent {
             return Ok(None);
         }
         self.backend.execute("policy")?;
@@ -211,8 +246,10 @@ impl<'a> DrivingRuntime<'a> {
         {
             *value = f32::from_ne_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
         }
-        self.inputs
-            .set_features(&self.output_values[self.hidden[0]..self.hidden[1]])?;
+        if !self.recurrent {
+            self.inputs
+                .set_features(&self.output_values[self.hidden[0]..self.hidden[1]])?;
+        }
         let outputs = RawOutputs::new(
             &self.output_values,
             &self.bundle.descriptor.metadata.output_slices,

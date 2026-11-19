@@ -152,7 +152,8 @@ pub fn model<'a>(
         Record::text(
             Level::Warning,
             format!(
-                "models loaded in {:.1}s, modeld starting",
+                "{} loaded in {:.1}s, modeld starting",
+                openpilot_driving_modeld::runtime::model_name(bundle),
                 started.elapsed().as_secs_f64()
             ),
         ),

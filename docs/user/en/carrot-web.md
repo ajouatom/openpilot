@@ -234,7 +234,7 @@ If only video is missing, check whether another browser owns the stream, whether
 ### External driving model selection (`carrot-wip`)
 
 In Tools, choose N16 Nav, Flip Flop, Light speed or Light speed 2 under **External driving model**. The choice saves automatically.
-The choice applies to both eGPU and Jetson; the internal model stays fixed at CD210.
+The choice applies to both eGPU and Jetson. "Internal model" in the same dialog picks the model the comma itself runs: CD210 (default) or Cheddar. It changes at the next ignition; if Cheddar cannot be loaded, the drive runs on CD210.
 Saving does not switch a running model. With ignition off and internet available, reboot
 both comma and Jetson to download, verify, and apply the choice. A new Jetson model also
 needs engine preparation. The eGPU downloads the official precompiled PKL without
