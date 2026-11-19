@@ -13,7 +13,7 @@
 #       branch, old reflogs and LFS objects, then a repack.
 set -uo pipefail
 mode=${1:-} root=${2:-} store=${3:-}
-[[ -n $mode && -d $root && -d $store ]] || { echo 'usage: device_cleanup.sh now|git ROOT STORE' >&2; exit 2; }
+[[ -n $mode && -d $root && -d $store ]] || { echo 'usage: device_cleanup.sh now|git|staging ROOT STORE' >&2; exit 2; }
 log=$store/cleanup.log
 free_mb() { df -Pm "$root" | awk 'NR == 2 {print $4}'; }
 note() { echo "[$(date '+%F %T')] $*" >> "$log"; }
@@ -112,6 +112,14 @@ case $mode in
     started=$(free_mb)
     trim_git
     note "history trim: free ${started} MB -> $(free_mb) MB"
+    ;;
+  staging)
+    # Boot with little space left (launch_chffrplus.sh): only the updater's
+    # stale copies, with the same pending-activation checks, so the Params
+    # and source builds before the first successful update have room.
+    started=$(free_mb)
+    clean_staging
+    note "low-space boot cleanup: free ${started} MB -> $(free_mb) MB"
     ;;
   *)
     echo "unknown mode: $mode" >&2

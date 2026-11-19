@@ -50,10 +50,25 @@ pub fn status(backend: &Backend) -> Result<Value, Error> {
     ]))
 }
 
+/// `GithubSshKeysUpdatedAt` is not in params_keys.h (nor in carrot's), so a
+/// plain put is rejected as an unknown key on the device — after the keys were
+/// already saved, which reported the download as failed. Store it as an
+/// unregistered value, the way Carrot Web stores settings missing from the
+/// registry; `Backend::get` reads it back.
+const UPDATED_AT: &str = "GithubSshKeysUpdatedAt";
+
+fn put_updated_at(backend: &mut Backend, value: &str) -> Result<(), Error> {
+    backend.put(UPDATED_AT, &Value::text(value), Some(&Value::object([])))
+}
+
 pub fn clear(backend: &mut Backend) -> Result<Value, Error> {
-    for name in ["GithubUsername", "GithubSshKeys", "GithubSshKeysUpdatedAt"] {
+    for name in ["GithubUsername", "GithubSshKeys", UPDATED_AT] {
         if !backend.has_params() || backend.remove(name).is_err() {
-            backend.put(name, &Value::text(""), None)?;
+            if name == UPDATED_AT {
+                put_updated_at(backend, "")?;
+            } else {
+                backend.put(name, &Value::text(""), None)?;
+            }
         }
     }
     status(backend)
@@ -122,7 +137,7 @@ pub fn apply_download(
                 .map_err(|error| Error::Source(error.to_string()))?,
         ),
     };
-    backend.put("GithubSshKeysUpdatedAt", &Value::text(&now), None)?;
+    put_updated_at(backend, &now)?;
     Ok(status(backend)?)
 }
 
@@ -146,5 +161,33 @@ mod test {
         let actual = timestamp_millis(Duration::from_nanos(1_700_000_000_999_999_999));
         println!("timestamp_millis={actual}");
         assert_eq!(actual, "1700000001000");
+    }
+
+    /// With real Params (as on a device), saving keys and clearing them must
+    /// not fail on the unregistered GithubSshKeysUpdatedAt key.
+    #[test]
+    fn keys_save_and_clear_with_device_params() {
+        use super::{apply_download, clear, Username, UPDATED_AT};
+        use crate::{params::Backend, Value};
+        let root = tempfile::tempdir().unwrap();
+        let params = openpilot_params::Params::for_runtime_at(&root.path().join("params")).unwrap();
+        let mut backend = Backend::native(params, root.path().join("state"));
+        let username = Username::parse(&Value::text("octocat")).unwrap();
+        apply_download(
+            &mut backend,
+            &username,
+            "ssh-ed25519 AAAA test",
+            Some(1700000000000),
+        )
+        .unwrap_or_else(|_| panic!("saving keys failed"));
+        assert_eq!(
+            backend.get(UPDATED_AT, &Value::text("")),
+            Value::text("1700000000000")
+        );
+        clear(&mut backend).unwrap();
+        assert_eq!(
+            backend.get("GithubSshKeys", &Value::text("")),
+            Value::text("")
+        );
     }
 }

@@ -159,6 +159,36 @@ function bootstrap_runtime_dependencies {
   ensure_python_package shapely shapely 0
 }
 
+# A boot step that stops before the build spinner otherwise leaves only the
+# comma logo on screen (C3X Lite K5, 2026-11-19: Params rebuild with /data
+# full). Show why, how much space is left and where recovery is.
+function show_boot_failure {
+  local reason="$1" log="${2:-}" free message details=""
+  free="$(df -Ph /data 2>/dev/null | awk 'NR == 2 {print $4 " free of " $2}')"
+  if [ -n "$log" ] && [ -f "$log" ]; then
+    details="$(tail -n 15 "$log")"
+  fi
+  printf -v message 'openpilot cannot start.\n\n%s\n\nStorage /data: %s\nRecovery: port 6999 (web terminal)\n\n%s' \
+    "$reason" "${free:-unknown}" "$details"
+  printf '%s\n' "$message"
+  if [ -x "$DIR/rust/bin/openpilot-text-window" ]; then
+    LD_LIBRARY_PATH="$DIR/rust/bin/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" \
+      "$DIR/rust/bin/openpilot-text-window" --source-root "$DIR" --text "$message" || true
+  else
+    python3 "$DIR/openpilot/system/ui/text.py" "$message" || true
+  fi
+}
+
+# Below 3 GB free the Params and source builds can fail; the updater's stale
+# copies in safe_staging are the first thing to go (same checks as after a build).
+function free_space_for_build {
+  local free_mb store=/data/openpilot-build
+  free_mb="$(df -Pm /data 2>/dev/null | awk 'NR == 2 {print $4}')"
+  [ -n "$free_mb" ] && [ "$free_mb" -lt 3072 ] || return 0
+  echo "Only ${free_mb} MB free on /data; removing stale update copies."
+  mkdir -p "$store" && bash "$DIR/rust/tools/device_cleanup.sh" staging "$DIR" "$store" || true
+}
+
 function show_agnos_update_failure {
   local reason="$1"
   local message
@@ -409,6 +439,7 @@ function launch {
     echo "Another repository operation is still running; launch deferred."
     exec 9>&-
     start_carrot_recovery
+    show_boot_failure "Another repository operation (update or cleanup) did not finish within 5 minutes."
     while true; do sleep 1; done
   fi
   export CARROT_BOOT_LOCK_FD=9
@@ -481,13 +512,20 @@ function launch {
   # before the first SCons invocation.
   if ! bootstrap_runtime_dependencies; then
     flock -u 9
+    show_boot_failure "Installing the runtime Python packages failed."
     while true; do sleep 1; done
   fi
 
+  free_space_for_build
   # Build Params before any long-running carrot service imports it.
-  if ! bash "$DIR/scripts/ensure_params_build.sh"; then
+  local params_log=/tmp/carrot_params_build.log
+  bash "$DIR/scripts/ensure_params_build.sh" > "$params_log" 2>&1
+  local params_status=$?
+  cat "$params_log"
+  if [ "$params_status" -ne 0 ]; then
     echo "Params registry build failed, not starting openpilot."
     flock -u 9
+    show_boot_failure "Building the Params registry failed (a setting list changed with this update)." "$params_log"
     while true; do sleep 1; done
   fi
 
@@ -530,6 +568,8 @@ function launch {
   # Never start driving services if a rebuild left the Params registry stale.
   if ! python3 "$DIR/openpilot/system/manager/params_check.py"; then
     echo "Native Params still do not match this checkout; not starting manager."
+    flock -u 9
+    show_boot_failure "The Params registry does not match this version (Params build is stale)."
     return 1
   fi
   start_big_model_update
