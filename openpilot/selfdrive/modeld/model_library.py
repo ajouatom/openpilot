@@ -119,6 +119,6 @@ def status():
                  'jetson_bytes': host.get('models', {}).get(sha) if host_fresh else None,
                  'delete_pending': key in queue})
   return {'models': rows, 'effective': C.effective_id(), 'selected': prefs['selected'],
-          'reboot_required': C.effective_id() != prefs['selected'], 'internal': 'CD210',
+          'reboot_required': C.effective_id() != prefs['selected'], 'internal': 'Cheddar',
           'effective_name': C.catalog()[C.effective_id()]['name'], 'effective_noo': C.noo(C.effective_id()),
           'jetson_inventory_fresh': host_fresh}
