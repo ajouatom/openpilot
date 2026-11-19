@@ -49,6 +49,7 @@ jobs:
           python -m pytest -c /dev/null --rootdir=. --confcutdir=openpilot/selfdrive/modeld/tests -q
           openpilot/selfdrive/modeld/tests/test_big_model.py
           openpilot/selfdrive/modeld/tests/test_cheddar_model.py
+          openpilot/selfdrive/modeld/tests/test_internal_model_selection.py
           openpilot/selfdrive/modeld/tests/test_internal_model_warmup.py
           openpilot/selfdrive/modeld/tests/test_precompiled_model.py
           openpilot/selfdrive/modeld/tests/test_precompiled_rejection_retry.py

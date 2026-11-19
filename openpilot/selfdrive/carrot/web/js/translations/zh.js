@@ -27,7 +27,7 @@ window.CarrotTranslations.register("zh", {
     model_library_close: "关闭",
     model_library_pending_apply: "重启后应用",
     model_library_title: "外部驾驶模型",
-    model_library_internal: "内部模型：固定 CD210",
+    model_library_internal: "内部模型：固定 Cheddar",
     model_library_noo: "支持 NOO",
     model_library_no_noo: "不支持 NOO",
     model_library_save: "保存，下次重启生效",

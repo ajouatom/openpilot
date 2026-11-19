@@ -1,6 +1,6 @@
 ﻿"use strict";
 const EN = {
-  title: "External driving model", internal: "Internal model: CD210 (fixed)",
+  title: "External driving model", internal: "Internal model: Cheddar (fixed)",
   help: "One choice for eGPU and Jetson. Choosing saves the next-boot selection. Reboot comma and Jetson while parked with ignition off and internet available. First use downloads files; Jetson also prepares its engine.",
   change: "Change model", close: "Close", pending_apply: "Apply after restart",
   current: "This boot", next: "Next boot", saved: "Saved. Reboot comma and Jetson to apply.",

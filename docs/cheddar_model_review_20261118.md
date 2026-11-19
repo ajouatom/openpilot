@@ -2,7 +2,9 @@
 
 ## Decision
 
-Apply the constant-Gather compilation fix, but hold the internal-model replacement. The GPU preparation failure is now reproduced and corrected on the installed tinygrad. Cheddar also runs with its exact upstream tinygrad/compiler pair. The current production entry point still needs stateful integration, and the tested upstream image-transfer/warp/policy path has less deadline margin than CD210. The model file, selection catalog and isolated external runtime pins remain unchanged.
+The November 19 follow-up promotes Cheddar to the internal default with its exact upstream tinygrad runtime. The initial hold below is historical: the earlier timing comparison ran on little CPU cores without modeld's realtime scheduling. Matching the official CPU configuration removes the observed deadline overruns in the synthetic benchmark. Production worker integration, reset and recurrent-state comparisons now pass the checks described below. This is not a claim of road-load or sustained thermal validation.
+
+CD210's default ONNX is replaced. Driver monitoring and legacy external compilation retain the existing vendored tinygrad; external model selections retain their separately pinned runtimes. The optional CD210-specific signal observer is not started for Cheddar.
 
 ## Artifacts
 
@@ -89,3 +91,27 @@ Model integration still needs explicit state-buffer, reset, standby warmup and r
 ## Evidence
 
 Initial private artifacts are under `.analysis/scratch/2026-11-18-cheddar-review`; follow-up programs, first-error records, generated shader sources, reference comparisons and full timing samples are under `.analysis/scratch/2026-11-18-cheddar-runtime`. Tests used temporary models/scripts rather than installed model artifacts. Diagnostic imports also populated the existing content-addressed compiler cache; no Params, vehicle control or installed source/model files were changed.
+
+## November 19: matching the official scheduling and integrating execution
+
+Repeat on the same offroad device with all CPU cores online, the inference thread pinned to core 7 with `SCHED_FIFO` priority 54, CPU governors set to performance and the normal 1,689,600 kHz cap, and the GPU interrupt assigned to core 7. Snapshot and restore the previous power/IRQ settings around each isolated command. A separate supervisor checks offroad state every 200 ms and terminates the entire test process group if it changes. The integrated worker reports affinity `[7]` and priority `54` in its startup handshake.
+
+These settings match the relevant upstream modeld/CPU configuration. They do not reproduce simultaneous camera capture, driver monitoring, other onroad processes, vehicle motion or a sustained thermal workload. All rows use synthetic full-resolution NV12 input, image warp, recurrent inference and synchronous readback, with 40 settling frames and 500 timed calls. The integrated row also includes IPC, validation and the production output parser. CD210 uses its existing resident image-buffer path; Cheddar uses the official full-image upload path.
+
+| Execution path | Mean | p95 | Maximum | Above 50 ms |
+| --- | --- | --- | --- | --- |
+| Installed CD210 | 21.62 ms | 21.96 ms | 22.19 ms | 0 / 500 |
+| Cheddar, official runtime/transfer path | 31.12 ms | 31.33 ms | 31.63 ms | 0 / 500 |
+| Cheddar, integrated worker and parser | 32.59 ms | 32.80 ms | 32.91 ms | 0 / 500 |
+
+The integrated worker loads and warms in 2.98 seconds in this cached-artifact test. After warmup/reset, the first output matches a fresh reset exactly. Two 150-frame sequences with changing images, action inputs, desire edges and catch-up calls also match exactly after reset. Power restoration is read back after the timing tests; online cores return to 0–3.
+
+The new compiler uses the unmodified `ec91b74` source archive, verified by SHA-256, and the upstream generic ONNX compiler. The worker selects that runtime before importing tinygrad, so it can coexist with the legacy runtime in modeld and driver monitoring. GPU state stays resident: next-state outputs alias the three input-state buffers. Host uploads and prediction readback are compiled once. Reset clears the same GPU allocations and waits for acknowledgement before clearing the parent's desire-edge history. Synthetic standby warmup clears history afterward; external-model fallback uses the same reset interface. The self-contained ONNX graph produces a complete policy on catch-up calls as well.
+
+Combining policy and warp object graphs in one pickle memo produced an HCQ parameter-index failure during the first integration attempt. Serialize each warp independently, as upstream's separate files do, then include its bytes in the chunkable bundle. The saved/reloaded integrated QCOM run passes after this correction. Native CPU tests also cover an empty buffer arena and require materializing a synthetic next-state value before writing an alias; arbitrary graphs are not assumed to be alias-safe.
+
+Linux CI compiles the actual Cheddar ONNX with the official Linux `CPU:LLVM` backend, compares 40 recurrent frames with aliased versus separate state destinations exactly, and exercises the production worker at 1928×1208 and 1344×760, including warmup, changed input, catch-up and reset. The alternative C renderer triggered a clang 18 frontend crash; it is not the production Linux backend. Related desktop checks cover failure containment, reset acknowledgements, model selection, external fallback and the existing action conversion.
+
+The new code does not alter Carrot's action conversion, stopping policy or smoothing. Cheddar supplies the existing direct-action branch instead of CD210's plan-derived action branch; the model replacement itself can therefore change driving behavior. Road behavior, concurrent onroad deadline margin and thermal endurance remain unmeasured. The full release build and broader CI run after publication.
+
+Private follow-up evidence is under `.analysis/scratch/2026-11-19-cheddar-integration`. The device disconnected during a subsequent fresh production-compiler run; its completion and scratch cleanup require reconnection. Successful timing/reset results above were observed before that disconnection. No installed vehicle source/model, Params or control commands were changed.
