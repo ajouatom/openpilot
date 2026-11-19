@@ -164,3 +164,73 @@ def test_low_speed_uses_fresh_ordinary_detection_without_rearm_memory():
 def test_retained_intent_expiry_never_erases_fresh_ordinary_turn_detection():
   starts = successive('late_growth')
   assert starts and 13.1 <= starts[0][0] <= 13.5
+
+
+def short_lane_follow(fault=None):
+  cs, md = scene()
+  cs.vEgo = 5.
+  cs.steeringPressed, cs.steeringTorque, cs.steeringAngleDeg = True, -400., -20.
+  md.laneLineProbs = [0.] * 4
+  lines(md, -2.6, 1.)
+  detector, isolation = ModelIndicator(), BoundaryIndicator()
+  detector.active, detector.request_time = Movement(10., 2, 'manual', cs, md), 10.
+  detector.active.last = (10.45, -2.6, 1.)
+  isolation.own(10.45, 2)
+  lines(md, -2.3, 1.3)
+  detector.update(10.5, cs, md, valid=True, lateral_active=False, desire_enabled=False,
+    path_enabled=False, busy=False, isolation=isolation, manual_turn_enabled=True, yaw_rate=.2)
+  assert detector.active is None and detector.follow_lane_turn
+  result=[]
+  for i in range(1, 41):
+    now=10.5+i*.05
+    md.frameId=i
+    cs.steeringAngleDeg=-20.-i*3.
+    cs.blinkerLever=2 if fault=='lever' else 0
+    cs.leftBlinker=fault=='opposite_lamp'
+    if fault=='opposite_torque':cs.steeringTorque=400.
+    isolation.update(now, cs, md, enabled=False, valid=fault!='invalid', busy=fault=='busy')
+    detector.update(now, cs, md, valid=fault!='invalid', lateral_active=False, desire_enabled=False,
+      path_enabled=False, busy=fault=='busy', isolation=isolation, manual_turn_enabled=fault!='disabled',
+      yaw_rate=None if fault=='pose' else .2)
+    if detector.active:result.append((now,detector.active.direction,detector.active.source,detector.request_time))
+  return result
+
+
+def test_short_boundary_request_does_not_consume_next_independent_same_side_turn():
+  starts=short_lane_follow()
+  assert starts and 10.5 < starts[0][0] < 12.45
+  assert starts[0][1:3] == (2,'manual_turn')
+  assert starts[0][3] != 10.  # New request; never resurrect the ended lease.
+
+
+@pytest.mark.parametrize('fault',['lever','invalid','busy','disabled','pose','opposite_lamp','opposite_torque'])
+def test_short_boundary_turn_recovery_respects_driver_and_opposite_lamps(fault):
+  assert not short_lane_follow(fault)
+
+
+@pytest.mark.parametrize('fault', [None,'same_side','lit','invalid','lever'])
+def test_short_attempt_rearms_only_fresh_opposite_approach_after_dark_second(fault):
+  from test_boundary_recent_intent import maneuver
+  from unittest.mock import patch
+  import test_boundary_recent_intent as checks
+  detector=BoundaryIndicator()
+  detector.initialized=True
+  detector.own(11.,1)
+  detector.short_attempt_end=(11.,1)
+  def gate(cs, md, now, frame):
+    # Install the prior ended attempt immediately before this new approach.
+    if frame==29:
+      detector.own(now,1 if fault!='same_side' else 2)
+      detector.short_attempt_end=(now,1 if fault!='same_side' else 2)
+    distance=max(.3,1.8-max(0,frame-50)*.04)
+    md.laneLines[1].y=[-(3.6-distance)]*9
+    md.laneLines[2].y=[distance]*9
+    cs.steeringPressed,cs.steeringTorque=True,-300.
+    if fault=='lit':cs.leftBlinker=True
+    if fault=='lever':cs.blinkerLever=2
+    if fault=='invalid':cs.canValid=False
+  with patch.object(checks,'BoundaryIndicator',return_value=detector):
+    requests=maneuver(2,gate=gate)
+  early=[r for r in requests if r[0]<14.45]
+  assert bool(early)==(fault is None)
+  assert detector.isolate_until>=23.

@@ -120,14 +120,14 @@ def test_paired_boundary_progress_requires_consistent_width(direction, consisten
 
 
 @pytest.mark.parametrize('code', [-1, 0, 1, 2, 12, 13, 16, 18, 20, 21, 24, 25, 30])
-def test_left_unknown_centreline_edge_and_barrier_never_indicate(code):
+def test_manual_left_marking_classification_does_not_veto_indication(code):
   def gate(cs, md, now, frame):
     cs.leftLaneLine = code
-  assert not maneuver(1, gate=gate)
+  assert maneuver(1, gate=gate)
 
 
 @pytest.mark.parametrize('failure', ['edge', 'edge_ahead', 'nan', 'truncated'])
-def test_right_requires_finite_road_edge_clearance(failure):
+def test_manual_right_road_edge_does_not_veto_indication(failure):
   def gate(cs, md, now, frame):
     if failure == 'edge':
       md.roadEdges[1].y = [v + 1.5 for v in md.laneLines[2].y]
@@ -137,12 +137,12 @@ def test_right_requires_finite_road_edge_clearance(failure):
       md.roadEdges[1].y[4] = float('nan')
     if failure == 'truncated':
       md.roadEdges[1].y = [5.4]
-  assert not maneuver(2, gate=gate)
+  assert maneuver(2, gate=gate)
 
 
 @pytest.mark.parametrize('age', [.3, -.1, 10])
-def test_left_unknown_or_stale_marking_remains_blocked(age):
-  assert not maneuver(1, gate=lambda cs, md, now, frame: setattr(cs, 'laneLineInfoMonoTime', int((now-age)*1e9) if age != 10 else 0))
+def test_manual_left_marking_age_does_not_veto_indication(age):
+  assert maneuver(1, gate=lambda cs, md, now, frame: setattr(cs, 'laneLineInfoMonoTime', int((now-age)*1e9) if age != 10 else 0))
 
 
 @pytest.mark.parametrize('direction', [1, 2])
@@ -172,8 +172,8 @@ def test_right_clearance_is_measured_beyond_target_boundary(clearance, expected)
   assert adjacent_lane(cs, md, 2, 10.) == expected
 
 
-def test_centreline_appearing_after_torque_cancels_remembered_intent():
-  assert not maneuver(gate=lambda cs, md, now, frame: setattr(cs, 'leftLaneLine', 21 if frame >= 44 else 10))
+def test_manual_centreline_change_preserves_remembered_intent():
+  assert maneuver(gate=lambda cs, md, now, frame: setattr(cs, 'leftLaneLine', 21 if frame >= 44 else 10))
 
 
 def test_only_selected_side_is_restricted():

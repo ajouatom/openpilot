@@ -1,5 +1,21 @@
 # Repository memory
 
+- 2026-11-20: Owner removes manual left OEM centre-line/marking and right2.5m
+  road-edge admission gates. Model/Tesla policy and automatic-steering isolation
+  retained. Short<=2s returned/relabelled manual attempt can seed independently
+  confirmed same-side turn within3s at10kmh+; fresh opposite boundary approach
+  can rearm after1s dark. Driver/input cancellation never seeds recovery.
+  Entire retained467segments/60routes/523934inputs against34ce0aa171: native
+  365->406, delayed410ms364->405, external366->407;42added/1removed/12changed.
+  Recover11f1/1 next right turn and11d5/3 opposite request;1186/3 turn245mslater.
+  Do not claim zero regression:118a/9 model turn absent under retained isolation;
+  five matched holds shorter, three at recorded lever/changed echo timing,
+  two boundary-return.17added events have sampled video,25unavailable; parked-car
+  avoidance is also admitted, so false-indication rate unproven.1196localpass/
+  9platformskip and25Wiki tests. No vehicle writes/physical proof. CI follows
+  publication. Details docs/indicator_replay_20261114.md and private scratch
+  2026-11-20-manual-indicator-fix/INDEX.md.
+
 - 2026-11-19 late: Owner explicitly requests Jetson-first Fairy Tale testing
   from ONNX despite official AMD PKL still404; Jetson does not depend on PKL.
   Owner authorizes reboot/temporary Jetson stop while Park/zero/disabled, then
