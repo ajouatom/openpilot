@@ -1,7 +1,6 @@
-use crate::{usb_model::UsbModel, Error};
+use crate::{recovery::Recovery, recovery_prepare::Preparation, Error};
 use openpilot_params::Params;
 use openpilot_usbgpu::{
-    client::Launch,
     hardware,
     model::{self, Paths},
 };
@@ -9,12 +8,14 @@ use std::{
     path::PathBuf,
     sync::{
         atomic::{AtomicBool, Ordering},
+        mpsc::{self, Receiver},
         Arc,
     },
     thread,
-    time::{Duration, Instant},
+    time::Duration,
 };
 
+#[derive(Clone)]
 pub struct Configuration {
     pub paths: Paths,
     pub devices: PathBuf,
@@ -45,20 +46,6 @@ impl Configuration {
     }
 }
 
-pub fn refresh(config: &Configuration, params: &Params) -> Result<(), Error> {
-    let present = config.present()?;
-    refresh_status(params, "UsbGpuPresent", present)?;
-    if present {
-        refresh_status(params, "UsbGpuHardwareSeen", true)?;
-    }
-    refresh_status(
-        params,
-        "UsbGpuCompiled",
-        model::compiled_path(&config.paths).is_some(),
-    )?;
-    Ok(())
-}
-
 fn refresh_status(params: &Params, key: &str, value: bool) -> Result<(), Error> {
     let bytes = if value { b"1" } else { b"0" };
     // Read persisted bytes each time so external edits, deletion and failed writes
@@ -69,91 +56,56 @@ fn refresh_status(params: &Params, key: &str, value: bool) -> Result<(), Error> 
     Ok(())
 }
 
-pub fn start(
-    config: &Configuration,
-    params: &Params,
+/// Artifact admission hashes and parses the selected package. Keep both discovery
+/// and periodic status refresh off the camera thread, including on first ignition.
+pub fn monitor(
+    config: Configuration,
+    params: Params,
     camera: [u32; 2],
-) -> Result<Option<UsbModel>, Error> {
-    let path = model::compiled_path(&config.paths);
-    let compiled = path.is_some();
-    let mut present = config.present()?;
-    if !present && compiled && params.get_bool("UsbGpuHardwareSeen")? {
-        let started = Instant::now();
-        while !present && started.elapsed() < Duration::from_secs(5) {
-            if config.cancelled.load(Ordering::Relaxed) {
-                clear_activity(params)?;
-                return Ok(None);
-            }
-            thread::sleep(Duration::from_millis(100));
-            present = config.present()?;
-        }
-    }
-    params.put_bool("UsbGpuPresent", present)?;
-    params.put_bool("UsbGpuCompiled", compiled)?;
-    if present || compiled {
-        params.put_bool("UsbGpuHardwareSeen", true)?;
-    }
-    let requested = present && compiled && !params.get_bool("UsbGpuStartupFailed")?;
-    params.put_bool("UsbGpuLoading", requested)?;
-    params.put_bool("UsbGpuActive", false)?;
-    if !requested {
-        return Ok(None);
-    }
-    let path = path.ok_or(Error::Contract("compiled USB model disappeared"))?;
-    let binding = match openpilot_usbgpu::worker_artifact::bind(&path, &config.paths.assets) {
-        Ok(binding) => binding,
-        Err(error) => {
-            fail(params)?;
-            return Err(
-                openpilot_usbgpu::Error::Protocol(format!("native model assets: {error}")).into(),
-            );
-        }
-    };
-    let started = Instant::now();
-    for attempt in 0..6 {
-        let remaining = Duration::from_secs(120).saturating_sub(started.elapsed());
-        if remaining.is_zero() {
-            break;
-        }
-        match UsbModel::launch_with_assets(
-            Launch {
-                worker: &config.worker,
-                model: &path,
-                camera,
-                timeout: remaining.min(Duration::from_secs(110)),
-                cancelled: Arc::clone(&config.cancelled),
-            },
-            &binding,
-        ) {
-            Ok(model) => {
-                params.put_bool("UsbGpuActive", true)?;
-                return Ok(Some(model));
-            }
-            Err(error) => {
-                if config.cancelled.load(Ordering::Relaxed) {
-                    clear_activity(params)?;
-                    return Ok(None);
+) -> Result<Receiver<Recovery>, Error> {
+    clear_activity(&params)?;
+    let (send, receive) = mpsc::channel();
+    thread::Builder::new()
+        .name("egpu-discovery".into())
+        .spawn(move || {
+            let run = || -> Result<(), Error> {
+                if std::path::Path::new("/TICI").is_file() {
+                    crate::recovery_task::background_scheduling()?;
                 }
-                if attempt < 5
-                    && openpilot_usbgpu::model_delivery::failure::pcie_not_ready(&error.to_string())
-                {
-                    let delay = Instant::now();
-                    while delay.elapsed() < Duration::from_secs(2) {
-                        if config.cancelled.load(Ordering::Relaxed) {
-                            clear_activity(params)?;
-                            return Ok(None);
-                        }
-                        thread::sleep(Duration::from_millis(100));
+                let mut selected = false;
+                while !config.cancelled.load(Ordering::Acquire) {
+                    let present = config.present()?;
+                    refresh_status(&params, "UsbGpuPresent", present)?;
+                    if present {
+                        refresh_status(&params, "UsbGpuHardwareSeen", true)?;
                     }
-                    continue;
+                    let path = model::compiled_path(&config.paths);
+                    refresh_status(&params, "UsbGpuCompiled", path.is_some())?;
+                    if present && !selected && !params.get_bool("UsbGpuStartupFailed")? {
+                        if let Some(path) = path {
+                            let preparation = Preparation::capture(
+                                &path,
+                                &config.worker,
+                                &config.paths.assets,
+                                camera,
+                            )?;
+                            let mut recovery = Recovery::new(preparation)?;
+                            recovery.policy.startup();
+                            if send.send(recovery).is_err() {
+                                return Ok(());
+                            }
+                            selected = true;
+                        }
+                    }
+                    thread::sleep(Duration::from_secs(1));
                 }
-                fail(params)?;
-                return Err(error);
+                Ok(())
+            };
+            if let Err(error) = run() {
+                eprintln!("eGPU discovery failed: {error}");
             }
-        }
-    }
-    fail(params)?;
-    Err(Error::Contract("eGPU model load timed out after 120s"))
+        })?;
+    Ok(receive)
 }
 
 fn clear_activity(params: &Params) -> Result<(), Error> {
@@ -169,6 +121,7 @@ pub fn fail(params: &Params) -> Result<(), Error> {
 }
 
 pub fn published(params: &Params) -> Result<(), Error> {
+    params.put_bool("UsbGpuActive", true)?;
     params.put_bool("UsbGpuLoading", false)?;
     Ok(())
 }

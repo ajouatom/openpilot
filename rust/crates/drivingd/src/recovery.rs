@@ -105,10 +105,13 @@ impl Recovery {
             && self.policy.healthy(now);
         self.health.observe(good);
         let was_stopped = self.policy.state == State::Stopped;
-        if self
-            .policy
-            .observe(now, published, work, dropped, self.task.is_some())
-        {
+        // A loaded startup worker waiting for handover is idle; only a load in
+        // progress can delay the internal model.
+        let loading = self
+            .task
+            .as_ref()
+            .is_some_and(|task| !(task.hold && task.ready()));
+        if self.policy.observe(now, published, work, dropped, loading) {
             if let Some(task) = &self.task {
                 task.cancelled.store(true, Ordering::Release);
             }
@@ -126,7 +129,10 @@ impl Recovery {
         may_join: bool,
     ) -> Result<Option<UsbModel>, Error> {
         if let Some(task) = &self.task {
-            if now - self.task_started >= TASK_SECONDS && self.policy.state != State::Stopped {
+            if now - self.task_started >= TASK_SECONDS
+                && !task.ready()
+                && self.policy.state != State::Stopped
+            {
                 self.policy.stop("cleanup_timeout");
                 task.cancelled.store(true, Ordering::Release);
                 self.save()?;
@@ -166,13 +172,17 @@ impl Recovery {
                 }
             }
         }
+        let startup = self.policy.starting();
         if self.policy.begin(now, present, self.task.is_some()) {
             // Persist consumption before any preparer thread or child can start.
             self.save()?;
             let preparation = self.preparation.clone();
-            self.task = Some(Task::start(Arc::clone(&self.health), move |cancel| {
-                preparation.prepare(cancel)
-            }));
+            let prepare = move |cancel| preparation.prepare(cancel);
+            self.task = Some(if startup {
+                Task::start_held(Arc::clone(&self.health), prepare)
+            } else {
+                Task::start(Arc::clone(&self.health), prepare)
+            });
             self.task_started = now;
             self.event("retry_started", "internal model remains active");
         }

@@ -35,7 +35,16 @@ impl Preparation {
         let parent = model
             .parent()
             .ok_or(Error::Contract("recovery artifact has no parent"))?;
-        let identity_file = if parent.join("installed.json").exists() {
+        let identity_file = if openpilot_usbgpu::local_artifact::is_local(model) {
+            assets
+                .join("local")
+                .join(
+                    model
+                        .file_name()
+                        .ok_or(Error::Contract("local model filename missing"))?,
+                )
+                .join("current.json")
+        } else if parent.join("installed.json").exists() {
             parent.join("installed.json")
         } else {
             parent.join("native-provider.json")
@@ -90,7 +99,7 @@ impl Preparation {
                 worker: &self.worker,
                 model: &self.model,
                 camera: self.camera,
-                timeout: Duration::from_secs(110),
+                timeout: openpilot_usbgpu::client::LOAD_INACTIVITY,
                 cancelled: Arc::clone(&cancelled),
             },
             &binding,

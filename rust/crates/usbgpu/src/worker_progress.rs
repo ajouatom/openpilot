@@ -12,7 +12,7 @@ use std::{
 mod watchdog;
 pub(crate) use watchdog::Watchdog;
 
-pub const STAGES: [&str; 12] = [
+pub const STAGES: [&str; 16] = [
     "starting",
     "verify_model",
     "load_model",
@@ -25,6 +25,10 @@ pub const STAGES: [&str; 12] = [
     "output_read",
     "publish",
     "local_prepare",
+    "open_gpu",
+    "upload_weights",
+    "bind_model",
+    "create_queues",
 ];
 const SIZE: usize = 48;
 
@@ -114,22 +118,39 @@ pub fn next_frame() {
     });
 }
 
+pub fn load_stage(stage: &str) {
+    mark(stage);
+    eprintln!("eGPU worker startup: {stage}");
+}
+
+fn read_record(path: &Path) -> std::io::Result<[u8; SIZE]> {
+    let mut file = File::open(path)?;
+    let mut first = [0; SIZE];
+    let mut second = [0; SIZE];
+    file.read_exact(&mut first)?;
+    file.seek(SeekFrom::Start(0))?;
+    file.read_exact(&mut second)?;
+    if first != second {
+        return Err(std::io::ErrorKind::WouldBlock.into());
+    }
+    Ok(first)
+}
+
+/// Only completed weight uploads can renew the ready handshake's inactivity timer.
+pub(crate) fn upload_generation(path: &Path) -> Option<u64> {
+    let record = read_record(path).ok()?;
+    let generation = u64::from_le_bytes(record[..8].try_into().ok()?);
+    let stage = usize::try_from(u64::from_le_bytes(record[8..16].try_into().ok()?)).ok()?;
+    (generation != 0
+        && generation.is_multiple_of(2)
+        && STAGES.get(stage) == Some(&"upload_weights"))
+    .then_some(generation)
+}
+
 /// Bounded, nonblocking best-effort reads, also usable with a fixture proc root.
 pub fn snapshot(path: &Path, pid: u32, proc_root: &Path) -> Value {
     let mut result = json!({"pid":pid});
-    let record = (|| -> std::io::Result<[u8; SIZE]> {
-        let mut file = File::open(path)?;
-        let mut first = [0; SIZE];
-        let mut second = [0; SIZE];
-        file.read_exact(&mut first)?;
-        file.seek(SeekFrom::Start(0))?;
-        file.read_exact(&mut second)?;
-        if first != second {
-            return Err(std::io::ErrorKind::WouldBlock.into());
-        }
-        Ok(first)
-    })();
-    if let Ok(record) = record {
+    if let Ok(record) = read_record(path) {
         let fields: Vec<u64> = record
             .chunks_exact(8)
             .map(|bytes| u64::from_le_bytes(bytes.try_into().unwrap()))

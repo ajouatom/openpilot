@@ -168,11 +168,18 @@ pub fn prepare(config: &Config, cancelled: &AtomicBool) -> Result<bool, Error> {
             failed.worker.as_ref(),
         )?;
         if !rejected {
+            // Not verified: the check failed in a way that may pass later
+            // (timeout, PCIe not up). The drive starts on the internal model
+            // and retries the eGPU in the background.
+            eprintln!(
+                "Precompiled eGPU validation did not pass ({}); retrying while driving",
+                failed.detail
+            );
             write(
                 config,
                 &model,
                 Phase::WaitingForIgnition,
-                "precompiled model verified; waiting for eGPU readiness or validation retry",
+                "precompiled model validation did not finish; retried in the background while driving",
             )?;
             return Ok(true);
         }

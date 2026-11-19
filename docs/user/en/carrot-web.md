@@ -238,7 +238,9 @@ The choice applies to both eGPU and Jetson. "Internal model" in the same dialog 
 Saving does not switch a running model. With ignition off and internet available, reboot
 both comma and Jetson to download, verify, and apply the choice. A new Jetson model also
 needs engine preparation. The eGPU downloads the official precompiled PKL without
-recompiling the driving model itself.
+recompiling the driving model itself. At ignition the drive starts at once on the internal model
+while the eGPU model loads in the background (yellow `eGPU` badge). Once it is ready, the eGPU
+takes over when the car is stopped or the driver steers, and openpilot is not in control (green badge).
 
 A Jetlink App (Android tablet or phone) takes the choice at its next connection, without a reboot.
 The comma sends the choice while parked (ignition off) or with the ignition on in **P, stopped and not

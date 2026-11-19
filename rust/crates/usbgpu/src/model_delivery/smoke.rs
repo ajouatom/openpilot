@@ -8,7 +8,7 @@ use serde::Serialize;
 use std::{
     path::Path,
     sync::{atomic::AtomicBool, Arc},
-    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
+    time::{Instant, SystemTime, UNIX_EPOCH},
 };
 
 #[derive(Serialize)]
@@ -71,7 +71,7 @@ fn run_inner(
             worker,
             model,
             camera,
-            timeout: Duration::from_secs(110),
+            timeout: crate::client::LOAD_INACTIVITY,
             cancelled: Arc::clone(cancelled),
         };
         let client = match binding {

@@ -50,7 +50,9 @@ fn run() -> Result<(), Error> {
             return Ok(());
         }
     }
-    openpilot_usbgpu::worker_progress::mark("verify_model");
+    if !structural {
+        openpilot_usbgpu::worker_progress::load_stage("verify_model");
+    }
     let path = PathBuf::from(&args[0]);
     let assets = std::env::var_os("USBGPU_ASSETS_ROOT")
         .map(PathBuf::from)
@@ -98,12 +100,14 @@ fn run() -> Result<(), Error> {
         info,
         ..
     } = artifact;
-    openpilot_usbgpu::worker_progress::mark("load_model");
+    openpilot_usbgpu::worker_progress::load_stage("open_gpu");
     let mut firmware = FirmwareDirectory(assets.join("firmware"));
     let cancelled = Arc::new(AtomicBool::new(false));
-    let gpu = HcqGpu::new(native_runtime::open(&mut firmware)?, cancelled)?;
+    let asic = native_runtime::open(&mut firmware)?;
+    openpilot_usbgpu::worker_progress::load_stage("create_queues");
+    let gpu = HcqGpu::new(asic, cancelled)?;
     let mut runtime = NativeRuntime::new(Model::load(&descriptor, &path, gpu)?);
-    openpilot_usbgpu::worker_progress::mark("prepare_runtime");
+    openpilot_usbgpu::worker_progress::load_stage("prepare_runtime");
     runtime.load_warp(&warp)?;
     let family = fs::read_to_string("/sys/firmware/devicetree/base/model").unwrap_or_default();
     if std::env::var_os("USBGPU_AMD_ONLY").is_none()
@@ -161,7 +165,7 @@ fn local(
         )?;
         return Ok(());
     }
-    openpilot_usbgpu::worker_progress::mark("load_model");
+    openpilot_usbgpu::worker_progress::load_stage("open_gpu");
     let mut firmware = FirmwareDirectory(artifact.assets.join("firmware"));
     let local = if let Some(path) = &artifact.qcom_warp {
         // SAFETY: the build-time package contains trusted immutable source kernels; Package::open verifies their layout and checksums before this native boundary.

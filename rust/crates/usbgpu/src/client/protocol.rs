@@ -12,13 +12,38 @@ pub(super) fn receive(
     timeout: Duration,
     cancelled: &AtomicBool,
 ) -> Result<Vec<u8>, Error> {
+    receive_bounded(stdout, timeout, timeout, cancelled, || None)
+}
+
+pub(super) fn receive_bounded(
+    stdout: &mut ChildStdout,
+    inactivity: Duration,
+    limit: Duration,
+    cancelled: &AtomicBool,
+    mut progress: impl FnMut() -> Option<u64>,
+) -> Result<Vec<u8>, Error> {
     let started = Instant::now();
+    let mut last_progress = started;
+    let mut generation = None;
+    let mut next_sample = Duration::ZERO;
     let mut line = Vec::new();
     loop {
         if cancelled.load(Ordering::Relaxed) {
             return Err(Error::Cancelled);
         }
-        let remaining = timeout.saturating_sub(started.elapsed());
+        let elapsed = started.elapsed();
+        if limit > inactivity && elapsed >= next_sample {
+            next_sample = elapsed + Duration::from_secs(1);
+            if let Some(current) = progress() {
+                if generation != Some(current) {
+                    generation = Some(current);
+                    last_progress = Instant::now();
+                }
+            }
+        }
+        let remaining = limit
+            .saturating_sub(elapsed)
+            .min(inactivity.saturating_sub(last_progress.elapsed()));
         if remaining.is_zero() {
             return Err(Error::Contract("precompiled eGPU worker timed out"));
         }

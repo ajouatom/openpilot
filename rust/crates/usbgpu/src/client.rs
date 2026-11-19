@@ -34,6 +34,9 @@ pub struct Client {
     cancelled: Arc<AtomicBool>,
 }
 
+pub const LOAD_INACTIVITY: Duration = Duration::from_secs(110);
+pub const MAX_LOAD: Duration = Duration::from_secs(240);
+
 pub struct Launch<'a> {
     pub worker: &'a Path,
     pub model: &'a Path,
@@ -90,7 +93,7 @@ impl Client {
             worker,
             model,
             camera,
-            timeout: Duration::from_secs(110),
+            timeout: LOAD_INACTIVITY,
             cancelled: Arc::new(AtomicBool::new(false)),
         })
     }
@@ -157,7 +160,7 @@ impl Client {
                 worker: Path::new(""),
                 model,
                 camera,
-                timeout: Duration::from_secs(110),
+                timeout: LOAD_INACTIVITY,
                 cancelled: Arc::new(AtomicBool::new(false)),
             },
         )
@@ -211,8 +214,18 @@ impl Client {
             .stdout
             .as_mut()
             .ok_or(Error::Contract("missing worker output"))?;
-        let response = receive(stdout, timeout, &client.cancelled)
-            .map_err(|error| client.capture_failure(error))?;
+        let limit = if timeout == LOAD_INACTIVITY {
+            MAX_LOAD
+        } else {
+            timeout
+        };
+        let response = protocol::receive_bounded(stdout, timeout, limit, &client.cancelled, || {
+            client
+                .progress
+                .as_ref()
+                .and_then(|file| crate::worker_progress::upload_generation(file.path()))
+        })
+        .map_err(|error| client.capture_failure(error))?;
         let info: Info = serde_json::from_slice(&response)?;
         validate(&info, camera)?;
         if client.shared.as_file().metadata()?.len() != info.size as u64 {

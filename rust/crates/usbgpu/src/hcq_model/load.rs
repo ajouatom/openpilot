@@ -17,6 +17,9 @@ impl<D: Device> Model<D> {
         let program = Program::parse(&serde_json::to_vec(&manifest.dispatcher)?)?;
         let mut file = File::open(path)?;
         storage::verify(&mut file, manifest.model_bytes, &manifest.model_sha256)?;
+        crate::worker_progress::load_stage("load_model");
+        let mut uploaded = 0u64;
+        let mut next_report = 128 << 20;
         let mut memory = Memory::default();
         let mut buffers = Vec::with_capacity(manifest.buffers.len());
         let mut total = 0u64;
@@ -100,11 +103,19 @@ impl<D: Device> Model<D> {
             };
             if let Some(blob) = initial {
                 storage::load_blob(&mut file, blob, |offset, data| {
-                    bound.write(offset, data, &mut memory, &mut device)
+                    bound.write(offset, data, &mut memory, &mut device)?;
+                    uploaded += data.len() as u64;
+                    crate::worker_progress::mark("upload_weights");
+                    if uploaded >= next_report {
+                        eprintln!("eGPU worker uploaded {} MiB of weights", uploaded >> 20);
+                        next_report += 128 << 20;
+                    }
+                    Ok(())
                 })?;
             }
             buffers.push(bound);
         }
+        crate::worker_progress::load_stage("bind_model");
         let mut bindings = Vec::with_capacity(manifest.bindings.len());
         for binding in &manifest.bindings {
             let allocation = if let Some(alias) = binding.alias {

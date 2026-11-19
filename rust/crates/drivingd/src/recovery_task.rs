@@ -61,18 +61,29 @@ pub struct Task<T: Candidate> {
     health: Arc<Health>,
     done: Arc<AtomicBool>,
     claimed: Arc<AtomicBool>,
+    /// The first eGPU start of a drive: once loaded, the idle worker is kept
+    /// until the vehicle allows the handover, instead of expiring after
+    /// READY_SECONDS and loading the whole model again.
+    pub hold: bool,
 }
 impl<T: Candidate> Task<T> {
     pub fn start(
         health: Arc<Health>,
         prepare: impl FnOnce(Arc<AtomicBool>) -> Result<T, String> + Send + 'static,
     ) -> Self {
-        Self::start_with_schedule(health, prepare, background_scheduling)
+        Self::start_with_schedule(health, prepare, background_scheduling, false)
+    }
+    pub fn start_held(
+        health: Arc<Health>,
+        prepare: impl FnOnce(Arc<AtomicBool>) -> Result<T, String> + Send + 'static,
+    ) -> Self {
+        Self::start_with_schedule(health, prepare, background_scheduling, true)
     }
     pub fn start_with_schedule(
         health: Arc<Health>,
         prepare: impl FnOnce(Arc<AtomicBool>) -> Result<T, String> + Send + 'static,
         schedule: impl FnOnce() -> std::io::Result<()> + Send + 'static,
+        hold: bool,
     ) -> Self {
         let shared = Arc::new(Mutex::new(Shared {
             candidate: None,
@@ -107,13 +118,20 @@ impl<T: Candidate> Task<T> {
                                 if state.claimed {
                                     return;
                                 }
-                                let error = if !watch_health.healthy() {
+                                // A held, loaded worker is idle: it no longer
+                                // competes with the internal model or times out.
+                                let held = hold && state.ready_at.is_some();
+                                let error = if !watch_health.healthy() && !held {
                                     Some("internal model publication delayed")
-                                } else if started.elapsed().as_secs_f64() >= TASK_SECONDS {
+                                } else if started.elapsed().as_secs_f64() >= TASK_SECONDS
+                                    && state.ready_at.is_none()
+                                {
                                     Some("eGPU recovery task timed out")
-                                } else if state.ready_at.is_some_and(|ready| {
-                                    ready.elapsed().as_secs_f64() >= READY_SECONDS
-                                }) {
+                                } else if !hold
+                                    && state.ready_at.is_some_and(|ready| {
+                                        ready.elapsed().as_secs_f64() >= READY_SECONDS
+                                    })
+                                {
                                     Some("eGPU ready wait expired")
                                 } else {
                                     None
@@ -194,6 +212,7 @@ impl<T: Candidate> Task<T> {
             health,
             done,
             claimed: Arc::new(AtomicBool::new(false)),
+            hold,
         }
     }
     /// A busy worker never stalls the frame thread. The caller also applies the
@@ -204,7 +223,7 @@ impl<T: Candidate> Task<T> {
             || !self.health.healthy()
             || state
                 .ready_at
-                .is_none_or(|ready| ready.elapsed().as_secs_f64() >= READY_SECONDS)
+                .is_none_or(|ready| !self.hold && ready.elapsed().as_secs_f64() >= READY_SECONDS)
         {
             return None;
         }
@@ -234,7 +253,7 @@ impl<T: Candidate> Drop for Task<T> {
         }
     }
 }
-fn background_scheduling() -> std::io::Result<()> {
+pub(crate) fn background_scheduling() -> std::io::Result<()> {
     // SAFETY: GNU/MUSL sched_param contains only C integers, integer timespecs,
     // and reserved storage; all-zero is valid for every field.
     let mut settings: libc::sched_param = unsafe { std::mem::zeroed() };
@@ -254,4 +273,38 @@ fn background_scheduling() -> std::io::Result<()> {
         return Err(std::io::Error::last_os_error());
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Candidate, Health, Task};
+    use std::{sync::Arc, thread, time::Duration};
+
+    struct Worker;
+    impl Candidate for Worker {
+        fn alive(&mut self) -> bool {
+            true
+        }
+    }
+
+    fn started(hold: bool) -> Task<Worker> {
+        // Health::default() is not healthy: the internal model has published nothing.
+        Task::start_with_schedule(Arc::new(Health::default()), |_| Ok(Worker), || Ok(()), hold)
+    }
+
+    #[test]
+    fn a_held_startup_worker_survives_while_it_waits_for_handover() {
+        let held = started(true);
+        let retry = started(false);
+        thread::sleep(Duration::from_millis(300));
+        assert!(held.ready(), "held worker must stay loaded");
+        assert!(!held.finished());
+        assert!(
+            !retry.ready(),
+            "a recovery retry still yields to the internal model"
+        );
+        assert!(retry.finished());
+        // Handover itself still requires a healthy internal model.
+        assert!(held.claim().is_none());
+    }
 }

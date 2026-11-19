@@ -4,7 +4,7 @@ pub const DELAYS: [f64; 3] = [10., 30., 60.];
 pub const HEALTH_SECONDS: f64 = 3.;
 pub const MAX_PUBLICATION_GAP: f64 = 0.1;
 pub const MAX_INTERNAL_WORK: f64 = 0.05;
-pub const TASK_SECONDS: f64 = 150.;
+pub const TASK_SECONDS: f64 = openpilot_usbgpu::client::MAX_LOAD.as_secs() as f64 + 40.;
 pub const READY_SECONDS: f64 = 30.;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
@@ -39,6 +39,7 @@ pub struct Policy {
     pub reason: &'static str,
     pub budget: Budget,
     pub next_attempt: f64,
+    first_start: bool,
     healthy_since: Option<f64>,
     last_publication: Option<f64>,
 }
@@ -49,9 +50,22 @@ impl Policy {
             reason: "",
             budget,
             next_attempt: 0.,
+            first_start: false,
             healthy_since: None,
             last_publication: None,
         }
+    }
+    pub fn startup(&mut self) {
+        if self.budget.stopped || self.budget.attempts >= DELAYS.len() {
+            self.stop("attempts_exhausted");
+        } else {
+            self.first_start = true;
+            self.state = State::Waiting;
+        }
+    }
+    /// The next attempt is the drive's first eGPU start, not a recovery retry.
+    pub fn starting(&self) -> bool {
+        self.first_start
     }
     pub fn stop(&mut self, reason: &'static str) {
         if self.state == State::Stopped {
@@ -128,7 +142,9 @@ impl Policy {
         {
             return false;
         }
-        self.budget.attempts += 1;
+        if !std::mem::take(&mut self.first_start) {
+            self.budget.attempts += 1;
+        }
         self.state = State::Recovering;
         true
     }
