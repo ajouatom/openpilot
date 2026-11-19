@@ -85,6 +85,13 @@ HAZARD_ALT_FRAMES = int(0.4 / DT_CTRL)
 # CanfdHazardTest 10-17 (user 11-19): BLINKER_CONTROL 0-7 held as is, same path. 2 is "hazards button backlight" in the
 # DBC, 5-7 have no name; none of them was tried on a car before (panda allows all 8 values since then).
 HAZARD_RAW_FIRST = 10
+# 3/4/10-17 wait until carstate had its chance to adopt the camera's ADRV_0x1ea (CANFD_CAMERA_TX_MESSAGES ready count
+# 122): before that a 0x1ea car looks like a SPAS2 car and would put these trial values on the bus (review 11-19)
+HAZARD_SPAS2_READY = 122
+# 3 on a piggybacked stream (no ack, KickMode 1): panda keeps only the newest held 0x16A, so if MenuTest/Kick/remote
+# also run, the next host frame could replace the single value-1 frame before a stock frame carries it. Send no SPAS
+# frames for 3 host frames after the shot: 30 ms > one 20 ms stock period, < the 50 ms hold limit (review 11-19).
+HAZARD_SHOT_HOLD_FRAMES = 3
 # SpasSteerTest: stock RSPA handshake, mode 4 then 5 after 0.1 s (2019 log 226.7 -> 226.8 s), angle at 100 deg/s
 SPAS_STEER_ASK_FRAMES = 10
 SPAS_STEER_RATE = 1.0
@@ -322,6 +329,7 @@ class CarController(CarControllerBase):
     self.blinker_test = 0  # CanfdBlinkerMenuTest: 1 left, 2 right (menu test, any speed/gear)
     self.hazard_test = 0  # CanfdHazardTest (remote hazard, 2 = fast flash): SPAS2 hazards when no camera 0x1ea carries bit 104
     self.hazard_shot_sent = False  # CanfdHazardTest 3: the single value-1 frame went out (resets when the value leaves 3)
+    self.hazard_shot_frame = 0
     self.blinker_stalk = 0  # BlinkerStalkTest: 1 left, 2 right (0x3C1 replay)
     self.highbeam_frame = None       # frame the latest push started
     self.highbeam_kind = 1           # 1 high beam, 2 flash-to-pass
@@ -619,6 +627,9 @@ class CarController(CarControllerBase):
     # CanfdHazardTest on a car whose camera sends no 0x1ea (HDA1 Tucson): bit 104 has no carrier, so SPAS2 BLINKER_CONTROL 1
     # (DBC "hazards") asks for them instead, any gear, while the test is on. A car with 0x1ea keeps bit 104 (hyundaicanfd).
     haz_mode = self.hazard_test if getattr(CS, "adrv_0x1ea", None) is None else 0
+    if haz_mode not in (0, 1, 2) and (getattr(CS, "controls_ready_count", 0) <= HAZARD_SPAS2_READY or
+                                      0x1EA in getattr(getattr(CS, "cp_cam", None), "seen_addresses", ())):
+      haz_mode = 0
     if haz_mode != 3:
       self.hazard_shot_sent = False
     hazard = haz_mode in (1, 2) or (haz_mode == 3 and not self.hazard_shot_sent)
@@ -682,6 +693,9 @@ class CarController(CarControllerBase):
         self.spas_angle = rate_limit(target, self.spas_angle, -SPAS_STEER_RATE, SPAS_STEER_RATE)
         mode = 4 if self.frame - self.aprk_frame <= SPAS_STEER_ASK_FRAMES else 5
         return ret + hyundaicanfd.create_spas_steer(self.packer, self.CAN, mode, self.spas_angle)
+      if (haz_mode == 3 and self.hazard_shot_sent and not self.aprk_acked and self.blinker_kick_mode == 1 and
+          self.frame - self.hazard_shot_frame < HAZARD_SHOT_HOLD_FRAMES):
+        return ret  # let a stock frame carry the held value-1 frame first
       # every frame (100 Hz), twice APRK's 50 Hz: 10-26 APRK stayed on, so its BLINKER_CONTROL 0 frames interleave with ours
       if not self.aprk_acked and self.blinker_kick_mode == 2 and self.frame % 4:
         return ret  # direct 25 Hz: a quarter of the frames, a quarter of the collision chances
@@ -692,7 +706,7 @@ class CarController(CarControllerBase):
       ret.extend(hyundaicanfd.create_spas_messages(self.packer, self.CAN, self.frame, left, right, getattr(CS, "spas2", None),
                                                          haz, spas1=not spas2_only, raw=raw))
       if haz_mode == 3 and haz:
-        self.hazard_shot_sent = True  # next frame want is False: the session is given back
+        self.hazard_shot_sent, self.hazard_shot_frame = True, self.frame  # given back next frame unless another test runs
     return ret
 
   def update(self, CC, CS, now_nanos):
@@ -719,6 +733,8 @@ class CarController(CarControllerBase):
       self.steer_angle_test = params.get_int("SteerAngleTest")
       self.spas_steer_test = params.get_int("SpasSteerTest")
       self.hazard_test = params.get_int("CanfdHazardTest")
+      if self.hazard_test != 3:
+        self.hazard_shot_sent = False  # at 0 the update() gate skips aprk_blinkers, so 0 then 3 must reset here
       steerMax = params.get_int("CustomSteerMax")
       steerDeltaUp = params.get_int("CustomSteerDeltaUp")
       steerDeltaDown = params.get_int("CustomSteerDeltaDown")
