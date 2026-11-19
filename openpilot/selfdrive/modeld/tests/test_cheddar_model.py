@@ -10,6 +10,7 @@ from openpilot.selfdrive.modeld import cheddar_model as client, cheddar_runtime 
 def fake_model():
   model = object.__new__(client.CheddarModelState)
   model.frame_size = 12
+  model.camera_size = 2, 2
   model.inference_timeout = .15
   model.views = {name: np.zeros(12, np.uint8) for name in ('img', 'big_img')}
   model.views.update(desire=np.zeros(8, np.float32), traffic_convention=np.zeros((1, 2), np.float32),
@@ -127,5 +128,29 @@ def test_parent_death_removes_owned_shared_storage_before_worker_exit(monkeypatc
   with pytest.raises(SystemExit) as raised:
     worker.watch_parent(123, path)
   assert raised.value.code == 1
+
+
+def test_tightly_packed_pc_nv12_keeps_pixels_and_zeros_venus_padding():
+  from openpilot.system.camerad.cameras.nv12_info import get_nv12_info
+  stride, yh, uvh, _ = get_nv12_info(6, 4)
+  destination = np.full(stride * (yh + uvh), 255, np.uint8)
+  source = np.arange(36, dtype=np.uint8)
+  frame = SimpleNamespace(data=source, stride=6, uv_offset=24)
+  client.copy_camera_frame(destination, frame, 6, 4)
+  expected = np.zeros_like(destination)
+  for row in range(4):
+    expected[row * stride:row * stride + 6] = source[row * 6:row * 6 + 6]
+  for row in range(2):
+    expected[(yh + row) * stride:(yh + row) * stride + 6] = source[24 + row * 6:30 + row * 6]
+  np.testing.assert_array_equal(destination, expected)
+
+
+def test_venus_frame_uses_only_image_planes_not_kernel_padding():
+  from openpilot.system.camerad.cameras.nv12_info import get_nv12_info
+  stride, yh, uvh, total = get_nv12_info(6, 4)
+  destination = np.zeros(stride * (yh + uvh), np.uint8)
+  source = np.arange(total, dtype=np.uint8)
+  client.copy_camera_frame(destination, SimpleNamespace(data=source, stride=stride, uv_offset=stride * yh), 6, 4)
+  np.testing.assert_array_equal(destination, source[:destination.size])
 
 

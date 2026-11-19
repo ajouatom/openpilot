@@ -15,6 +15,25 @@ from openpilot.selfdrive.modeld.cheddar_runtime import CHECKPOINT
 from openpilot.selfdrive.modeld.helpers import get_tg_input_devices
 from openpilot.selfdrive.modeld.output_validation import validate_compiled_output
 from openpilot.selfdrive.modeld.parse_model_outputs import Parser
+from openpilot.system.camerad.cameras.nv12_info import get_nv12_info
+
+
+def copy_camera_frame(destination, buffer, width, height):
+  """Keep the existing PC camera's tightly packed NV12 compatibility."""
+  stride, yh, uvh, _ = get_nv12_info(width, height)
+  source = np.frombuffer(buffer.data, np.uint8)
+  src_stride = getattr(buffer, 'stride', stride)
+  src_uv = getattr(buffer, 'uv_offset', stride * yh)
+  if src_stride == stride and src_uv == stride * yh and source.size >= destination.size:
+    np.copyto(destination, source[:destination.size])
+    return
+  if src_stride < width or src_uv < src_stride * height or source.size < src_uv + src_stride * (height // 2):
+    raise ValueError('incomplete internal camera frame')
+  destination[:] = 0
+  y = destination[:stride * yh].reshape(yh, stride)
+  uv = destination[stride * yh:].reshape(uvh, stride)
+  y[:height, :width] = source[:src_stride * height].reshape(height, src_stride)[:, :width]
+  uv[:height // 2, :width] = source[src_uv:src_uv + src_stride * (height // 2)].reshape(height // 2, src_stride)[:, :width]
 
 
 class CheddarModelState:
@@ -23,6 +42,7 @@ class CheddarModelState:
   signal_shadow = None  # The optional observer's CD210 feature contract is incompatible.
 
   def __init__(self, cam_w, cam_h, pkl_path):
+    self.camera_size = cam_w, cam_h
     self.process = self.shared = self.file = None
     self.views = {}
     self.output = None
@@ -84,7 +104,7 @@ class CheddarModelState:
   def run(self, bufs, transforms, inputs, prepare_only):
     try:
       for name in self.vision_input_names:
-        np.copyto(self.views[name], np.frombuffer(bufs[name].data, np.uint8, count=self.frame_size))
+        copy_camera_frame(self.views[name], bufs[name], *self.camera_size)
       desire = np.asarray(inputs['desire_pulse']).copy()
       desire[0] = 0
       self.views['desire'][:] = np.where(desire - self.prev_desire > .99, desire, 0)
