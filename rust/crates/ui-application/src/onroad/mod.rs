@@ -8,5 +8,6 @@ pub mod driver_state;
 pub mod exp_button;
 pub mod hud;
 pub mod model_renderer;
+pub mod nav_map;
 pub mod path_geometry;
 pub mod road_markings;

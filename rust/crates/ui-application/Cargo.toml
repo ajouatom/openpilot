@@ -43,6 +43,7 @@ qrcodegen = "=1.8.0"
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 openpilot-ui-framework = { path = "../ui-framework" }
 openpilot-startup-ui = { path = "../startup-ui" }
+openpilot-mapsd = { path = "../mapsd" }
 openpilot-params = { path = "../params" }
 openpilot-cereal = { path = "../cereal" }
 openpilot-messaging = { path = "../messaging" }

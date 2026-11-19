@@ -3997,6 +3997,7 @@ dependencies = [
  "openpilot-logging",
  "openpilot-logmessaged",
  "openpilot-managed-entry",
+ "openpilot-mapsd",
  "openpilot-messaging",
  "openpilot-msgq",
  "openpilot-params",

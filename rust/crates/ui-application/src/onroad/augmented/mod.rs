@@ -99,6 +99,7 @@ pub struct Road {
     plot_next: f64,
     publisher: openpilot_messaging::runtime::PubMaster,
     border_params: crate::cache::TimedCache<border::Parameters>,
+    nav_map: onroad::nav_map::NavMap,
     diagnostics: Option<crate::render_diagnostics::RenderDiagnostics>,
 }
 impl Road {
@@ -192,6 +193,7 @@ impl Road {
             publisher: openpilot_messaging::runtime::PubMaster::for_runtime(&["uiDebug"])
                 .map_err(|error| Error::Io(std::io::Error::other(error)))?,
             border_params: crate::cache::TimedCache::new(border::Parameters::default()),
+            nav_map: onroad::nav_map::NavMap::new(),
             diagnostics: if big {
                 Some(crate::render_diagnostics::RenderDiagnostics::new("ui")?)
             } else {
@@ -394,6 +396,10 @@ impl Widget for Road {
             })?;
         }
         if big {
+            // Under the HUD, so speeds, signs and alerts stay on top of it.
+            if !self.suppress_camera {
+                self.nav_map.draw(&self.context, content, now, draw)?;
+            }
             measure(3, &mut || {
                 Self::render_child(self.hud.widget(), content, frame, draw)
             })?;

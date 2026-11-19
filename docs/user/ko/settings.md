@@ -349,7 +349,7 @@ Jetson HUD에는 `jetSON` 아래에 Jetson 내부 센서의 최고 온도가 표
 
 | 중분류 | 파라미터 | 용도 |
 |---|---|---|
-| 정보 표시 | `ShowDebugUI`, `ShowTpms`, `ShowDateTime`, `ShowPathEnd`, `ShowDeviceState`, `ShowLaneInfo`, `ShowRadarInfo`, `ShowRouteInfo`, `ShowPlotMode` | 주행 화면의 디버그, 타이어, 시간, 차선, 레이더와 경로 정보 |
+| 정보 표시 | `ShowDebugUI`, `ShowTpms`, `ShowDateTime`, `ShowPathEnd`, `ShowDeviceState`, `ShowLaneInfo`, `ShowRadarInfo`, `ShowRouteInfo`, `ShowPlotMode`, `ShowNavMap` | 주행 화면의 디버그, 타이어, 시간, 차선, 레이더와 경로 정보, 지도 |
 | 경로 표시 | `ShowPathMode`, `ShowPathColor`, `ShowPathColorCruiseOff`, `ShowPathModeLane`, `ShowPathColorLane` | 레인리스·레인모드·크루즈 OFF 상태의 경로 모양과 색상 |
 | 밝기·주행화면 | `ShowCustomBrightness`, `ShowModelView`, `ShowCameraWithCluster` | 주행 중 밝기, 카메라·모델 표시 조합과 외부 HUD 연결 중 본체 카메라 표시 |
 | 외부 HUD·기본 | `ClusterHud`, `ClusterHudBrightness`, `ClusterHudOrientation`, `ClusterHudMirror`, `ClusterHudTheme`, `ClusterNaviMapTheme`, `ClusterNaviMapType`, `ClusterNaviMapFps` | TURZX 외부 HUD, 밝기, 화면 회전, 미러링과 지도 테마 |
@@ -364,6 +364,8 @@ ARS 표시 스트림을 지원하는 RAV4 2022에서는 장치 기본 주행 화
 USB 외부 HUD 출력은 **10 FPS**로 고정되며, eGPU가 활성화되면 렌더링·인코딩·USB 출력 모두 **5 FPS**로 전환됩니다. eGPU 활성 상태가 바뀌면 자동 반영되며, H.264 인코더의 FPS 변경에는 HUD 재시작이 동반됩니다. Android 지도 입력의 `ClusterNaviMapFps`는 별도 설정입니다.
 
 Onroad에서는 본체 UI가 CPU 6번, 외부 HUD가 CPU 7번을 일반 스케줄링의 낮은 우선순위(nice 19)로 사용합니다. Offroad에서는 4~7번 코어 절전에 대응해 0~3번으로 복귀하며, 항상 켜짐 디버그 출력도 같은 복귀 규칙을 따릅니다. FPS·CPU 코어 선택과 실시간 우선순위 설정은 제거되어 이전 저장값은 적용되지 않습니다. 부하가 높으면 실제 갱신율은 출력 제한보다 낮아질 수 있습니다.
+
+`ShowNavMap`은 주행 화면 오른쪽에 Mapbox 지도를 진행 방향 위로 표시합니다. `0` 끄기, `1` 미니맵(야간 내비 지도), `2` 위성지도이며, 경로가 있으면 파란 선으로 겹쳐 그립니다. Mapbox Public 키가 필요합니다. 타일은 mapsd가 받아 기기에 30일(최대 256MB) 저장하고, 화면은 새 타일이 들어올 때만 디코드해 GPU로 회전·이동합니다.
 
 `ShowPlotMode`는 주행 중 진단 그래프를 선택하며 `0`은 표시를 끕니다. `4`와 `5`는 모두 주 제어 대상 앞차(`radarState.leadOne`)를 사용하며, mici 본체에서도 앞차 메시지의 값이 바뀌면 그래프에 반영합니다.
 

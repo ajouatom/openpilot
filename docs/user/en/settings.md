@@ -355,7 +355,7 @@ With `CarrotVisionEnabled` on, the external HUD and web camera view can be used 
 
 | Group | Parameters | Purpose |
 |---|---|---|
-| Information | `ShowDebugUI`, `ShowTpms`, `ShowDateTime`, `ShowPathEnd`, `ShowDeviceState`, `ShowLaneInfo`, `ShowRadarInfo`, `ShowRouteInfo`, `ShowPlotMode` | Debug, tire, time, lane, radar, and route information |
+| Information | `ShowDebugUI`, `ShowTpms`, `ShowDateTime`, `ShowPathEnd`, `ShowDeviceState`, `ShowLaneInfo`, `ShowRadarInfo`, `ShowRouteInfo`, `ShowPlotMode`, `ShowNavMap` | Debug, tire, time, lane, radar, and route information, map |
 | Path | `ShowPathMode`, `ShowPathColor`, `ShowPathColorCruiseOff`, `ShowPathModeLane`, `ShowPathColorLane` | Path shape and color by driving state |
 | Brightness/on-road view | `ShowCustomBrightness`, `ShowModelView`, `ShowCameraWithCluster` | Brightness, camera/model composition, and the on-device camera while the external HUD is connected |
 | External HUD | `ClusterHud`, `ClusterHudBrightness`, `ClusterHudOrientation`, and related `ClusterHud*` settings | Supported TURZX HUD layout, live brightness, screen rotation, camera, radar, and encoder options |
@@ -368,6 +368,8 @@ or Toyota corner-radar support. See the [display conditions](radar.md).
 USB external HUD output is fixed at **10 FPS**; while the eGPU is active, rendering, encoding, and USB output switch to **5 FPS**. Changes to eGPU activity apply automatically; changing the H.264 encoder rate restarts the HUD. `ClusterNaviMapFps` remains a separate setting for Android map input.
 
 Onroad, the main UI uses CPU 6 and the external HUD uses CPU 7 with low-priority normal scheduling (nice 19). Offroad, both return to CPUs 0–3 so CPUs 4–7 can enter power save; always-on debug output follows the same rule. FPS selection, CPU selection, and realtime priority settings have been removed, and previously stored values are ignored. Actual refresh rates may fall below the output cap under load.
+
+`ShowNavMap` shows a Mapbox map at the right of the driving view, heading up: `0` off, `1` minimap (navigation night map), `2` satellite map, with the route drawn in blue when there is one. It needs a Mapbox Public key. mapsd downloads the tiles and keeps them on the device for 30 days (up to 256 MB); the screen decodes a tile only when it comes into view and moves and rotates it on the GPU.
 
 `ShowPlotMode` selects an on-road diagnostic graph; `0` turns it off. Modes `4` and `5` both use the primary lead vehicle (`radarState.leadOne`), and the mici device display also updates these graphs when the lead message values change.
 

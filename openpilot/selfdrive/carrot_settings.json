@@ -556,7 +556,8 @@
             "ShowLaneInfo",
             "ShowRadarInfo",
             "ShowRouteInfo",
-            "ShowPlotMode"
+            "ShowPlotMode",
+            "ShowNavMap"
           ]
         },
         {
@@ -2752,6 +2753,23 @@
       "cdescr": "0:关, 1:加速度, 2:速度+加速度, 3:模型, 4:前车加速度/相对速度, 5:前车加速度/加加速度, 6:转向, 7:转角, 8:曲率",
       "min": 0,
       "max": 8,
+      "default": 0,
+      "unit": 1,
+      "control": "select"
+    },
+    {
+      "group": "화면",
+      "name": "ShowNavMap",
+      "title": "지도 표시(0)",
+      "descr": "주행 화면 오른쪽에 Mapbox 지도를 표시합니다. 0: 끄기, 1: 미니맵(야간 내비 지도), 2: 위성지도. Mapbox 토큰(Carrot Web)이 필요합니다. 타일은 기기에 30일 저장(최대 256MB)되어 같은 길은 다시 받지 않습니다.",
+      "egroup": "DISP",
+      "etitle": "Map display(0)",
+      "edescr": "Shows a Mapbox map at the right of the driving view. 0: off, 1: minimap (navigation night map), 2: satellite map. Needs a Mapbox token (Carrot Web). Tiles are kept on the device for 30 days (up to 256 MB), so a known road is not downloaded again.",
+      "cgroup": "显示设置",
+      "ctitle": "地图显示(0)",
+      "cdescr": "在驾驶画面右侧显示 Mapbox 地图。0: 关闭, 1: 小地图(夜间导航地图), 2: 卫星地图。需要 Mapbox 令牌(Carrot Web)。图块在设备上保存30天(最多256MB)，同一路段不会重复下载。",
+      "min": 0,
+      "max": 2,
       "default": 0,
       "unit": 1,
       "control": "select"

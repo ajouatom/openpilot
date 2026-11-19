@@ -11,6 +11,7 @@ use openpilot_logging::{
     Fields, Value,
 };
 use openpilot_mapsd::{
+    display,
     output::{self, Map, DEMAND_PATH, MAP_BYTES},
     preview,
     remote::{Archive, Mapbox},
@@ -112,12 +113,16 @@ fn text(params: &openpilot_params::Params, key: &str) -> String {
         .unwrap_or_default()
 }
 
-/// As carrot: a Mapbox token wins; otherwise a configured PMTiles URL.
-fn remote(params: &openpilot_params::Params) -> (String, Option<Source>) {
-    let token = std::env::var("MAPBOX_TOKEN")
+fn mapbox_token(params: &openpilot_params::Params) -> String {
+    std::env::var("MAPBOX_TOKEN")
         .ok()
         .filter(|t| !t.is_empty())
-        .unwrap_or_else(|| text(params, "MapboxPublicKey"));
+        .unwrap_or_else(|| text(params, "MapboxPublicKey"))
+}
+
+/// As carrot: a Mapbox token wins; otherwise a configured PMTiles URL.
+fn remote(params: &openpilot_params::Params) -> (String, Option<Source>) {
+    let token = mapbox_token(params);
     if !token.is_empty() {
         return (
             format!("mapbox:{}", token.len()),
@@ -231,6 +236,57 @@ fn demand(params: &openpilot_params::Params) -> bool {
         || preview::fresh(Path::new(preview::WEB_DEMAND_PATH))
 }
 
+/// The map panel's downloads on their own thread (it inherits the little
+/// cores and nice 15). The loop only says where the car is and which style
+/// the panel wants; None stops the downloads.
+type PanelTarget = Option<(display::Style, (f64, f64))>;
+
+struct PanelTiles {
+    /// (Mapbox token, target)
+    shared: Arc<std::sync::Mutex<(String, PanelTarget)>>,
+}
+
+impl PanelTiles {
+    fn start(stop: Arc<AtomicBool>) -> std::io::Result<Self> {
+        let shared = Arc::new(std::sync::Mutex::new((String::new(), None)));
+        let worker = Arc::clone(&shared);
+        std::thread::Builder::new()
+            .name("mapsd-panel".into())
+            .spawn(move || {
+                let mut fetcher = display::Fetcher::new(String::new(), display::store_root());
+                while !stop.load(Ordering::Relaxed) {
+                    let (token, target) = match worker.lock() {
+                        Ok(state) => state.clone(),
+                        Err(_) => return,
+                    };
+                    if token != fetcher.token() {
+                        fetcher = display::Fetcher::new(token, display::store_root());
+                    }
+                    let fetched = target.is_some_and(|(style, (longitude, latitude))| {
+                        fetcher.step(style, longitude, latitude, monotonic())
+                    });
+                    // Back to back while tiles are missing, else 5 checks a second.
+                    if !fetched {
+                        std::thread::sleep(Duration::from_millis(200));
+                    }
+                }
+            })?;
+        Ok(Self { shared })
+    }
+
+    fn set_token(&self, token: String) {
+        if let Ok(mut state) = self.shared.lock() {
+            state.0 = token;
+        }
+    }
+
+    fn aim(&self, target: PanelTarget) {
+        if let Ok(mut state) = self.shared.lock() {
+            state.1 = target;
+        }
+    }
+}
+
 /// Auxiliary work shares only the little cores, at normal priority: never
 /// compete with camera, control, radar, driving model or DM on cores 4..7.
 fn little_cores() {
@@ -273,6 +329,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut logger = Factory::for_runtime().ok().map(|factory| factory.logger());
     let mut tracker: Option<RouteTracker> = None;
     let mut position = ParkedPosition::default();
+    let panel = PanelTiles::start(Arc::clone(&stop))?;
+    let mut panel_style: Option<display::Style> = None;
+    let (mut route_generation, mut panel_route) = (0u64, None::<u64>);
     let (mut next_render, mut next_config, mut was_ready) = (0f64, 0f64, false);
     let (mut demand_checked, mut wanted, mut retry_at, mut next_preview) =
         (0f64, false, 0f64, 0f64);
@@ -286,6 +345,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let now = monotonic();
         if now >= next_config {
             next_config = now + 5.;
+            panel.set_token(mapbox_token(&params));
             let (key, source) = remote(&params);
             if key != remote_key {
                 remote_key = key;
@@ -318,6 +378,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     {
                         route_id = id;
                         route = selected;
+                        route_generation += 1;
                         tracker = RouteTracker::new(route.clone());
                         next_render = 0.;
                     }
@@ -333,7 +394,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         if now >= demand_checked {
             wanted = demand(&params);
             demand_checked = now + 1.;
+            panel_style = display::read_demand(Path::new(display::DEMAND_PATH));
         }
+        // The onroad map panel: its route when that changed; its tiles come
+        // from PanelTiles' own thread, so a slow download never delays the
+        // model's map.
+        if panel_style.is_some() {
+            if panel_route != Some(route_generation) {
+                match display::write_route(Path::new(display::ROUTE_PATH), &route) {
+                    Ok(()) => panel_route = Some(route_generation),
+                    Err(error) => eprintln!("mapsd: write panel route: {error}"),
+                }
+            }
+        } else {
+            panel_route = None;
+        }
+        panel.aim(panel_style.zip(fix.as_ref().map(|f| (f.longitude, f.latitude))));
         let ready = wanted && tracker.is_some() && fix.is_some() && instruction;
         if now < next_render && (ready || !was_ready) {
             was_ready = ready;
