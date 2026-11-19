@@ -17,12 +17,12 @@ jobs:
       - name: Execute the pinned internal Cheddar runtime on native CPU
         env:
           PYTHONPATH: .
-          DEV: CPU
+          DEV: CPU:LLVM
         run: python tools/modeld/check_cheddar_runtime.py
       - name: Compile Cheddar and exercise the production worker on native CPU
         env:
           PYTHONPATH: .
-          DEV: CPU
+          DEV: CPU:LLVM
         run: |
           mkdir /tmp/cheddar-build
           curl --fail --retry 3 -L -o /tmp/cheddar-build/model.onnx https://huggingface.co/commaai/openpilot_driving_models/resolve/main/26ada517-d522-4c97-b358-c91c34bf40b1/16384/big_driving_supercombo.onnx
