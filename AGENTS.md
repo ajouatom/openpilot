@@ -1,5 +1,28 @@
 # Repository memory
 
+- 2026-11-19 evening: Owner reconnects comma and authorizes actual Cheddar
+  installation plus PR39415 review. Offroad clean tracked checkout fast-forwards
+  a9811adce->93c5c6afaf, normal reboot/fresh QCOM SCons build succeeds; installed
+  worker passes both camera sizes, changed input/catch-up/reset. Owner READY,
+  real1344x760 cameras/core7/FIFO54. Initial1398 live frames mean34.30/max44.97,
+  no gaps or invalid pose/odometry. Explicit Park/zero/inactive guarded45s
+  Jetlink daemon pause: stable Cheddar820frames mean34.32/max45.21/zeroover50,
+  valid outputs/odometry/pose. Deliberate timeout207.41ms causes3-frame gap and
+  one invalid odometry; pose valid/no sampled alert. Resume watchdog/finally
+  restore daemon; N16 returns~10s later,1406frames mean41.43/max50.03/oneover50,
+  all valid. Existing N16 remains active; Cheddar internal fallback retained.
+  No model-selection/control Params changes, road/thermal validation. Recovered
+  raw evidence and hash-matched scratch bundle/warp; exact unused5319-file
+  scratch directory removed, live mmap/runtime retained. Previous final full
+  build/model/Jetson/docs CI pass. PR39415 only changes external PKL, sameec91b74
+  runtime; configured official LFS returns404 for16882f.../764592225B twice.
+  Official Fairy Tale ONNXbc125a.../766137036B hash/checker pass; Light speed2
+  contract/slices exact,40CPU recurrent frames finite/parser/cereal pass.
+  No NAV inputs. Official Chestnut60samples mean39.39/max39.92, not own hardware.
+  Hold Fairy catalog/pins until exact PKL and native external validation.
+  See docs/fairy_tale_model_review_20261119.md, updated Cheddar review and
+  private scratch2026-11-19-cheddar-install and2026-11-19-fairy-tale.
+
 - 2026-11-19: Owner requests official-condition Cheddar comparison and runtime
   integration, permitting CD210 replacement. Same offroad TICI, core7/FIFO54,
   performance governors/1689600kHz and GPU IRQ7: 500 synthetic full-image calls
