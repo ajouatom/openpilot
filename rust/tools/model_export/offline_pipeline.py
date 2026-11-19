@@ -164,6 +164,14 @@ def recurrent_driving_pipeline(loaded: OfflineOnnx, spec: OfflinePipelineSpec, n
         Tensor.realize(packed, image)
         outputs = loaded.runner({"new_img": image, "desire": packed[0:8], "traffic_convention": packed[8:10].reshape(1, 2),
                                  "action_t": packed[10:12].reshape(1, 2), **states})
+        # Compute each prediction head at its own width. Fusing the reductions
+        # into Cheddar's final Concat evaluates all heads for every output lane.
+        producers = {name: node for node in loaded.runner.graph_nodes for name in node.outputs}
+        prediction = producers["outputs"]
+        if prediction.op == "Cast":
+            prediction = producers[prediction.inputs[0]]
+        if prediction.op == "Concat":
+            Tensor.realize(*(loaded.runner.graph_values[name] for name in prediction.inputs))
         model = outputs["outputs"].cast(dtypes.float32).contiguous()
         following = [outputs[f"next_{name}"].contiguous() for name in RECURRENT_STATES]
         Tensor.realize(model, *following)

@@ -46,6 +46,10 @@ def prepare_constants(model: OfflineModel, linear: UOp) -> PreparedSchedule:
                     if len(initialized[argument]) != descriptor(argument).nbytes:
                         raise ExportError("offline initializer size differs from storage")
                     host[argument].buffer.ensure_allocated().copyin(memoryview(bytearray(initialized[argument])))
+                else:
+                    # A weight transform can leave gaps between image rows.
+                    # These bytes are serialized along with the written values.
+                    host[argument].buffer.ensure_allocated().copyin(memoryview(bytearray(original.nbytes)))
         with Context(DEV="CPU:LLVM", IMAGE=1, FLOAT16=1, NOLOCALS=1, BEAM=0):
             if call.src[0].op is Ops.COPY:
                 program, outputs, inputs = call.src[0], (0,), (1,)
