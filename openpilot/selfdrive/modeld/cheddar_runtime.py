@@ -57,9 +57,14 @@ def load_bundle(path):
     opcodes = stream.read(size)
     if len(opcodes) != size:
       raise EOFError('incomplete internal model pickle')
-    arena = Tensor(np.frombuffer(stream.read(), np.uint8).copy(), device=Device.DEFAULT).realize().uop.buffer
+    payload = stream.read()
+    arena = Tensor(np.frombuffer(payload, np.uint8).copy(), device=Device.DEFAULT).realize().uop.buffer if payload else None
+  def persistent_load(pid):
+    if arena is None:
+      raise EOFError('missing internal model buffer arena')
+    return arena.view(*pid)
   unpickler = pickle.Unpickler(io.BytesIO(opcodes))
-  unpickler.persistent_load = lambda pid: arena.view(*pid)
+  unpickler.persistent_load = persistent_load
   return unpickler.load()
 
 
