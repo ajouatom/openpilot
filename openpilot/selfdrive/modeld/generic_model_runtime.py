@@ -44,7 +44,7 @@ def input_view(buffer, shape, dtype, offset=0):
   return Tensor(uop).reshape(shape)
 
 
-def model_metadata(jits):
+def model_metadata(jits, *, device='AMD'):
   metadata = jits['metadata']
   specs = jits['input_specs']
   outputs = jits['output_specs']
@@ -64,11 +64,11 @@ def model_metadata(jits):
   if set(specs) != {'new_img', 'desire', 'traffic_convention', 'action_t'} | set(state_pairs) | nav:
     raise ValueError('unsupported generic model inputs')
   for name, next_name in state_pairs.items():
-    shape, dtype, device = specs[name]
+    shape, dtype, state_device = specs[name]
     out_shape, out_dtype, out_device = outputs[next_name]
-    if tuple(shape) != tuple(out_shape) or np.dtype(dtype) != np.dtype(out_dtype) or device != out_device:
+    if tuple(shape) != tuple(out_shape) or np.dtype(dtype) != np.dtype(out_dtype) or state_device != out_device:
       raise ValueError('incompatible generic model state feedback')
-  if not state_pairs or any(spec[2] != 'AMD' for spec in list(specs.values()) + list(outputs.values())):
+  if not state_pairs or any(spec[2] != device for spec in list(specs.values()) + list(outputs.values())):
     raise ValueError('unsupported generic model device/state')
   slices = pickle.loads(base64.b64decode(metadata['metadata']['output_slices']))
   count = math.prod(outputs['outputs'][0])

@@ -111,5 +111,8 @@ Pipfile
 .ionide
 .vs
 
+# Extracted internal policy runtime, reproduced from the verified source archive.
+openpilot/selfdrive/modeld/models/.cheddar-runtime/
+
 # Local Windows native CPU test builds
 *.pyd
