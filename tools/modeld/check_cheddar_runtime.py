@@ -18,7 +18,10 @@ def check(directory):
 
   @TinyJit
   def policy(state, control, outputs):
-    Tensor.realize(outputs['next'].assign(state + control), outputs['result'].assign((state + control) * 2))
+    # Materialize the next value before either destination is written. A toy
+    # graph that re-reads state after writing its alias is not alias-safe.
+    next_value = (state + control).contiguous().realize()
+    Tensor.realize(outputs['next'].assign(next_value), outputs['result'].assign(next_value * 2))
 
   @TinyJit
   def warp(frame):
