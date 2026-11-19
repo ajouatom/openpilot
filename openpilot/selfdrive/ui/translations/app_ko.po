@@ -1569,8 +1569,8 @@ msgid "comma Connect is disabled"
 msgstr "comma Connect가 꺼져 있습니다"
 
 #: openpilot/selfdrive/ui/layouts/settings/toggles.py
-msgid "Vehicle (manual)"
-msgstr "차량 (수동)"
+msgid "Vehicle (restart)"
+msgstr "차량 (재시작)"
 
 #: openpilot/selfdrive/ui/layouts/settings/toggles.py
 msgid "Porter II EV"
@@ -1581,8 +1581,8 @@ msgid "Ioniq 5 HDA2"
 msgstr "아이오닉5 HDA2"
 
 #: openpilot/selfdrive/ui/layouts/settings/toggles.py
-msgid "Porter II EV: CAMERA SCC 0, radar tracks 0, HDA2 0, steering ratio 20.2. Ioniq 5 HDA2: 2, 3, 1, steering ratio 14.0. Other manual settings, including Porter toggles, stay unchanged. Select while offroad, choose the matching branch manually and restart before driving."
-msgstr "포터2 EV: CAMERA SCC 0, 레이더트랙 0, HDA2 0, 조향비 20.2. 아이오닉5 HDA2: 2, 3, 1, 조향비 14.0. 포터 전용 토글을 포함한 다른 수동 설정은 유지합니다. 주행 종료 상태에서 선택하고 해당 브랜치를 직접 선택한 뒤 주행 전에 재시작하세요."
+msgid "Porter II EV: CAMERA SCC 0, radar tracks 0, HDA2 0, steering ratio 20.2. Ioniq 5 HDA2: 2, 3, 1, steering ratio 14.0. Other manual settings, including Porter toggles, stay unchanged. Select with ignition off or while stopped in Park. Ignition-on selections apply after restart. Choose the matching branch manually and restart before driving."
+msgstr "포터2 EV: CAMERA SCC 0, 레이더트랙 0, HDA2 0, 조향비 20.2. 아이오닉5 HDA2: 2, 3, 1, 조향비 14.0. 포터 전용 토글을 포함한 다른 수동 설정은 유지합니다. 시동 OFF 또는 P단 정차 상태에서 선택하세요. 시동 ON에서 선택한 값은 재시작 후 적용됩니다. 해당 브랜치를 직접 선택하고 주행 전에 재시작하세요."
 
 #: openpilot/selfdrive/ui/layouts/settings/toggles.py
 msgid "Vehicle selection could not finish. Restart before driving."

@@ -10,7 +10,7 @@
 +<!-- CARROT:SECTION:BEGIN USAGE -->
 +### 사용
 +
-+주행 종료 상태에서 차량과 해당 브랜치를 직접 선택하고 주행 전에 재시작합니다. 이후 수동 조향비 변경은 다음 차량 선택 전까지 유지되며, 부팅만으로 차량별 값을 다시 적용하지 않습니다.
++시동 OFF 또는 유효한 신호로 확인된 P단 정차 상태에서 선택합니다. 시동 ON에서 선택하면 예약만 저장하고 콤마를 재부팅할 때 차종과 설정을 적용하며, 그 전에는 현재 설정을 유지합니다. 해당 브랜치를 직접 선택하고 주행 전에 재시작합니다. 이후 수동 조향비 변경은 다음 차량 선택 적용 전까지 유지됩니다.
 +<!-- CARROT:SECTION:END USAGE -->
 --- a/EN-CustomSteerRatiox0.1(0).md
 +++ b/EN-CustomSteerRatiox0.1(0).md
@@ -24,7 +24,7 @@
 +<!-- CARROT:SECTION:BEGIN USAGE -->
 +### Usage
 +
-+Select the vehicle and matching branch manually while offroad, then restart before driving. Later manual ratio changes remain until the next vehicle selection; startup alone does not reapply a vehicle preset.
++Select with ignition off or valid feedback confirming stopped in Park. Ignition-on choices queue the vehicle and settings for an OS reboot, leaving current settings unchanged until then. Choose the matching branch manually and restart before driving. Later manual ratio changes remain until the next selection is applied.
 +<!-- CARROT:SECTION:END USAGE -->
 --- a/ZH-自定义转向比x0.1(0).md
 +++ b/ZH-自定义转向比x0.1(0).md
@@ -38,5 +38,5 @@
 +<!-- CARROT:SECTION:BEGIN USAGE -->
 +### 使用
 +
-+请在非行驶状态下手动选择车型及对应分支，并在驾驶前重启。之后手动修改的转向比会保留到下次车型选择，仅启动设备不会重新应用车型预设。
++请在熄火或有效信号确认 P 挡停车时选择。点火开启时只保存待应用的车型，在设备重启时应用车型及设置，此前保留当前设置。请手动选择对应分支，并在驾驶前重启。之后手动修改的转向比会保留到下次车型选择生效。
 +<!-- CARROT:SECTION:END USAGE -->

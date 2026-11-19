@@ -19,7 +19,10 @@ from openpilot.common.vehicle_selection import (
 
 
 @pytest.fixture
-def store(tmp_path):
+def store(tmp_path, monkeypatch):
+  from openpilot.common import vehicle_selection
+
+  monkeypatch.setattr(vehicle_selection, '_boot_id', lambda: 'boot-a')
   p = Params(str(tmp_path / 'params'))
   p.put_bool('IsOffroad', True)
   for key, value in {
@@ -84,7 +87,16 @@ def test_interrupted_selection_finishes_without_touching_other_manual_values(sto
   assert preserved(store) == before
 
 
-@pytest.mark.parametrize('value', [{'version': 2, 'vehicle': IONIQ5}, {'version': 1, 'vehicle': 'OTHER'}, {'vehicle': IONIQ5}])
+@pytest.mark.parametrize(
+  'value',
+  [
+    {'version': 3, 'vehicle': IONIQ5},
+    {'version': 1, 'vehicle': 'OTHER'},
+    {'vehicle': IONIQ5},
+    {'version': 2, 'vehicle': IONIQ5},
+    {'version': 2, 'vehicle': IONIQ5, 'boot': ''},
+  ],
+)
 def test_invalid_pending_choice_never_applies_a_profile(store, value):
   store.put(PENDING, value)
   with pytest.raises(ValueError):
@@ -108,12 +120,17 @@ def test_retired_auto_settings_cannot_rewrite_presets_or_start_a_handoff(store):
 
 
 @pytest.mark.parametrize('index,vehicle', [(0, PORTER), (1, IONIQ5)])
-def test_real_manual_car_lookup_skips_active_queries_despite_stale_auto_flags(store, monkeypatch, index, vehicle):
+@pytest.mark.parametrize('pending_parked', [False, True])
+def test_real_manual_car_lookup_skips_active_queries_despite_stale_auto_flags(store, monkeypatch, index, vehicle, pending_parked):
   from opendbc.car import car_helpers
   from opendbc.car.structs import CarParams
   from opendbc.car.vin import VIN_UNKNOWN
 
   select_manual_vehicle(store, index)
+  if pending_parked:
+    store.put_bool('IsOnroad', True)
+    store.put_bool('IsOffroad', False)
+    select_manual_vehicle(store, 1 - index, parked=True)
   store.put_bool('AutoVehicleSession', True)
   store.put_bool('AutoVehicleBranchPending', True)
   calls = []
@@ -139,6 +156,8 @@ def test_real_manual_car_lookup_skips_active_queries_despite_stale_auto_flags(st
   assert result.CP.carFingerprint == vehicle
   assert result.CP.fingerprintSource == CarParams.FingerprintSource.fixed
   assert calls == [True]
+  assert store.get('CarName') == vehicle
+  assert bool(store.get(PENDING)) == pending_parked
 
 
 def test_other_manual_selection_is_not_replaced_by_a_two_vehicle_default(store):
@@ -185,3 +204,29 @@ def test_manual_ratio_adjustment_is_not_overwritten_on_startup_without_a_new_cho
   assert store.get_int('CustomSR') == 155
   select_manual_vehicle(store, 0)
   assert store.get_int('CustomSR') == 202
+
+
+@pytest.mark.parametrize('onroad,offroad', [(True, False), (True, True), (False, False)])
+def test_parked_selection_waits_for_manager_startup(store, monkeypatch, onroad, offroad):
+  from openpilot.common import vehicle_selection
+
+  select_manual_vehicle(store, 0)
+  before = preserved(store)
+  active_keys = (*PRESETS[PORTER], 'CarName', 'CarSelected3')
+  active = {key: store.get(key) for key in active_keys}
+  store.put_bool('IsOnroad', onroad)
+  store.put_bool('IsOffroad', offroad)
+  select_manual_vehicle(store, 1, parked=True)
+  assert selected_vehicle_index(store) == 1
+  finish_pending_selection(store)  # card/ignition restart must not apply it
+  assert {key: store.get(key) for key in active_keys} == active
+  assert store.get(PENDING) == {'version': 2, 'vehicle': IONIQ5, 'boot': 'boot-a'}
+  finish_pending_selection(store, startup=True)  # same-boot manager restart
+  assert {key: store.get(key) for key in active_keys} == active
+  assert store.get(PENDING)
+  monkeypatch.setattr(vehicle_selection, '_boot_id', lambda: 'boot-b')
+  finish_pending_selection(store, startup=True)
+  assert store.get('CarName') == IONIQ5
+  assert {key: store.get_int(key) for key in PRESETS[IONIQ5]} == PRESETS[IONIQ5]
+  assert not store.get(PENDING)
+  assert preserved(store) == before

@@ -87,7 +87,7 @@ def manager_init() -> UpdateStatus:
     params.put_bool("RecordFront", True)
 
   retire_automatic_switch(params)
-  finish_pending_selection(params)
+  finish_pending_selection(params, startup=True)
   configure_monitoring(params)
   migrate_atc_params(params)
   migrate_lateral_geometry_params(params)

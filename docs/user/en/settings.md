@@ -339,7 +339,7 @@ A saved change takes effect at the **next vehicle-parameter initialization**; it
 
 This manual selector is available on both `c3-pht-porter` and `c3-pht`.
 
-On the comma, open **Settings → Toggles → Vehicle (manual)** and select **Porter II EV** or **Ioniq 5 HDA2**. Selection is available only offroad and saves the vehicle and these four settings.
+On the comma, open **Settings → Toggles → Vehicle (restart)** and select **Porter II EV** or **Ioniq 5 HDA2**. Selection is available with ignition off or with valid vehicle feedback confirming stopped in Park, and changes the vehicle and these four settings.
 
 | Setting | Porter II EV | Ioniq 5 HDA2 |
 |---|---|---|
@@ -350,7 +350,9 @@ On the comma, open **Settings → Toggles → Vehicle (manual)** and select **Po
 
 Manually choose `c3-pht-porter` for the Porter or `c3-pht` for the Ioniq 5, then restart before driving. Automatic identification, preset restoration and Git branch switching have been removed. Manual selection skips active VIN/firmware queries; passive CAN bus detection and camera/model startup are still required.
 
-The ratio preset applies when a vehicle button is pressed; later manual adjustments remain until the next vehicle selection. Other manual settings, including steering strength, GAP and Porter automatic SET, low-speed cancellation and dedicated GAP toggles, are preserved. Porter-specific features run only on the Porter and remain inactive on the Ioniq 5. Shared steering settings can affect both cars; check them for the selected vehicle. Calibration is no longer reset automatically: reset calibration in the Device menu after moving to the other vehicle's mounting position.
+An ignition-on Park selection queues the next vehicle and leaves the current vehicle and settings unchanged. Reboot the comma to apply the queued vehicle and four settings. Process restarts or cycling ignition within the same OS boot do not apply it. Drive, Reverse, Neutral, motion, invalid CAN or stale vehicle feedback block selection. Ignition-off choices retain immediate storage and still require a restart before driving.
+
+The ratio preset changes when a vehicle selection is applied; later manual adjustments remain until the next selection is applied. Other manual settings, including steering strength, GAP and Porter automatic SET, low-speed cancellation and dedicated GAP toggles, are preserved. Porter-specific features run only on the Porter and remain inactive on the Ioniq 5. Shared steering settings can affect both cars; check them for the selected vehicle. Calibration is no longer reset automatically: reset calibration in the Device menu after moving to the other vehicle's mounting position.
 
 <a id="display"></a>
 ## Display

@@ -115,7 +115,9 @@ branch-generated pages with `git apply --check --unidiff-zero` and
 
 `manual-vehicle-steering-ratio.patch` documents the comma Toggles action's
 `CustomSR` presets for Porter II EV and Ioniq 5 HDA2, preserving the Porter
-feature toggles and other manual tuning. Generate fresh pages from the matching
+feature toggles and other manual tuning. Ignition-on Park choices are queued
+for manager startup after an OS reboot; same-boot manager/card restarts keep
+the active profile. Generate fresh pages from the matching
 fork catalog, apply with `git apply --check --unidiff-zero` and
 `git apply --unidiff-zero`, regenerate with staging as `--wiki-dir` and validate.
 Only Korean, English and Chinese MANUAL regions change. This fork-specific
