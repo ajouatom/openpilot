@@ -134,6 +134,19 @@ def test_any_blinker_control_value_is_a_lamp_command_other_bits_stay_refused():
   assert not d.s.safety_tx_hook(raw(20, (2 << 5) | 1))
 
 
+def test_gv80_parking_ecu_lamp_fields_are_allowed():
+  # 11-20 GV80 auto-parking logs: byte 18 = 0x40 rides with BLINKER_CONTROL 3/4, byte 3 = 0x26 while the parking
+  # system is armed. Exactly those values pass; anything else in those bytes stays refused
+  d = Device()
+  def raw(counter, byte3, byte18):
+    data = bytearray(frame(SPAS2, counter, "left", 0).dat)
+    data[3], data[18] = byte3, byte18
+    data[:2] = checksum(SPAS2, data).to_bytes(2, 'little')
+    return libsafety_py.make_CANPacket(SPAS2, 0, bytes(data))
+  assert d.s.safety_tx_hook(raw(1, 0x01, 0x40)) and d.s.safety_tx_hook(raw(2, 0x26, 0x40))
+  assert not d.s.safety_tx_hook(raw(3, 0x01, 0x41)) and not d.s.safety_tx_hook(raw(4, 0x27, 0x40))
+
+
 def test_hda1_allows_the_parking_ecu_and_spas_ids():
   # 11-17: HDA1 (camera SCC + long, no HDA2) takes 0x7B1 and SPAS1/SPAS2 like HDA2; before only the piggyback copy left
   d = Device(4 | 8)

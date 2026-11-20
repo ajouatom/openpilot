@@ -15,7 +15,9 @@ def test_gv80_spas2_echo_keeps_stock_bytes():
   for blink, left, right in ((3, True, False), (4, False, True), (0, False, False)):
     (_, spas1, _), (addr, dat, _) = hyundaicanfd.create_spas_messages(packer, SimpleNamespace(ECAN=0), 0, left, right, template)
     assert addr == 0x16A and get_raw_value(dat, sigs['BLINKER_CONTROL']) == blink
-    assert dat[3:16] == GV80_SPAS2[3:16] and dat[17:] == GV80_SPAS2[17:] and dat[16] == blink << 5
+    assert dat[3:16] == GV80_SPAS2[3:16] and dat[16] == blink << 5
+    # byte 18 = 0x40 with a side request, as the parking ECU's own lamp frames (11-20 auto-parking logs); idle stays 0
+    assert dat[18] == (0x40 if blink else 0) and dat[17] == GV80_SPAS2[17] and dat[19:] == GV80_SPAS2[19:]
     assert not any(spas1[3:])
 
 

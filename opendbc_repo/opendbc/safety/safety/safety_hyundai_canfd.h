@@ -730,7 +730,8 @@ static bool hyundai_canfd_tx_hook(const CANPacket_t *to_send_const) {
   // has no 0x1ea to carry it, Tucson HDA1 11-17; 2 and 5-7 opened 11-19 for CanfdHazardTest 10-17 on the Tucson, whose
   // BCM flickers on 1 - a lamp request field, nothing else in the byte may be set)
   // Exception (GV80 echo): the car's own frame carries constant fields the BCM may validate, so those exact
-  // values are allowed through. Nothing else may be non-zero.
+  // values are allowed through. Nothing else may be non-zero. 11-20 (GV80 auto-parking logs): byte 3 is 0x26 while its
+  // parking system is armed, and the parking ECU's own lamp frames carry byte 18 = 0x40 with BLINKER_CONTROL 3/4.
   if ((addr == 0x165) || (addr == 0x16A)) {
     for (uint8_t i = 3U; i < GET_LEN(to_send); i++) {
       uint8_t b = GET_BYTE(to_send, i);
@@ -738,11 +739,13 @@ static bool hyundai_canfd_tx_hook(const CANPacket_t *to_send_const) {
       bool stock_field = false;
       if (addr == 0x16A) {
         if ((i == 3U) || (i == 4U)) {
-          stock_field = (b == 0x01U);   // both cars: 01 01
+          stock_field = (b == 0x01U) || ((i == 3U) && (b == 0x26U));   // both cars: 01 01; GV80 b3 26 when armed
         } else if ((i >= 10U) && (i <= 13U)) {
           stock_field = (b == 0x80U);   // GV80: 80 80 80 80
         } else if ((i == 14U) || (i == 15U)) {
           stock_field = (b == 0x03U);   // Ioniq 5 b14, both cars b15
+        } else if (i == 18U) {
+          stock_field = (b == 0x40U);   // GV80: with BLINKER_CONTROL 3/4 in the parking ECU's lamp frames
         } else if (i == 20U) {
           stock_field = (b == 0x10U);   // GV80 b20
         }

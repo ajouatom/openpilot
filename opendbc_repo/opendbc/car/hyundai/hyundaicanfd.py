@@ -656,8 +656,13 @@ def create_spas_messages(packer, CAN, frame, left_blink, right_blink, spas2_temp
     blink = 4
   # GV80: the car's own SPAS2 (bytes 3/4=01, 10..13=80, 15=03, 20=10 via the BYTEn signals, 10-26 rlog 00000331);
   # other cars keep the zero-filled frame that lit the lamp on the Ioniq 5 and EV4
-  values = {k: v for k, v in (spas2_template or {}).items() if k not in ("CHECKSUM", "COUNTER")}
+  values = {k: v for k, v in (spas2_template or {}).items() if k not in ("CHECKSUM", "COUNTER", "BYTE18")}
   values["BLINKER_CONTROL"] = blink
+  # GV80 (11-20, 02_logs s71): in 3 stock auto-parking runs the parking ECU's own lamp frames carried byte 18 = 0x40 together
+  # with BLINKER_CONTROL 3/4 (set with it or 20 ms before; the lamp came on 10-20 ms later); its idle frames have 0. Our
+  # copies left it 0 and never lit the GV80 lamps (s58, 10-27), so ask the way the parking ECU does. Template = GV80 only.
+  if spas2_template is not None and blink in (3, 4):
+    values["BYTE18"] = 0x40
   ret.append(packer.make_can_msg("SPAS2", CAN.ECAN, values))
 
   return ret
