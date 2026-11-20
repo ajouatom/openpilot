@@ -45,8 +45,8 @@ def test_helper_survives_checkout_change(tmp_path, replacement, source, cls, met
     parent = parent.parent
   marker = tmp_path / 'calls.txt'
   helper_path.write_text(
-    f'from pathlib import Path\ndef {function}(*args):\n'
-    f'  with Path({str(marker)!r}).open("a") as f: f.write("startup helper\\n")\n'
+    f'from pathlib import Path\ndef {function}(*args):\n' +
+    f'  with Path({str(marker)!r}).open("a") as f: f.write("startup helper\\n")\n' +
     '  return False\n', encoding='utf-8')
 
   runner = tmp_path / 'run.py'

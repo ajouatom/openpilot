@@ -180,6 +180,9 @@ jobs:
           opendbc_repo/opendbc/car/hyundai/tests/test_blinker_stalks.py
           opendbc_repo/opendbc/car/hyundai/tests/test_ccnc_cluster.py
           opendbc_repo/opendbc/car/hyundai/tests/test_carstate_buttons.py
+          opendbc_repo/opendbc/car/hyundai/tests/test_hda2_scc_topology.py
+          opendbc_repo/opendbc/car/hyundai/tests/test_steering_mode.py
+          opendbc_repo/opendbc/car/hyundai/tests/test_ev_mode.py
           openpilot/selfdrive/car/tests/test_camera_scc_steering_intent.py
           opendbc_repo/opendbc/car/toyota/tests/test_ars510_carrot.py
           opendbc_repo/opendbc/car/toyota/tests/test_ars510_display.py
