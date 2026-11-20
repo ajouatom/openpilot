@@ -14,12 +14,12 @@ jobs:
         with:
           python-version: '3.12'
       - run: python -m pip install numpy pytest requests psutil scons cython setuptools aiohttp
-      - name: Execute the pinned internal Cheddar runtime on native CPU
+      - name: Execute the retained experimental Cheddar runtime on native CPU
         env:
           PYTHONPATH: .
           DEV: CPU:LLVM
         run: python tools/modeld/check_cheddar_runtime.py
-      - name: Compile Cheddar and exercise the production worker on native CPU
+      - name: Compile Cheddar and exercise its experimental worker on native CPU
         env:
           PYTHONPATH: .
           DEV: CPU:LLVM

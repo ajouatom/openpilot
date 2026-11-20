@@ -130,16 +130,6 @@ def get_action_from_model(model_output: dict[str, np.ndarray], prev_action: log.
 class ModelState:
   prev_desire: np.ndarray  # for tracking the rising edge of the pulse
 
-  def __new__(cls, cam_w, cam_h, usbgpu, pkl_path=None, *, enable_shadow=True):
-    # carrot model selector: a MODELD_MODELS_DIR custom model is a compile_modeld bundle
-    # for tinygrad_repo, which the pinned Cheddar runtime rejects. Only the built-in
-    # internal model uses the Cheddar worker. (Local import: AST-extracted factory test.)
-    import os
-    if not usbgpu and not os.getenv('MODELD_MODELS_DIR'):
-      from openpilot.selfdrive.modeld.cheddar_model import CheddarModelState
-      return CheddarModelState(cam_w, cam_h, pkl_path or modeld_pkl_path(False))
-    return super().__new__(cls)
-
   def __init__(self, cam_w: int, cam_h: int, usbgpu: bool, pkl_path=None, *, enable_shadow=True):
     input_devices = get_tg_input_devices(PROCESS_NAME, usbgpu)
     self.WARP_DEV, self.QUEUE_DEV = input_devices['WARP_DEV'], input_devices['QUEUE_DEV']
