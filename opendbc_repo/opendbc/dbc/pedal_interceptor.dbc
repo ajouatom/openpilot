@@ -5,8 +5,8 @@ BS_:
 BU_: INTERCEPTOR NEO
 
 BO_ 512 GAS_COMMAND: 6 NEO
- SG_ GAS_COMMAND : 7|16@0+ (0.336,-88.704) [0|255] "" INTERCEPTOR
- SG_ GAS_COMMAND2 : 23|16@0+ (0.166,-82.502) [0|255] "" INTERCEPTOR
+ SG_ GAS_COMMAND : 7|16@0+ (0.29064,-68.44146) [0|255] "" INTERCEPTOR
+ SG_ GAS_COMMAND2 : 23|16@0+ (0.14359,-63.07673) [0|255] "" INTERCEPTOR
  SG_ ENABLE : 39|1@0+ (1,0) [0|1] "" INTERCEPTOR
  SG_ COUNTER_PEDAL : 35|4@0+ (1,0) [0|15] "" INTERCEPTOR
  SG_ CHECKSUM_PEDAL : 47|8@0+ (1,0) [0|255] "" INTERCEPTOR
@@ -20,4 +20,4 @@ BO_ 513 GAS_SENSOR: 6 INTERCEPTOR
 
 VAL_ 513 STATE 5 "FAULT_TIMEOUT" 4 "FAULT_STARTUP" 3 "FAULT_SCE" 2 "FAULT_SEND" 1 "FAULT_BAD_CHECKSUM" 0 "NO_FAULT" ;
 
-CM_ "Ray EV experimental command expansion x2. Only GAS_COMMAND factors and offsets are halved from the original (0.672,-177.408)/(0.332,-165.004), preserving raw neutral 264/497 while doubling each command's unrounded increment above neutral. This is a requested output-map expansion, not a measured calibration or proof of doubled ECU pedal position/acceleration. With target cap 0.70, rounded command maxima are 795/1572. GAS_SENSOR retains the original input scaling; raw driver thresholds are unchanged. The 0x200/0x201 protocol, counter and CRC8 are unchanged. Pedal firmware/input transforms and voltage calibration are not modified.";
+CM_ "Ray EV positive command calibration. Raw neutral 264/497 corresponds to 8.2875 command units on both tracks. The Ray encoder joins its low-pedal curve to the fitted command scale at 24.07 percent demand. At 80 percent the rounded tracks are 937/1860. Disabled frames carry two raw zeros.";
