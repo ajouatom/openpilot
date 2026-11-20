@@ -2,9 +2,9 @@
 
 ## Decision
 
-The November 19 follow-up promotes Cheddar to the internal default with its exact upstream tinygrad runtime. The initial hold below is historical: the earlier timing comparison ran on little CPU cores without modeld's realtime scheduling. Matching the official CPU configuration removes the observed deadline overruns in the synthetic benchmark. Production worker integration, reset and recurrent-state comparisons now pass the checks described below. This is not a claim of road-load or sustained thermal validation.
+On November 20 the owner requested a return to CD210 after disliking Cheddar's driving behavior. Restore the exact previous CD210 ONNX and its vendored tinygrad compiler/ModelState path together, including the fixed model name in Carrot Web. External eGPU/Jetson choices and runtime pins stay unchanged. The isolated Cheddar implementation remains available for explicit experiments but is no longer the internal default. Normal update and restart rebuild the internal artifact; this repository change does not establish installation on a particular vehicle.
 
-CD210's default ONNX is replaced. Driver monitoring and legacy external compilation retain the existing vendored tinygrad; external model selections retain their separately pinned runtimes. The optional CD210-specific signal observer is not started for Cheddar.
+The November 19 promotion and validation below are historical. Matching the official CPU configuration removed the observed synthetic deadline overruns, and worker/reset checks passed; these checks did not establish preferred driving behavior. Returning to CD210 also restores its existing optional signal-observer path. No new observer setting is enabled by this change.
 
 ## Artifacts
 

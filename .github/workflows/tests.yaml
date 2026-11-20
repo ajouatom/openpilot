@@ -120,7 +120,7 @@ jobs:
       - name: Build openpilot
         run: scons
       - name: Execute the SCons-built internal model and camera warps
-        run: python tools/modeld/check_cheddar_model.py openpilot/selfdrive/modeld/models/driving_tinygrad.pkl
+        run: SEND_RAW_PRED=1 python tools/modeld/check_internal_model.py openpilot/selfdrive/modeld/models/driving_tinygrad.pkl
       - name: Check native offline cloud boundaries and C3 modem routing
         env:
           NATIVE_DEVICE_TESTS: '1'

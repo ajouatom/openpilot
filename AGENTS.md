@@ -1,5 +1,15 @@
 # Repository memory
 
+- 2026-11-20: Owner requests internal CD210 again after disliking Cheddar.
+  Restore exact60792584B/f73a9e535523 ONNX, vendored compile_modeld and ordinary
+  ModelState together; Carrot Web fixed name is CD210. External eGPU/Jetson
+  selections/pins unchanged. Retain isolated Cheddar tools only for explicit
+  experiments. Existing startup tree stamp/SCons dependencies rebuild the
+  internal artifact. Local272Python+4web checks pass; Linux full build now
+  exercises actual CD210 warmup, both camera warps, catch-up and history reset.
+  Full native CI follows publication. No live vehicle installation in this task.
+  Earlier Cheddar timing success did not establish preferred driving behavior.
+
 - 2026-11-20: Sonata565c34a74e40b91d uploads464/0..1 and466/0..2 on
   a9811adce contain persistent CAN faults, not a UI crash.464 selects classic
   SONATA;466 selects SONATA_2024 with recorded HDA2=0/CameraSCC=0. Physical
