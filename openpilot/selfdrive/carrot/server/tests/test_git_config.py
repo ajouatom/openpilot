@@ -312,6 +312,36 @@ def test_web_remote_change_removes_inherited_fetch_ref(web_dispatcher, api, acti
   git(device, "fetch", "origin")
 
 
+@pytest.mark.parametrize("api", ["job", "sync"])
+def test_reset_repo_uses_configured_origin(web_dispatcher, api, monkeypatch):
+  dispatcher, device, _ = web_dispatcher
+  monkeypatch.setenv("GIT_ALLOW_PROTOCOL", "file")
+  origin = git(device, "remote", "get-url", "origin")
+  git(device, "remote", "add", "backup", str(device.parent / "backup.git"))
+  git(device, "config", "remote.origin.pushurl", str(device.parent / "push.git"))
+  before = git(device, "remote", "-v")
+  git(device.parent / "seed", "push", origin, "HEAD:refs/heads/bin9208/carrot-rust-dev")
+
+  result = dispatch(dispatcher, api, "git_reset_repo_fetch")
+
+  assert result["ok"], result
+  assert "bin9208/carrot-rust-dev" in result["branches"]
+  assert git(device, "remote", "-v") == before
+
+
+@pytest.mark.parametrize("api", ["job", "sync"])
+def test_reset_repo_without_origin_keeps_existing_remotes(web_dispatcher, api, monkeypatch):
+  dispatcher, device, _ = web_dispatcher
+  monkeypatch.setenv("GIT_ALLOW_PROTOCOL", "file")
+  git(device, "remote", "rename", "origin", "backup")
+  before = git(device, "remote", "-v")
+
+  result = dispatch(dispatcher, api, "git_reset_repo_fetch")
+
+  assert not result["ok"], result
+  assert git(device, "remote", "-v") == before
+
+
 def add_other_model(device):
   seed = device.parent / "seed"
   remote = device.parent / "origin.git"

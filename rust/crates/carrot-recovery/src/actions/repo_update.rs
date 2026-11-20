@@ -187,7 +187,6 @@ fn inherited(config: &Config, argv: &[OsString], lock: &File) -> Result<i32, Err
             .wait()?,
     ))
 }
-const NATIVE_ORIGIN: &str = "https://github.com/bin9208/openpilot-rust.git";
 fn native_capture(
     config: &Config,
     argv: &[&str],
@@ -261,15 +260,7 @@ fn native_action(
     lock: &File,
 ) -> Result<i32, Error> {
     if action == "__stage-reset-repo" {
-        let changed = native_capture(
-            config,
-            &["git", "remote", "set-url", "origin", NATIVE_ORIGIN],
-            15,
-            lock,
-        )?;
-        if changed.code != 0 {
-            checked_git(config, &["remote", "add", "origin", NATIVE_ORIGIN], lock)?;
-        }
+        checked_git(config, &["remote", "set-branches", "origin", "*"], lock)?;
     }
     if action != "__stage-repair" {
         checked_git(config, &["fetch", "origin", "--prune"], lock)?;

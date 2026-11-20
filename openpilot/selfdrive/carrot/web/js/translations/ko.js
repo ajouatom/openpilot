@@ -1527,7 +1527,7 @@ window.CarrotTranslations.register("ko", {
     git_log_checkout_confirm: "이 커밋으로 체크아웃할까요?",
     git_log_checkout_done: "체크아웃 완료",
     git_reset_repo_title: "저장소 초기화",
-    git_reset_repo_confirm: "경고: origin을 제거하고 'ajouatom/openpilot'을 다시 추가합니다.\n모든 로컬 변경사항이 사라집니다. 계속할까요?",
+    git_reset_repo_confirm: "현재 설정된 origin에서 브랜치를 선택해 초기화합니다.\n모든 로컬 변경사항이 사라집니다. 계속할까요?",
     git_reset_repo_no_branches: "브랜치를 찾을 수 없습니다",
     git_reset_repo_branch_message: "초기화할 브랜치를 선택하세요",
     git_reset_repo_done: "'{branch}' 브랜치로 초기화 완료",

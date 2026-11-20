@@ -125,7 +125,7 @@
     if (action === "git_reset_repo") {
       var target = await pickBranch("Reset repo", "Fetch the selected branch fresh.\nAll local changes and untracked files will be lost.", "c3-wip", "Next");
       if (!target) return;
-      if (await appConfirm("Branch: " + target + "\nRemote: ajouatom/openpilot.git\n\nThis cannot be undone.", { title: "Confirm reset", confirmLabel: "Reset" })) {
+      if (await appConfirm("Branch: " + target + "\nRemote: origin\n\nThis cannot be undone.", { title: "Confirm reset", confirmLabel: "Reset" })) {
         await dispatchGit("git_reset_repo", { branch: target });
       }
       return;

@@ -669,7 +669,7 @@ def _git_command(action: str, payload: dict) -> str | None:
       # abort any in-progress op (';' so failures are ignored), rebuild remote
       # refs so a corrupt ref can't block fetch, then FORCE the branch to the
       # remote ('&&' chain stops only on a real failure).
-      "git remote set-url origin https://github.com/ajouatom/openpilot.git 2>/dev/null; "
+      "git remote set-branches origin '*' || exit 1; "
       "git merge --abort 2>/dev/null; git rebase --abort 2>/dev/null; "
       "git cherry-pick --abort 2>/dev/null; git revert --abort 2>/dev/null; "
       "git am --abort 2>/dev/null; git bisect reset 2>/dev/null; "
@@ -2317,7 +2317,7 @@ RECOVERY_JS = """\"use strict\";
     if (action === \"git_reset_repo\") {
       var target = await pickBranch(\"Reset repo\", \"Fetch the selected branch fresh.\\nAll local changes and untracked files will be lost.\", \"c3-wip\", \"Next\");
       if (!target) return;
-      if (await appConfirm(\"Branch: \" + target + \"\\nRemote: ajouatom/openpilot.git\\n\\nThis cannot be undone.\", { title: \"Confirm reset\", confirmLabel: \"Reset\" })) {
+      if (await appConfirm(\"Branch: \" + target + \"\\nRemote: origin\\n\\nThis cannot be undone.\", { title: \"Confirm reset\", confirmLabel: \"Reset\" })) {
         await dispatchGit(\"git_reset_repo\", { branch: target });
       }
       return;

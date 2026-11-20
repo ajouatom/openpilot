@@ -565,31 +565,11 @@ async def _run_tool_job(job: Dict[str, Any]) -> None:
       return
 
     if action == "git_reset_repo_fetch":
-      url = "https://github.com/ajouatom/openpilot.git"
       # Phase 0: clear stale git locks so the remote/config/fetch steps below
       # aren't blocked by a leftover *.lock from a crashed git process.
       await jobs.capture_exec(["find", ".git", "-type", "f", "-name", "*.lock", "-delete"], cwd=repo_dir, timeout=10)
-      # Phase 1: ensure origin points to the correct URL and tracks every
-      # branch. Installations migrated from comma may still have a narrow
-      # release-tizi-staging fetch refspec, which does not exist on this
-      # remote and makes even a plain `git fetch origin` fail.
-      jobs.progress(job, message="configuring origin remote", current=1, total=4)
-
-      rc_set, _ = await jobs.capture_exec(
-        ["git", "remote", "set-url", "origin", url], cwd=repo_dir, timeout=15
-      )
-      if rc_set != 0:
-        jobs.append(job, "origin not found, adding new remote\n")
-        await jobs.capture_exec(["git", "remote", "remove", "origin"], cwd=repo_dir, timeout=10)
-        rc_add, out_add = await jobs.capture_exec(
-          ["git", "remote", "add", "origin", url], cwd=repo_dir, timeout=15
-        )
-        if rc_add != 0:
-          jobs.append(job, f"failed to add origin: {out_add}\n")
-          jobs.finish(job, ok=False, result={"ok": False, "error": f"failed to configure remote: {out_add}"})
-          return
-      jobs.append(job, f"origin → {url}\n")
-
+      # Shallow installations may track only one branch. List every branch on origin.
+      jobs.progress(job, message="configuring origin branches", current=1, total=3)
       rc_branches, out_branches = await jobs.capture_exec(
         ["git", "remote", "set-branches", "origin", "*"], cwd=repo_dir, timeout=15
       )
@@ -599,25 +579,11 @@ async def _run_tool_job(job: Dict[str, Any]) -> None:
         return
       jobs.append(job, "origin branches: *\n")
 
-      # Phase 2: remove ALL other remotes (so only origin remains)
-      jobs.progress(job, message="cleaning other remotes", current=2, total=4)
-      rc_remotes, out_remotes = await jobs.capture_exec(
-        ["git", "remote"], cwd=repo_dir, timeout=10
-      )
-      for remote_name in (out_remotes or "").splitlines():
-        remote_name = remote_name.strip()
-        if remote_name and remote_name != "origin":
-          jobs.append(job, f"removing remote: {remote_name}\n")
-          await jobs.capture_exec(
-            ["git", "remote", "remove", remote_name], cwd=repo_dir, timeout=10
-          )
-
-      # Phase 3: fetch from origin only.
       # First clear remote-tracking refs + repack so a corrupt/broken ref
       # ("unable to update local ref", "cannot lock ref ... reference broken"
       # from a power-loss mid-fetch) can't block the fetch — git rebuilds
       # origin/* fresh. --force allows non-fast-forward ref updates.
-      jobs.progress(job, message="git fetch origin --prune --force", current=3, total=4)
+      jobs.progress(job, message="git fetch origin --prune --force", current=2, total=3)
       await jobs.capture_exec(["git", "pack-refs", "--all"], cwd=repo_dir, timeout=20)
       await jobs.capture_exec(["rm", "-rf", ".git/refs/remotes/origin"], cwd=repo_dir, timeout=10)
       rc_fetch = await jobs.stream_exec(
@@ -627,8 +593,7 @@ async def _run_tool_job(job: Dict[str, Any]) -> None:
         jobs.finish(job, ok=False, result=jobs.result_from_log(job, rc_fetch))
         return
 
-      # Phase 4: list remote branches (origin/* only)
-      jobs.progress(job, message="listing branches", current=4, total=4)
+      jobs.progress(job, message="listing branches", current=3, total=3)
       rc_br, out_br = await jobs.capture_exec(
         ["git", "branch", "-r"], cwd=repo_dir, timeout=15
       )
@@ -1088,32 +1053,14 @@ async def _dispatch_sync(request: web.Request, body: Dict[str, Any]) -> web.Resp
       return web.json_response({"ok": rc == 0, "commits": commits, "current_commit": current_commit, "out": out, "summary_key": "git_result_log_done", "summary_vars": {"count": len(commits)}})
 
     if action == "git_reset_repo_fetch":
-      url = "https://github.com/ajouatom/openpilot.git"
       out_all = ""
 
       # clear stale git locks so the remote/config/fetch steps aren't blocked
       run(["find", ".git", "-type", "f", "-name", "*.lock", "-delete"], cwd=REPO_DIR)
-      rc_set, out_set = run(["git", "remote", "set-url", "origin", url], cwd=REPO_DIR)
-      if rc_set != 0:
-        run(["git", "remote", "remove", "origin"], cwd=REPO_DIR)
-        rc_add, out_add = run(["git", "remote", "add", "origin", url], cwd=REPO_DIR)
-        out_all += f"> git remote add origin {url}\n{out_add}\n\n"
-        if rc_add != 0:
-          return web.json_response({"ok": False, "error": f"failed to configure remote: {out_add}"})
-      else:
-        out_all += f"> git remote set-url origin {url}\n{out_set}\n\n"
-
       rc_branches, out_branches = run(["git", "remote", "set-branches", "origin", "*"], cwd=REPO_DIR)
       out_all += f"> git remote set-branches origin '*'\n{out_branches}\n\n"
       if rc_branches != 0:
         return web.json_response({"ok": False, "rc": rc_branches, "out": out_all.strip()})
-
-      rc_rem, out_rem = run(["git", "remote"], cwd=REPO_DIR)
-      for rname in (out_rem or "").splitlines():
-        rname = rname.strip()
-        if rname and rname != "origin":
-          run(["git", "remote", "remove", rname], cwd=REPO_DIR)
-          out_all += f"> removed remote: {rname}\n"
 
       # clear remote-tracking refs + repack so a corrupt/broken ref can't block
       # the fetch (git rebuilds origin/* fresh); --force allows non-ff updates

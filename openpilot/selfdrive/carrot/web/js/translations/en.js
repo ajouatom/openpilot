@@ -1504,7 +1504,7 @@ window.CarrotTranslations.register("en", {
     git_log_checkout_confirm: "Checkout this commit?",
     git_log_checkout_done: "Checkout complete",
     git_reset_repo_title: "Reset Repository",
-    git_reset_repo_confirm: "Warning: This will remove origin and re-add 'ajouatom/openpilot'.\nAll local changes will be lost. Proceed?",
+    git_reset_repo_confirm: "Choose a branch from the currently configured origin to reset to.\nAll local changes will be lost. Proceed?",
     git_reset_repo_no_branches: "No branches found",
     git_reset_repo_branch_message: "Select branch to reset to",
     git_reset_repo_done: "Reset to '{branch}' complete",

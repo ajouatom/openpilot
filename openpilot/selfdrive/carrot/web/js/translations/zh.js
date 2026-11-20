@@ -1350,7 +1350,7 @@ window.CarrotTranslations.register("zh", {
     git_log_checkout_confirm: "检出此提交？",
     git_log_checkout_done: "检出完成",
     git_reset_repo_title: "重置仓库",
-    git_reset_repo_confirm: "警告：这将删除 origin 并重新添加 'ajouatom/openpilot'。\n所有本地更改都将丢失。继续？",
+    git_reset_repo_confirm: "将从当前配置的 origin 选择分支并重置。\n所有本地更改都将丢失。继续？",
     git_reset_repo_no_branches: "未找到分支",
     git_reset_repo_branch_message: "选择要重置到的分支",
     git_reset_repo_done: "已重置到 '{branch}'",
