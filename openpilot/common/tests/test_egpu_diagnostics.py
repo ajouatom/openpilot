@@ -113,12 +113,13 @@ def test_main_web_capture_upload_file_contains_report(tmp_path, monkeypatch):
   source = Path('openpilot/selfdrive/carrot/server/features/tools/dispatcher.py')
   tree = ast.parse(source.read_text(encoding='utf-8'))
   function = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == 'capture_tmux_log_sync')
+  imports = [n for n in tree.body if isinstance(n, ast.ImportFrom) and n.module == 'openpilot.common.egpu_diagnostics']
   function.returns = None
   path = tmp_path / 'tmux.log'
   namespace = {'os': os, 'subprocess': SimpleNamespace(run=lambda *a, **kw: SimpleNamespace(returncode=0, stdout='pane', stderr='')),
                'TMUX_LOG_PATH': str(path)}
   monkeypatch.setattr(diag, 'collect_report', lambda *a: {'test': 'attached'})
-  exec(compile(ast.Module(body=[function], type_ignores=[]), str(source), 'exec'), namespace)
+  exec(compile(ast.Module(body=imports + [function], type_ignores=[]), str(source), 'exec'), namespace)
   assert namespace['capture_tmux_log_sync']() == (0, '')
   assert 'pane' in path.read_text() and 'attached' in path.read_text()
 

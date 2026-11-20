@@ -96,9 +96,10 @@ def test_hardware_reboot_calls_common_helper(monkeypatch):
   tree = ast.parse(path.read_text(encoding='utf-8'))
   cls = next(n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == 'Tici')
   method = next(n for n in cls.body if isinstance(n, ast.FunctionDef) and n.name == 'reboot')
+  imports = [n for n in tree.body if isinstance(n, ast.ImportFrom) and n.module == 'openpilot.common.reboot']
   namespace = {}
-  exec(compile(ast.fix_missing_locations(ast.Module(body=[method], type_ignores=[])), str(path), 'exec'), namespace)
   calls = []
   monkeypatch.setattr(reboot, 'reboot_device', lambda: calls.append('reboot'))
+  exec(compile(ast.fix_missing_locations(ast.Module(body=imports + [method], type_ignores=[])), str(path), 'exec'), namespace)
   namespace['reboot'](None)
   assert calls == ['reboot']
