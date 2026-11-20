@@ -198,6 +198,27 @@ function unpackLiveTracks(value) {
   return tracks;
 }
 
+// Mode-5 liveTracks points carry the same raw 0x238 values as their display
+// point; the two services may be one 50 ms scan apart, hence the range margin.
+const CLASSIC_MATCH_MAX_DX_M = 1.0;
+const CLASSIC_MATCH_MAX_DY_M = 0.4;
+const CLASSIC_MAX_OBJECT_ID = 63;
+
+// Label: the radar's object ID plus the object's ground speed in km/h
+// (ego speed + vRel; the compact wire has no vLead).
+function classicObjectLabel(track, egoSpeedMps) {
+  const objectId = finiteOrNull(track?.trackId);
+  const idText = objectId !== null && objectId >= 0 && objectId <= CLASSIC_MAX_OBJECT_ID
+    ? String(Math.trunc(objectId))
+    : null;
+  const vLead = finiteOrNull(track?.vLead);
+  const vRel = finiteOrNull(track?.vRel);
+  const speed = vLead ?? (vRel !== null && egoSpeedMps !== null ? egoSpeedMps + vRel : null);
+  if (speed === null) return idText;
+  const kmh = Math.round(speed * 3.6);
+  return `${idText ?? "-"} ${Object.is(kmh, -0) ? 0 : kmh}`;
+}
+
 function radarTrackKey(value) {
   const trackId = finiteOrNull(
     typeof value === "number" ? value : Number.parseFloat(String(value ?? "")),
@@ -209,7 +230,7 @@ function radarTrackKey(value) {
 // a lead and its originating track describe one vehicle. Match them on track id
 // the way the replay view does; otherwise the same car draws twice - once as a
 // "fusion" lead and once under its real radar source.
-function normalizeRadar(overlayState) {
+function normalizeRadar(overlayState, egoSpeedMps = null) {
   const radarState = overlayState?.radarState || {};
   const leads = [];
   const appendLead = (lead) => {
@@ -240,7 +261,32 @@ function normalizeRadar(overlayState) {
       relativeSpeedMps: entry.relativeSpeedMps,
       measured: entry.measured,
       selected: entry.selected,
+      ...(entry.label ? { label: entry.label } : {}),
     }));
+  };
+
+  // 0x238 계열 점의 trackId는 레이더 자체 객체 ID(0-63)이다. K7 EnableRadarTracks=1의
+  // liveTracks 점은 같은 스캔의 같은 좌표로 나오므로, 그 점에 객체 ID를 붙이고
+  // 표시 전용 점은 한 번만 그린다.
+  const classicTracks = [];
+  for (const track of unpackLiveTracks(overlayState?.classicRadarTracks)) {
+    const xM = finiteOrNull(track?.xM ?? track?.dRel);
+    const yM = finiteOrNull(track?.yM ?? track?.yRel);
+    if (xM === null || yM === null) continue;
+    classicTracks.push({ track, xM, yM, used: false, label: classicObjectLabel(track, egoSpeedMps) });
+  }
+  const takeClassicLabel = (xM, yM) => {
+    let best = null;
+    for (const classic of classicTracks) {
+      if (classic.used) continue;
+      const dx = Math.abs(classic.xM - xM);
+      const dy = Math.abs(classic.yM - yM);
+      if (dx > CLASSIC_MATCH_MAX_DX_M || dy > CLASSIC_MATCH_MAX_DY_M) continue;
+      if (!best || dx + dy < best.cost) best = { classic, cost: dx + dy };
+    }
+    if (!best) return null;
+    best.classic.used = true;
+    return best.classic.label;
   };
 
   for (const track of unpackLiveTracks(overlayState?.liveTracks)) {
@@ -260,7 +306,26 @@ function normalizeRadar(overlayState) {
       relativeSpeedMps: finiteOrNull(track?.relativeSpeedMps ?? track?.vRel),
       measured: typeof track?.measured === "boolean" ? track.measured : Boolean(track?.radar),
       selected,
+      label: source === "front" ? takeClassicLabel(xM, yM) : null,
       dedupeKey: trackKey !== null ? `track:${trackKey}` : `liveTracks:${stableIndex}`,
+    });
+  }
+
+  // 제어용 liveTracks와 겹치지 않는 0x238 점은 표시 전용 점으로 추가한다.
+  for (const classic of classicTracks) {
+    if (classic.used) continue;
+    const { track, xM, yM } = classic;
+    const trackId = track?.id ?? track?.trackId ?? radar.length;
+    push({
+      id: `classic238:${trackId}`,
+      source: "front",
+      xM,
+      yM,
+      relativeSpeedMps: finiteOrNull(track?.relativeSpeedMps ?? track?.vRel),
+      measured: typeof track?.measured === "boolean" ? track.measured : true,
+      selected: false,
+      label: classic.label,
+      dedupeKey: `classic238:${trackId}`,
     });
   }
 
@@ -359,7 +424,7 @@ export function normalizeDriveInsightsSnapshot({
   const path = selectedPath.points;
   const lanes = normalizeLanes(overlayState?.modelV2);
   const leads = normalizeModelLeads(overlayState?.modelV2, ego.speedMps);
-  const radar = normalizeRadar(overlayState);
+  const radar = normalizeRadar(overlayState, ego.speedMps);
   const navigation = normalizeNavigation(hudState, overlayState);
   const frameTimestamp = nonNegativeOrNull(cameraFrameTimestampMs);
   const cameraAvailable = Boolean(overlayState?.roadCameraState) && frameTimestamp !== null;
@@ -376,7 +441,9 @@ export function normalizeDriveInsightsSnapshot({
     path: hasSource(overlayState?.[selectedPath.service]),
     lanes: hasSource(overlayState?.modelV2),
     leads: hasSource(overlayState?.modelV2),
-    radar: hasSource(overlayState?.radarState) || hasSource(overlayState?.liveTracks),
+    radar: hasSource(overlayState?.radarState)
+      || hasSource(overlayState?.liveTracks)
+      || hasSource(overlayState?.classicRadarTracks),
     navigation: hasSource(hudState?.navigation)
       || hasSource(overlayState?.navigation)
       || hasSource(hudState?.navInstructionCarrot)
@@ -389,7 +456,7 @@ export function normalizeDriveInsightsSnapshot({
     path: domainAge(serviceAges, selectedPath.service),
     lanes: domainAge(serviceAges, "modelV2"),
     leads: domainAge(serviceAges, "modelV2"),
-    radar: domainAge(serviceAges, ...(overlayState?.liveTracks ? ["radarState", "liveTracks"] : ["radarState"])),
+    radar: domainAge(serviceAges, "radarState", "liveTracks", "classicRadarTracks"),
     navigation: domainAge(serviceAges, "carrotMan", "navInstructionCarrot"),
     camera: domainAge(serviceAges, "roadCameraState"),
   };

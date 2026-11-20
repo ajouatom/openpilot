@@ -630,7 +630,18 @@ def test_planner_gap_gate_allows_zero_level_and_stopping_but_not_override(gas, r
   assert eval(compile(ast.Expression(expression), str(path), 'eval'), {
     'reset_state': reset, 'sm': {'carState': SimpleNamespace(gasPressed=gas)}, 'force_slow_decel': force,
     'carrot': SimpleNamespace(leadAccelResponse=0, lane_change_active=lane),
-    'self': SimpleNamespace(output_should_stop=True)}) == expected
+    'self': SimpleNamespace(output_should_stop=True, radar_comfort_extras=True)}) == expected
+
+
+def test_planner_gap_gate_is_off_for_k7_classic_238_leads():
+  # The K7 0x238 radar lead is followed like a vision lead: no extra gap headroom.
+  path = Path(__file__).resolve().parents[1]/'lib/longitudinal_planner.py'
+  tree = ast.parse(path.read_text(encoding='utf-8'))
+  expression = next(node.value for node in ast.walk(tree) if isinstance(node, ast.keyword) and node.arg == 'lead_gap_enabled')
+  assert not eval(compile(ast.Expression(expression), str(path), 'eval'), {
+    'reset_state': False, 'sm': {'carState': SimpleNamespace(gasPressed=False)}, 'force_slow_decel': False,
+    'carrot': SimpleNamespace(leadAccelResponse=0, lane_change_active=False),
+    'self': SimpleNamespace(output_should_stop=True, radar_comfort_extras=False)})
 
 
 def test_displayed_target_includes_headroom_and_uses_restrictive_valid_lead():

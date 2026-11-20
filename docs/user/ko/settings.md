@@ -308,6 +308,8 @@ VW MEB(ID.4 포함)에도 수동 조향비와 학습 비율이 적용됩니다. 
 
 `RadarTrackFlip`은 `0: 정상`(기본값), `1: 좌우 반전`입니다. 전방 레이더 트랙의 좌우 위치·횡속도를 함께 반전하여 선행차 선택과 표시에 적용하며 SCC·코너·비전은 그대로 유지합니다. 차종별 자동 반전은 없고, 실제 좌우 불일치가 확인된 차량에서만 사용합니다. 변경 후 재시동 또는 재부팅하면 다음 OnRoad 시작부터 적용됩니다. [레이더 좌우 반전](radar.md#radar-track-flip)을 참고하세요.
 
+K7 2020(`KIA_K7_PE`)에서 `EnableRadarTracks=1`이면 `0x500` 트랙 대신 레이더가 버스 1로 이미 보내는 `0x238~0x255` 객체를 사용하며 트랙 활성화 쓰기를 하지 않습니다. [레이더 설정](radar.md)을 참고하세요.
+
 Bosch MRRevo14F 수신을 지원하는 버전에서 Bosch MRRevo14F 후보 차종(실차 검증은 아반떼 AD뿐)의 Bosch 메시지 그룹이 감지되고 `EnableRadarTracks=1`~`3`이면, 이미 전송 중인 트랙을 passive 방식으로 수신하며 시작 시 레이더 활성화 UDS 쓰기와 SCC ECU 통신 비활성화를 건너뜁니다. `EnableRadarTracksResult`는 갱신하지 않으므로 실제 수신·CAN 유효성·레이더 오류로 확인하세요. passive는 차량 제어 전체가 꺼진다는 뜻이 아닙니다. [Bosch passive 수신 예외](radar.md#bosch-passive-reception)를 참고하세요.
 
 `EnableRadarTracks=1`~`3`에서는 확인된 프런트 선행차의 바깥쪽 레이더 움직임과 비전의 먼 차량 전환이 일치하면 ACC의 미래 추종 거리 요구를 제한적으로 완화합니다. [CUT-OUT 예측 처리](radar.md)를 참고하세요.

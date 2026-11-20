@@ -75,6 +75,11 @@ class RadarLeadInfo:
 
 
 
+# A classic 0x238 object this close to a displayed lead is the same object.
+CLASSIC_LABEL_MATCH_D_M = 3.0
+CLASSIC_LABEL_MATCH_Y_M = 1.5
+
+
 class ModelRenderer(Widget):
   def __init__(self):
     super().__init__()
@@ -177,10 +182,13 @@ class ModelRenderer(Widget):
   def _draw_carrot_overlays(self, sm) -> None:
     timing = self._render_diagnostics
     timing.start()
+    # Screen rectangles of distance/speed labels drawn this frame; radar object labels avoid them.
+    self._carrot_label_rects = []
     timing.call('path', self._draw_path_carrot, sm)
     timing.call('lanes', self._draw_lane_lines_carrot, sm)
     timing.call('blindspot', self._draw_blind_spot_carrot, sm)
     timing.call('radar', self._draw_radar_info_carrot, sm)
+    timing.call('classicRadar', self._draw_classic_radar_tracks_carrot, sm)
     timing.values['native_draw'] = float(native_draw.active())
     timing.values['native_geometry'] = float(native_geometry.active())
     timing.values['native_text'] = float(native_text.active())
@@ -692,6 +700,7 @@ class ModelRenderer(Widget):
   def _draw_text_box_carrot(self, x: int, y: int, text: str, font_size: int, box_color: rl.Color):
     w = max(40, int(len(text) * font_size * 0.8))
     h = 42
+    self._note_label_rect(x - w / 2, y - 20, w, h)
     self._draw_rect_fill_outline_carrot(x - w / 2, y - 20, w, h, box_color, box_color, 0.0)
     draw_text_ui_style(
       text,
@@ -706,6 +715,15 @@ class ModelRenderer(Widget):
       shadow_offset=8.0,
     )
 
+
+  def _note_label_rect(self, x: float, y: float, w: float, h: float) -> None:
+    rects = getattr(self, '_carrot_label_rects', None)
+    if rects is not None:
+      rects.append((x, y, w, h))
+
+  @staticmethod
+  def _rects_overlap(a, b) -> bool:
+    return a[0] < b[0] + b[2] and b[0] < a[0] + a[2] and a[1] < b[1] + b[3] and b[1] < a[1] + a[3]
 
   def _update_path_end_carrot(self, sm):
     if self._path.raw_points.shape[0] == 0:
@@ -851,6 +869,9 @@ class ModelRenderer(Widget):
     self._draw_tf_marker_carrot()
 
     if self._carrot_lead_status:
+      self._note_label_rect(self._carrot_path_x - self._carrot_path_width_px / 2 - 10,
+                            self._carrot_path_y - self._carrot_path_width_px * 0.8,
+                            self._carrot_path_width_px + 20, self._carrot_path_width_px * 0.8)
       rcolor = rl.Color(255, 0, 0, 255) if self._carrot_radar_track_id < 1 else rl.Color(255, 175, 3, 255)
       if self._carrot_lead_two_status > 0:
         radar_stroke = rl.Color(218, 111, 37, 255)
@@ -881,6 +902,7 @@ class ModelRenderer(Widget):
   def _draw_tf_marker_carrot(self):
     if self._carrot_tf_distance > 0.0 and self._carrot_tf_left is not None and self._carrot_tf_right is not None:
       self._draw_line_segment_carrot(self._carrot_tf_left, self._carrot_tf_right, rl.Color(255, 255, 255, 255), 3.0)
+      self._note_label_rect(self._carrot_tf_right[0] + 10, self._carrot_tf_right[1] - 15, 80, 30)
       draw_text_ui_style(f"{self._carrot_tf_distance:.0f} m", int(self._carrot_tf_right[0]) + 10, int(self._carrot_tf_right[1]),
                          25, rl.Color(255, 255, 255, 255), align="left", y_offset=0.0)
 
@@ -1147,10 +1169,73 @@ class ModelRenderer(Widget):
           self._draw_text_box_carrot(int(x), int(y), speed_text, 40, box_color)
 
           if self._carrot_show_radar_info >= 2:
+            self._note_label_rect(x - 40, y - 55, 80, 30)
+            self._note_label_rect(x - 40, y + 15, 80, 30)
             draw_text_ui_style(f"{y_rel:.1f}", int(x), int(y - 40), 30, rl.Color(255, 255, 255, 255), align="center", y_offset=0.0)
             draw_text_ui_style(f"{d_rel:.1f}", int(x), int(y + 30), 30, rl.Color(255, 255, 255, 255), align="center", y_offset=0.0)
         elif self._carrot_show_radar_info >= 3:
           draw_text_ui_style("*", int(x), int(y), 40, rl.Color(255, 255, 255, 255), align="center", y_offset=0.0)
+
+  def _draw_classic_radar_tracks_carrot(self, sm):
+    if not sm.valid['classicRadarTracks'] or not sm.valid['modelV2']:
+      return
+
+    model = sm['modelV2']
+    if len(model.laneLines) < 3:
+      return
+    lane_line = model.laneLines[2]
+    lane_x = np.array(lane_line.x, dtype=np.float32)
+    lane_z = np.array(lane_line.z, dtype=np.float32)
+
+    # Objects already shown as a lead (box with distance) or as a radar-info speed box keep
+    # only a small dot, so their ID/speed text does not overlap those labels.
+    shown = []
+    if sm.valid['radarState']:
+      radar_state = sm['radarState']
+      shown = [(float(lead.dRel), float(lead.yRel)) for lead in (radar_state.leadOne, radar_state.leadTwo) if lead.status]
+      if self._carrot_show_radar_info > 0:
+        shown += [(float(lead.dRel), float(lead.yRel))
+                  for group in (radar_state.leadsLeft, radar_state.leadsRight, radar_state.leadsCenter) for lead in group]
+
+    for point in sm['classicRadarTracks'].points:
+      d_rel = float(point.dRel)
+      y_rel = float(point.yRel)
+      if not 2.5 < d_rel <= 250.0 or abs(y_rel) > 20.0:
+        continue
+      duplicate = any(abs(d_rel - d) < CLASSIC_LABEL_MATCH_D_M and abs(y_rel - y) < CLASSIC_LABEL_MATCH_Y_M for d, y in shown)
+      idx = self._get_path_length_idx(lane_x, d_rel)
+      if idx >= len(lane_z):
+        continue
+      side = self._map_to_screen(d_rel, -y_rel, float(lane_z[idx]) - 0.61)
+      if side is None:
+        continue
+
+      x, y = int(side[0]), int(side[1])
+      confirmed = int(point.trackState) == 2
+      color = rl.Color(53, 224, 193, 230) if confirmed else rl.Color(125, 135, 146, 230)
+      if duplicate:
+        rl.draw_circle(x, y, 5.0, color)
+        continue
+      rl.draw_circle(x, y, 9.0, color)
+      # trackId is the radar's own object ID (0-63); larger values mean unknown.
+      # The number after it is the object's ground speed (km/h or mph).
+      object_id = int(point.trackId)
+      label = str(object_id) if object_id < 64 else "-"
+      v_lead = float(point.vLead)
+      if np.isfinite(v_lead):
+        speed = round(v_lead * (3.6 if ui_state.is_metric else 2.2369363))
+        label = f"{label} {speed}"
+      # Above the dot, else below it; skip the text if both would cover another label.
+      occupied = getattr(self, '_carrot_label_rects', None)
+      width = len(label) * 16 + 8
+      for label_y in (y - 24, y + 24):
+        rect = (x - width / 2, label_y - 15, width, 30)
+        if occupied is None or not any(self._rects_overlap(rect, other) for other in occupied):
+          if occupied is not None:
+            occupied.append(rect)
+          draw_text_ui_style(label, x, label_y, 26,
+                             rl.Color(255, 255, 255, 230), align="center", y_offset=0.0)
+          break
 
 
   def _build_path_polygon_update_line_data2_carrot(self, line: np.ndarray, width_apply: float, z_off_start: float, z_off_end: float, max_idx: int, allow_invert: bool = True) -> np.ndarray:

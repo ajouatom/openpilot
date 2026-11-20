@@ -4,6 +4,7 @@ import pytest
 
 from opendbc.car import gen_empty_fingerprint
 from opendbc.car.structs import CarParams
+import opendbc.car.hyundai.interface as interface_module
 from opendbc.car.fw_versions import build_fw_dict
 from opendbc.car.hyundai.interface import CarInterface
 from opendbc.car.hyundai.hyundaicanfd import CanBus
@@ -11,7 +12,7 @@ from opendbc.car.hyundai.radar_interface import RADAR_START_ADDR
 from opendbc.car.hyundai.values import CAMERA_SCC_CAR, CANFD_CAR, CAN_GEARS, CAR, CHECKSUM, DATE_FW_ECUS, \
                                          HYBRID_CAR, EV_CAR, FW_QUERY_CONFIG, LEGACY_SAFETY_MODE_CAR, CANFD_FUZZY_WHITELIST, \
                                          UNSUPPORTED_LONGITUDINAL_CAR, PLATFORM_CODE_ECUS, HYUNDAI_VERSION_REQUEST_LONG, \
-                                         HyundaiFlags, get_platform_codes, HyundaiSafetyFlags
+                                         HyundaiFlags, get_platform_codes, HyundaiSafetyFlags, HyundaiExtFlags
 from opendbc.car.hyundai.fingerprints import FW_VERSIONS
 
 Ecu = CarParams.Ecu
@@ -44,6 +45,63 @@ CANFD_EXPECTED_ECUS = {Ecu.fwdCamera, Ecu.fwdRadar}
 
 
 class TestHyundaiFingerprint:
+  @staticmethod
+  def classic_238_params(mode):
+    class FakeParams:
+      def get_int(self, key):
+        return mode if key == "EnableRadarTracks" else 0
+
+      def get_bool(self, key):
+        return False
+
+      def put_int(self, key, value):
+        pass
+
+      def put_bool(self, key, value):
+        pass
+
+    return FakeParams
+
+  @staticmethod
+  def classic_238_fingerprint():
+    fingerprint = gen_empty_fingerprint()
+    for addr in range(0x238, 0x256):
+      fingerprint[1][addr] = 8
+    return fingerprint
+
+  def test_k7_mode1_reads_classic_238_without_activating_tracks(self, monkeypatch):
+    monkeypatch.setattr(interface_module, "Params", self.classic_238_params(1))
+    CP = CarInterface.get_params(CAR.KIA_K7_PE, self.classic_238_fingerprint(), [], False, False, False)
+
+    assert CP.extFlags & HyundaiExtFlags.RADAR_CLASSIC_238
+    assert not CP.radarUnavailable
+    # Mode 1 keeps its usual openpilot longitudinal (the stock SCC is silenced at init).
+    assert CP.openpilotLongitudinalControl
+
+    def unexpected_radar_write(*args, **kwargs):
+      raise AssertionError("the K7 0x238 stream must not write the radar track configuration")
+
+    silenced = []
+    monkeypatch.setattr(interface_module, "enable_radar_tracks", unexpected_radar_write)
+    monkeypatch.setattr(interface_module, "disable_ecu", lambda *args, **kwargs: silenced.append(kwargs.get("addr")))
+    CarInterface.init(CP, lambda *args, **kwargs: [], lambda *args, **kwargs: None)
+    assert silenced == [0x7d0]
+
+  @pytest.mark.parametrize("car, legacy_tracks", ((CAR.KIA_K7, False), (CAR.KIA_K7_PE, True), (CAR.HYUNDAI_SONATA, False)))
+  def test_mode1_elsewhere_still_activates_legacy_tracks(self, monkeypatch, car, legacy_tracks):
+    fingerprint = self.classic_238_fingerprint() if car != CAR.HYUNDAI_SONATA else gen_empty_fingerprint()
+    if legacy_tracks:
+      fingerprint[1][RADAR_START_ADDR] = 8
+    monkeypatch.setattr(interface_module, "Params", self.classic_238_params(1))
+    CP = CarInterface.get_params(car, fingerprint, [], False, False, False)
+
+    assert not CP.extFlags & HyundaiExtFlags.RADAR_CLASSIC_238
+    activated = []
+    monkeypatch.setattr(interface_module, "enable_radar_tracks", lambda *args, **kwargs: activated.append(True) or True)
+    monkeypatch.setattr(interface_module, "disable_ecu", lambda *args, **kwargs: None)
+    CarInterface.init(CP, lambda *args, **kwargs: [], lambda *args, **kwargs: None)
+    assert activated == ([True] if not CP.flags & HyundaiFlags.CANFD else [])
+
   def test_feature_detection(self):
     # LKA steering
     for lka_steering in (True, False):

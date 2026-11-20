@@ -26,6 +26,7 @@ RAW_OPTIONAL_SERVICES: tuple[str, ...] = (
   # Per-target radar tracks. Requested only while the Drive Insights forward
   # view is open, so the device opens this socket on demand rather than always.
   "liveTracks",
+  "classicRadarTracks",
   # AR anchor inputs. 20Hz each, so they are requested only while the AR
   # overlay holds an "ar" activity lease - never on the always-on overlay path.
   "cameraOdometry",

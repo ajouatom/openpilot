@@ -19,8 +19,22 @@ from opendbc.car.hyundai.values import DBC, HyundaiFlags, HyundaiExtFlags
 from openpilot.common.params import Params
 from opendbc.car.hyundai.hyundaicanfd import CanBus
 from opendbc.car.hyundai.radar_group3 import Group3Object, Group3TrackIds
+from opendbc.car.hyundai.radar_classic_238 import (
+  CLASSIC_238_END_ADDR,
+  CLASSIC_238_MAX_TRIPLET_AGE_NS,
+  CLASSIC_238_START_ADDR,
+  CLASSIC_238_TRACK_MODE,
+  Classic238DisplayTracker,
+  classic_238_longitudinal_tracks,
+)
 
 SCC_TID = 0
+# A K7 radar that also sends stock SCC11/SCC12 (e.g. wired behind the C4) is followed
+# through SCC once SCC11 has arrived continuously for this long; 0x238 objects then stay
+# reference-only (display/recording). A gap longer than CLASSIC_238_SCC_MAX_GAP_NS
+# returns control to the 0x238 objects.
+CLASSIC_238_SCC_MIN_LIVE_NS = 1_000_000_000
+CLASSIC_238_SCC_MAX_GAP_NS = 300_000_000
 RADAR_START_ADDR = 0x500
 RADAR_MSG_COUNT = 64
 RADAR_REQUIRED_MSG_COUNT = 32
@@ -48,6 +62,7 @@ CORNER_OBJECT_430_MSG_COUNT_PER_SIDE = 8
 CORNER_OBJECT_430_SLOTS_PER_MSG = 7
 CORNER_OBJECT_430_TRACK_ID_OFFSET = 300
 CORNER_OBJECT_430_DBC = 'hyundai_canfd_corner_radar_430_generated'
+CLASSIC_238_TRACK_ID_OFFSET = 4000
 
 
 def canfd_group2_track_status(msg):
@@ -569,6 +584,10 @@ class RadarInterface(RadarInterfaceBase):
 
     self.params = Params()
     self.radar_track_mode = self.params.get_int("EnableRadarTracks")
+    # Mode 1 reads the K7 0x238 stream only when the car interface selected it; otherwise it
+    # keeps its 0x500 tracks.
+    self.classic_238 = (not self.canfd and self.radar_track_mode == CLASSIC_238_TRACK_MODE and
+                        bool(CP.extFlags & HyundaiExtFlags.RADAR_CLASSIC_238.value))
     self.radar_tracks = self.radar_track_mode >= 1
     self.bosch = None
     self._bosch_objects = ()
@@ -605,7 +624,7 @@ class RadarInterface(RadarInterfaceBase):
     self.corner_object_430_missed_updates = 0
     self.corner_object_track_ids = CornerObjectTrackIdManager()
     self.rcp_tracks = get_radar_can_parser(
-      CP, self.radar_tracks and self.bosch is None, self.radar_start_addr, self.radar_msg_count,
+      CP, self.radar_tracks and not self.classic_238 and self.bosch is None, self.radar_start_addr, self.radar_msg_count,
       self.radar_required_msg_count, self.radar_group4,
     )
     self.rcp_corner_objects = get_corner_object_can_parser(CP, self.corner_object_tracks)
@@ -613,7 +632,8 @@ class RadarInterface(RadarInterfaceBase):
     self.rcp_corner_objects_430 = get_corner_object_430_can_parser(CP, self.corner_object_430_tracks)
     # Enabling raw radar tracks on legacy CAN disables the stock SCC11 stream on
     # some Hyundai/Kia platforms. Camera-SCC cars may still use SCC11.
-    use_scc_parser = self.bosch is not None or not (self.radar_tracks and not self.canfd and not (CP.flags & HyundaiFlags.CAMERA_SCC))
+    use_scc_parser = (self.classic_238 or self.bosch is not None or
+                      not (self.radar_tracks and not self.canfd and not (CP.flags & HyundaiFlags.CAMERA_SCC)))
     self.rcp_scc = get_radar_can_parser_scc(CP) if use_scc_parser else None
     self.trigger_msg_scc = 416 if self.canfd else 0x420
 
@@ -645,6 +665,14 @@ class RadarInterface(RadarInterfaceBase):
     self.corner_object_430_noncenter_inward_frames = {}
 
     self.group3_track_ids = Group3TrackIds()
+
+    self.classic_238_tracker = Classic238DisplayTracker() if self.classic_238 else None
+    self.classic_238_first_ns = 0
+    self.classic_238_last_frame_ns = 0
+    self.classic_238_latest_ns = 0
+    self.classic_238_invalid = False
+    self.classic_238_scc_since_ns = 0
+    self.classic_238_scc_last_ns = 0
 
     # Initialize pts
     if self.rcp_tracks is not None:
@@ -769,12 +797,17 @@ class RadarInterface(RadarInterfaceBase):
 
   def update(self, can_strings):
     self.frame += 1
-    if self.radar_off_can or (self.bosch is None and self.rcp_tracks is None and self.rcp_scc is None and self.rcp_corner_objects is None and self.rcp_corner_objects_180 is None and self.rcp_corner_objects_430 is None):
+    if self.radar_off_can or (self.bosch is None and self.classic_238_tracker is None and self.rcp_tracks is None and self.rcp_scc is None and self.rcp_corner_objects is None and self.rcp_corner_objects_180 is None and self.rcp_corner_objects_430 is None):
       return super().update(None)
+
+    if self.classic_238_tracker is not None:
+      self._receive_classic_238(can_strings)
 
     if self.rcp_scc is not None:
       vls_s = self.rcp_scc.update(can_strings)
       self.updated_scc.update(vls_s)
+      if self.classic_238 and self.trigger_msg_scc in vls_s:
+        self._note_classic_238_scc(can_strings)
 
     track_ready = False
     if self.bosch is not None:
@@ -813,6 +846,9 @@ class RadarInterface(RadarInterfaceBase):
       corner_430_ready = self.trigger_msg_corner_objects_430 in self.updated_corner_objects_430
 
     scc_ready = (not self.radar_tracks or self.bosch is not None) and self.frame % 5 == 0 and self.rcp_scc is not None
+    # The 0x238 scan runs at ~33 Hz; liveTracks consumers expect 14-25 Hz, so
+    # publish the newest confirmed objects on the same 20 Hz cadence as SCC.
+    classic_238_ready = self.classic_238_tracker is not None and self.frame % 5 == 0
 
     if track_ready and self.rcp_tracks is not None:
       self._update(self.updated_tracks)
@@ -836,7 +872,7 @@ class RadarInterface(RadarInterfaceBase):
     # Corner radar runs at its own cadence. Do not let corner-only frames publish
     # RadarData, since liveTracks uses a fixed radarTimeStep for aLead/jLead.
     bosch_front_only = self.bosch is not None and self.radar_track_mode == 1
-    publish_ready = scc_ready if self.bosch is not None else track_ready or scc_ready
+    publish_ready = scc_ready if self.bosch is not None else track_ready or scc_ready or classic_238_ready
     if bosch_front_only:
       # Mode 1 consumes frontRadar; optional SCC reception cannot gate its clock.
       publish_ready = self.frame % 5 == 0
@@ -845,6 +881,8 @@ class RadarInterface(RadarInterfaceBase):
 
     if self.rcp_scc is not None:
       self._update_scc(self.updated_scc)
+      if self.classic_238 and not self.classic_238_scc_live():
+        self.pts[SCC_TID].measured = False
     if self.rcp_corner_objects is not None:
       if self.updated_corner_objects:
         self._update_corner_objects(self.updated_corner_objects)
@@ -874,18 +912,94 @@ class RadarInterface(RadarInterfaceBase):
     self.updated_corner_objects_180.clear()
     self.updated_corner_objects_430.clear()
 
+    classic_238_error = False
+    if classic_238_ready:
+      classic_238_error = not self._update_classic_238()
+
     ret = structs.RadarData()
     if self.bosch is not None:
       ret.errors.canError = self.bosch.can_error
       ret.errors.wrongConfig = self.bosch.wrong_config
-    if ((self.rcp_tracks is not None and self.radar_tracks and not self.rcp_tracks.can_valid) or
-        (self.rcp_scc is not None and not bosch_front_only and not self.corner_objects_available and not self.rcp_scc.can_valid) or
+    if (classic_238_error or
+        (self.rcp_tracks is not None and self.radar_tracks and not self.rcp_tracks.can_valid) or
+        (self.rcp_scc is not None and not self.classic_238 and not bosch_front_only and not self.corner_objects_available
+         and not self.rcp_scc.can_valid) or
         (self.rcp_corner_objects is not None and not self.rcp_corner_objects.can_valid) or
         (self.rcp_corner_objects_180 is not None and not self.rcp_corner_objects_180.can_valid) or
         (self.rcp_corner_objects_430 is not None and not self.rcp_corner_objects_430.can_valid)):
       ret.errors.canError = True
-    ret.points = [point for point in self.pts.values() if point.measured]
+    # The radar's own live SCC lead drives control; 0x238 objects are then reference only.
+    # (Assign once: re-filtering ret.points would read back the capnp list just replaced.)
+    scc_only = self.classic_238 and self.classic_238_scc_live()
+    ret.points = [point for point in self.pts.values()
+                  if point.measured and not (scc_only and point.trackId >= CLASSIC_238_TRACK_ID_OFFSET)]
     return ret
+
+  def _note_classic_238_scc(self, can_packets):
+    if can_packets and not isinstance(can_packets[0], list | tuple):
+      can_packets = [can_packets]
+    packet_ns = max((packet[0] for packet in can_packets), default=0)
+    if not packet_ns:
+      return
+    if not self.classic_238_scc_last_ns or packet_ns - self.classic_238_scc_last_ns > CLASSIC_238_SCC_MAX_GAP_NS:
+      self.classic_238_scc_since_ns = packet_ns
+    self.classic_238_scc_last_ns = packet_ns
+
+  def classic_238_scc_live(self) -> bool:
+    now_ns = max(self.classic_238_latest_ns, self.classic_238_scc_last_ns)
+    return bool(self.classic_238_scc_last_ns
+                and now_ns - self.classic_238_scc_last_ns <= CLASSIC_238_SCC_MAX_GAP_NS
+                and self.classic_238_scc_last_ns - self.classic_238_scc_since_ns >= CLASSIC_238_SCC_MIN_LIVE_NS)
+
+  def _receive_classic_238(self, can_packets):
+    if can_packets and not isinstance(can_packets[0], list | tuple):
+      can_packets = [can_packets]
+    for packet_ns, frames in can_packets:
+      self.classic_238_latest_ns = max(self.classic_238_latest_ns, packet_ns)
+      if self.classic_238_first_ns == 0:
+        self.classic_238_first_ns = packet_ns
+      for address, dat, src in frames:
+        if src != 1 or not CLASSIC_238_START_ADDR <= address <= CLASSIC_238_END_ADDR:
+          continue
+        try:
+          self.classic_238_tracker.update(packet_ns, address, dat, self.v_ego)
+        except ValueError:
+          # Malformed frames invalidate this output; never keep their objects.
+          self.classic_238_invalid = True
+          next_track_id = self.classic_238_tracker.association.next_track_id
+          self.classic_238_tracker = Classic238DisplayTracker()
+          # Keep IDs unique so motion filters never bridge old and new objects.
+          self.classic_238_tracker.association.next_track_id = next_track_id
+          continue
+        self.classic_238_last_frame_ns = max(self.classic_238_last_frame_ns, packet_ns)
+
+  def _update_classic_238(self) -> bool:
+    """Refresh K7 0x238 points; return False for stale or malformed input."""
+    now_ns = self.classic_238_latest_ns
+    reference_ns = self.classic_238_last_frame_ns or self.classic_238_first_ns
+    stale = now_ns - reference_ns > CLASSIC_238_MAX_TRIPLET_AGE_NS
+    valid = not (stale or self.classic_238_invalid)
+    self.classic_238_invalid = False
+    # Replace only this stream's points: with HyundaiCameraSCC the stock SCC11 point
+    # (SCC_TID) lives in the same dict and is updated in place every cycle.
+    for track_id in [track_id for track_id in self.pts if track_id >= CLASSIC_238_TRACK_ID_OFFSET]:
+      del self.pts[track_id]
+    if not valid:
+      return False
+    tracks = classic_238_longitudinal_tracks(self.classic_238_tracker.current(now_ns), now_ns)
+    for track in tracks:
+      kinematics = track.kinematics
+      point = structs.RadarData.RadarPoint()
+      point.trackId = CLASSIC_238_TRACK_ID_OFFSET + track.track_id
+      point.radarSource = "frontRadar"
+      point.measured = True
+      point.trackState = track.status
+      point.dRel, point.yRel = kinematics.d_rel, kinematics.y_rel
+      point.vLead = kinematics.v_lead
+      point.vRel = kinematics.v_lead - self.v_ego
+      point.aRel, point.yvRel = float("nan"), 0.0
+      self.pts[point.trackId] = point
+    return True
 
   def _update(self, updated_messages):
     if self.radar_group3:

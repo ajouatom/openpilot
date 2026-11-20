@@ -1,6 +1,7 @@
 import asyncio
 import gzip
 import json
+from pathlib import Path
 
 from aiohttp.test_utils import TestClient, TestServer
 from aiohttp import web
@@ -105,6 +106,49 @@ def test_export_matches_desktop_controller():
     assert item['selection']['lead_one'] == exporter.finite_json(asdict(selection.lead_one)) if selection.lead_one else item['selection']['lead_one'] is None
   assert payload['sensitivity'] == exporter.replay.VALIDATION_DEFAULT_SENSITIVITY
   json.dumps(payload, allow_nan=False)
+
+
+def test_radar_asset_defaults_to_compact_track_ids():
+  asset = (Path(__file__).parents[1] / "radar_view.js").read_text(encoding="utf-8")
+  assert '<option value="track" selected>Track ID</option>' in asset
+  assert 'data-show-live checked' in asset
+  assert 'data-show-classic checked' in asset
+  assert 'data-hide-scc' in asset
+  assert '`T${point.track_id??point.slot}`' in asset
+  assert 'C${p.slot}:S${p.status}' not in asset
+
+
+def test_export_adds_classic_238_objects_without_changing_selection():
+  from openpilot.selfdrive.carrot.radar.tools import radar_web_export as exporter
+  from openpilot.selfdrive.carrot.tests.test_radar_lead_simulator import frame, point
+  frames = [frame((point(41, 25.0, 0.0),), time_s=i * .05) for i in range(3)]
+  snapshot = (frames[1].mono_time_s, [{
+    'slot': 3, 'status': 2, 'd_rel': 30.0, 'y_rel': -1.0, 'v_lead': 20.0,
+    'object_sequence': 7, 'rolling_counter': 1, 'counter_consistent': True,
+    'confirmed_candidate': True, 'first_raw_hex': '0123456789abcdef',
+    'second_raw_hex': '4000000000000000',
+    'third_raw_hex': '4000000700000000',
+  }])
+  changed = (frames[2].mono_time_s, [{
+    **snapshot[1][0], 'object_sequence': 8,
+    'second_raw_hex': '8000000000000001', 'third_raw_hex': '8000000800000002',
+  }])
+  payload = exporter.export_frames(frames, classic_238_bus=1, classic_238_snapshots=[snapshot, changed])
+  assert payload['schemaVersion'] == 4
+  assert payload['classic238'] == {
+    'available': True, 'bus': 1, 'controlConnected': False, 'confirmedStatus': 2,
+  }
+  assert payload['frames'][0]['classic_238_objects'] == []
+  assert payload['frames'][1]['classic_238_objects'][0]['slot'] == 3
+  assert payload['frames'][1]['classic_238_objects'][0]['track_id'] == 0
+  assert payload['frames'][2]['classic_238_objects'][0]['confirmed_candidate'] is True
+  assert payload['frames'][2]['classic_238_objects'][0]['second_unknown_change_mask'] == '0000000000000001'
+  assert payload['frames'][2]['classic_238_objects'][0]['third_unknown_change_mask'] == '0000000000000002'
+  assert payload['frames'][2]['classic_238_objects'][0]['second_unknown_changed_bits'] == 1
+  assert payload['frames'][2]['classic_238_objects'][0]['third_unknown_changed_bits'] == 1
+  assert payload['frames'][2]['classic_238_objects'][0]['object_sequence_delta'] == 1
+  assert payload['frames'][2]['classic_238_objects'][0]['first_raw_hex'] == '0123456789abcdef'
+  assert payload['frames'][1]['selection']['lead_one']['track_id'] == 41
 
 
 def test_graph_preserves_missing_scc_samples_and_desktop_series():

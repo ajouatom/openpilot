@@ -12,6 +12,15 @@ from openpilot.selfdrive.carrot.radar.can_batch import MAX_INPUT_AGE_NS, RadarCa
 from openpilot.selfdrive.carrot.radar.lateral import set_radar_track_flip
 from openpilot.selfdrive.pandad import can_capnp_to_list
 from opendbc.car.car_helpers import interfaces
+from opendbc.car.hyundai.radar_classic_238 import (
+  CLASSIC_238_END_ADDR,
+  CLASSIC_238_START_ADDR,
+  Classic238DisplayTracker,
+  classic_238_display_ids,
+)
+
+
+CLASSIC_DISPLAY_PERIOD_NS = 50_000_000
 
 
 def _set_bosch_context(radar, sm, now_ns):
@@ -41,13 +50,14 @@ def main():
   poller = messaging.Poller()
   can_sock = messaging.sub_sock('can', poller=poller, conflate=False)
   state_sock = messaging.sub_sock('carState', poller=poller, conflate=False)
-  pm = messaging.PubMaster(['liveTracks'])
+  pm = messaging.PubMaster(['liveTracks', 'classicRadarTracks'])
   CP = messaging.log_from_bytes(Params().get('CarParams', block=True), car.CarParams)
   radar_interface = interfaces[CP.carFingerprint].RadarInterface
   radar = _rebuild_radar_interface(radar_interface, CP)
   bosch_context_sm = messaging.SubMaster(['livePose', 'modelV2']) if getattr(radar, 'bosch', None) is not None else None
   # Latch once per onroad start; never change a track's side during a drive.
   radar_track_flip = Params().get_bool('RadarTrackFlip')
+  classic_tracker = Classic238DisplayTracker() if CP.brand == 'hyundai' else None
   batches = RadarCanBatches()
   diagnostics = RuntimeDiagnostics('radarcan', cloudlog.event)
   last_input_ns = time.monotonic_ns()
@@ -56,6 +66,11 @@ def main():
   needs_reset = False
   replay = 'REPLAY' in os.environ
   replay_ns = last_input_ns
+  # K7 0x238 objects are shown on the web in every EnableRadarTracks mode. When the
+  # selected radar path publishes nothing (e.g. mode 1 on a car without 0x500 tracks),
+  # publish them on their own 20 Hz cadence; display only, never used for control here.
+  classic_seen = False
+  last_classic_publish_ns = 0
   bosch_replay_ns = 0
 
   def now():
@@ -74,7 +89,34 @@ def main():
       msg.liveTracks.hasDisplayData = getattr(radar, 'DISPLAY_POINTS_SUPPORTED', False) is True
       msg.liveTracks.radarTrackFlipped = radar_track_flip
       pm.send('liveTracks', msg)
+      classic_msg = messaging.new_message('classicRadarTracks')
+      classic_msg.valid = False
+      pm.send('classicRadarTracks', classic_msg)
       last_error_publish_ns = now_ns
+
+  def publish_classic_tracks(now_ns):
+    nonlocal last_classic_publish_ns
+    last_classic_publish_ns = now_ns
+    tracks = classic_tracker.current(now_ns) if classic_tracker is not None else []
+    msg = messaging.new_message('classicRadarTracks')
+    msg.valid = True
+    points = msg.classicRadarTracks.init('points', len(tracks))
+    display_ids = classic_238_display_ids(tracks)
+    for point, track, display_id in zip(points, tracks, display_ids, strict=True):
+      kinematics = track.kinematics
+      point.trackId = display_id
+      point.dRel = kinematics.d_rel
+      point.yRel = kinematics.y_rel
+      point.vRel = kinematics.v_rel
+      point.aRel = kinematics.a_rel
+      point.yvRel = kinematics.yv_rel
+      point.measured = True
+      point.vLead = kinematics.v_lead
+      point.aLead = float('nan')
+      point.jLead = float('nan')
+      point.radarSource = 'frontRadar'
+      point.trackState = track.status
+    pm.send('classicRadarTracks', msg)
 
   while True:
     poller.poll(20)
@@ -107,6 +149,8 @@ def main():
       if needs_reset:
         # Never bridge missing CAN with stale object IDs or filter histories.
         radar = _rebuild_radar_interface(radar_interface, CP, radar)
+        if classic_tracker is not None:
+          classic_tracker = Classic238DisplayTracker()
         needs_reset = False
       last_input_ns = ego.receive_ns
       max_input_age_ms = max(max_input_age_ms, (now_ns - ego.receive_ns) / 1e6)
@@ -116,6 +160,18 @@ def main():
         context_ns = bosch_replay_ns if replay else ego.receive_ns
         _set_bosch_context(radar, bosch_context_sm, context_ns)
       result = radar.update_carrot(ego.v_ego, ego.a_ego, ego.receive_ns * 1e-9, packets)
+      for packet_ns, frames in packets:
+        for address, dat, src in frames:
+          if (classic_tracker is not None and src == 1
+              and CLASSIC_238_START_ADDR <= address <= CLASSIC_238_END_ADDR):
+            try:
+              classic_tracker.update(packet_ns, address, dat, ego.v_ego)
+              classic_seen = True
+            except ValueError:
+              # Foreign or malformed frame in this ID range: display only, never crash.
+              classic_tracker = Classic238DisplayTracker()
+      if classic_tracker is not None:
+        classic_tracker.finish_scan(ego.receive_ns)
       processed += 1
       if now() - ego.receive_ns > MAX_INPUT_AGE_NS:
         publish_error('processingTimeout', now())
@@ -127,6 +183,9 @@ def main():
         # Assignment copies the result: decoder points/filter history stay raw.
         set_radar_track_flip(msg.liveTracks, radar_track_flip)
         pm.send('liveTracks', msg)
+        publish_classic_tracks(ego.receive_ns)
+      elif classic_seen and ego.receive_ns - last_classic_publish_ns >= CLASSIC_DISPLAY_PERIOD_NS:
+        publish_classic_tracks(ego.receive_ns)
     now_ns = now()
     if now_ns - min(last_input_ns, last_can_input_ns) > MAX_INPUT_AGE_NS:
       publish_error('inputTimeout', now_ns)
