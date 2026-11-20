@@ -1,5 +1,52 @@
 # Repository memory
 
+- 2026-11-20: Sonata565c34a74e40b91d uploads464/0..1 and466/0..2 on
+  a9811adce contain persistent CAN faults, not a UI crash.464 selects classic
+  SONATA;466 selects SONATA_2024 with recorded HDA2=0/CameraSCC=0. Physical
+  ECAN is bus1 (0x100/32,0x1AA/16,0x1CF/8); LKAS_ALT0x110 is on bus2.
+  Enabling HDA2 alone retains this platform's inherited CameraSCC flag and
+  still waits for SCC_CONTROL/LFAHDA_CLUSTER on the wrong bus. Normalize the
+  existing HDA2+CameraSCC0 selection to stock SCC before deriving capabilities,
+  safety and longitudinal policy; explicit CameraSCC modes remain unchanged.
+  Current36 CAN-FD platforms x eight setting combinations reproduce one old
+  failure (Sonata HDA2 stock), all pass corrected.745 related local checks pass.
+  Full CarState/parser replay of five complete rlogs, with parser registration
+  clock aligned to recorded time, has23339/23339 valid samples after the initial
+  five seconds per route; recorded configurations have23339 invalid. This is
+  receive-path replay, not ECU acceptance, physical driving or a live fix.
+  Vehicle still needs Sonata2024 selection/HDA2 enabled and restart; no Params
+  or device writes performed. Private evidence shares tesla-startup scratch.
+
+- 2026-11-20: Latest-labelled wip device edb4204468f19127 (unidentified, not
+  confirmed Tesla) repeatedly exits UI1 on lazy reboot/signal_mode imports;
+  tmux diagnostics also cannot import egpu_diagnostics. All helpers are tracked
+  in ad0943; mismatched traceback source supports runtime/checkout inconsistency,
+  but its cause is unproven. Load these stdlib-only helpers with their callers
+  during startup, preserving setting reads and reboot/diagnostic behavior.
+  Four isolated caller paths reproduce missing/replaced-helper failure before
+  correction and pass afterward (eight cases); no blanket exception suppression.
+  This prevents those late imports, not arbitrary damaged installations. No
+  reporter device writes or physical recovery proof. Evidence in private
+  .analysis/scratch/2026-11-20-tesla-startup/INDEX.md.
+
+- 2026-11-20: Merge PR583 alternate 8-byte0x4B8 PROLONG navigation receiver.
+  Owner requests data-based support across Hyundai/Kia/Genesis CAN-FD, including
+  EV4/PV5 optional reception, with no GV80 fingerprint gate. Share the existing
+  profile policy; retain route/PV5 warning requirements and settings. Exact-length
+  admission rejects unrelated same-address payloads; consume primary/alternate
+  profiles in timestamp order. Original PR reproduces wrong-length false bump,
+  older alternate overwriting newer zone, and EV4 exclusion; final tests pass.
+  Scan58 retained GV80-folder logs:141 physical-bus profiles in15segments/two
+  GV80s; one log lacks carParams. Navigation-component replay65segments/34routes/
+  352327 recorded carState inputs, four modes:50 no-alternate segments unchanged;
+  alternate path exactly matches baseline with address remapped4B8->4BE.
+  Replay selects the observed navigation bus/format independently of unrecorded
+  harness Params, initializes each segment, and fixes recorded speed. It is not
+  whole-controller, physical deceleration, or harness-installation validation.
+  549 local related checks,25Wiki tests and DBC generation parity pass. CI/NAS
+  automatic deployment follow publication. No vehicle writes. Private evidence
+  .analysis/scratch/2026-11-20-pr583/INDEX.md.
+
 - 2026-11-20: Owner removes manual left OEM centre-line/marking and right2.5m
   road-edge admission gates. Model/Tesla policy and automatic-steering isolation
   retained. Short<=2s returned/relabelled manual attempt can seed independently
