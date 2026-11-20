@@ -295,6 +295,18 @@ def test_spas2_only_1_leaves_the_parking_ecu_on():
   assert abs(len(spas2(cc, sent)) - (carcontroller.BLINKER_PULSE_FRAMES - 1)) <= 1
 
 
+def test_spas2_only_3_sends_spas2_in_bursts():
+  # CanfdBlinkerSpas2Only 3 (Sorento 11-20, s71): as 1, but SPAS2 in 0.35 s bursts with 0.1 s gaps, never 0.5 s in a row
+  cc = make_cc(control=False, test=1, spas2_only=3)
+  per = [step(cc, 1, P, 0) for _ in range(3 * (carcontroller.SPAS2_BURST_ON + carcontroller.SPAS2_BURST_OFF))]
+  assert all(uds(f) == [] and spas1(f) == [] for f in per) and not cc.ecu.quiet
+  on = [bool(spas2(cc, f)) for f in per]
+  runs = [(k, len(list(g))) for k, g in __import__("itertools").groupby(on)]
+  assert max(n for k, n in runs if k) <= carcontroller.SPAS2_BURST_ON < int(0.5 / carcontroller.DT_CTRL)
+  assert all(n == carcontroller.SPAS2_BURST_OFF for k, n in runs[1:-1] if not k)
+  assert {v for f in per for v in spas2(cc, f)} == {3}
+
+
 def test_spas2_only_2_silences_the_ecu_and_sends_spas2_only():
   cc = make_cc(control=False, test=2, spas2_only=2)
   sent = step(cc, 30, P, 0)
