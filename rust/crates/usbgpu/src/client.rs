@@ -63,7 +63,15 @@ fn python_worker(worker: &Path, model: &Path) -> Option<(PathBuf, PathBuf)> {
 fn worker_command(worker: &Path, model: &Path) -> (Command, bool) {
     match python_worker(worker, model) {
         Some((script, repository)) => {
-            let mut command = Command::new("python3");
+            // Loaded in the background while driving (carrot loads it before
+            // modeld runs): on the 3.5 GiB comma four the kernel must kill this
+            // worker first, never a driving process, if memory runs out.
+            let mut command = Command::new("sh");
+            command.args([
+                "-c",
+                "echo 1000 > /proc/self/oom_score_adj 2>/dev/null; exec \"$0\" \"$@\"",
+                "python3",
+            ]);
             let mut path = std::ffi::OsString::from(repository.join("pydeps"));
             path.push(":");
             path.push(&repository);
