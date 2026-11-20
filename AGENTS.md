@@ -1,5 +1,62 @@
 # Repository memory
 
+- 2026-11-20: Owner removes manual left OEM centre-line/marking and right2.5m
+  road-edge admission gates. Model/Tesla policy and automatic-steering isolation
+  retained. Short<=2s returned/relabelled manual attempt can seed independently
+  confirmed same-side turn within3s at10kmh+; fresh opposite boundary approach
+  can rearm after1s dark. Driver/input cancellation never seeds recovery.
+  Entire retained467segments/60routes/523934inputs against34ce0aa171: native
+  365->406, delayed410ms364->405, external366->407;42added/1removed/12changed.
+  Recover11f1/1 next right turn and11d5/3 opposite request;1186/3 turn245mslater.
+  Do not claim zero regression:118a/9 model turn absent under retained isolation;
+  five matched holds shorter, three at recorded lever/changed echo timing,
+  two boundary-return.17added events have sampled video,25unavailable; parked-car
+  avoidance is also admitted, so false-indication rate unproven.1196localpass/
+  9platformskip and25Wiki tests. No vehicle writes/physical proof. CI follows
+  publication. Details docs/indicator_replay_20261114.md and private scratch
+  2026-11-20-manual-indicator-fix/INDEX.md.
+
+- 2026-11-19 late: Owner explicitly requests Jetson-first Fairy Tale testing
+  from ONNX despite official AMD PKL still404; Jetson does not depend on PKL.
+  Owner authorizes reboot/temporary Jetson stop while Park/zero/disabled, then
+  imposes~5min departure cutoff. Orin Nano8GB/MAXN_SUPER, signedN16 host0cb67d46.
+  Fresh vehicle guard and bounded service-restoring supervisor stop inference;
+  original host builds hash-verifiedbc125a ONNX in private scratch. NvMap error12
+  warning occurs, but timing cache and534724608B staged engine prove builder
+  reached plan serialization/write. Repeated SSH heartbeat banner timeout then
+  triggers guard kill; no complete atomic plan or inference timing. Do not infer
+  fatal model incompatibility/OOM-killer cause from warning alone. Original N16
+  service restored, commaactive/ready/error-empty verified; selection/pins unchanged.
+  Removed incomplete1300859716B temp directory after process check. Retain ONNX,
+  spec/timing cache/log in /opt/carrot-jetlink/fairy-test-20261119 for next session.
+  Offline harness uses persistent SSH heartbeat with same4s expiry; not yet device
+  tested. No more device work after cutoff. Hold catalog until native comparison
+  passes; Jetson-only entry must not advertise unavailable eGPU support.
+  Evidence private scratch2026-11-19-fairy-tale and updated review doc.
+
+- 2026-11-19 evening: Owner reconnects comma and authorizes actual Cheddar
+  installation plus PR39415 review. Offroad clean tracked checkout fast-forwards
+  a9811adce->93c5c6afaf, normal reboot/fresh QCOM SCons build succeeds; installed
+  worker passes both camera sizes, changed input/catch-up/reset. Owner READY,
+  real1344x760 cameras/core7/FIFO54. Initial1398 live frames mean34.30/max44.97,
+  no gaps or invalid pose/odometry. Explicit Park/zero/inactive guarded45s
+  Jetlink daemon pause: stable Cheddar820frames mean34.32/max45.21/zeroover50,
+  valid outputs/odometry/pose. Deliberate timeout207.41ms causes3-frame gap and
+  one invalid odometry; pose valid/no sampled alert. Resume watchdog/finally
+  restore daemon; N16 returns~10s later,1406frames mean41.43/max50.03/oneover50,
+  all valid. Existing N16 remains active; Cheddar internal fallback retained.
+  No model-selection/control Params changes, road/thermal validation. Recovered
+  raw evidence and hash-matched scratch bundle/warp; exact unused5319-file
+  scratch directory removed, live mmap/runtime retained. Previous final full
+  build/model/Jetson/docs CI pass. PR39415 only changes external PKL, sameec91b74
+  runtime; configured official LFS returns404 for16882f.../764592225B twice.
+  Official Fairy Tale ONNXbc125a.../766137036B hash/checker pass; Light speed2
+  contract/slices exact,40CPU recurrent frames finite/parser/cereal pass.
+  No NAV inputs. Official Chestnut60samples mean39.39/max39.92, not own hardware.
+  Hold Fairy catalog/pins until exact PKL and native external validation.
+  See docs/fairy_tale_model_review_20261119.md, updated Cheddar review and
+  private scratch2026-11-19-cheddar-install and2026-11-19-fairy-tale.
+
 - 2026-11-19: Owner requests official-condition Cheddar comparison and runtime
   integration, permitting CD210 replacement. Same offroad TICI, core7/FIFO54,
   performance governors/1689600kHz and GPU IRQ7: 500 synthetic full-image calls

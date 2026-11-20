@@ -115,3 +115,57 @@ Linux CI compiles the actual Cheddar ONNX with the official Linux `CPU:LLVM` bac
 The new code does not alter Carrot's action conversion, stopping policy or smoothing. Cheddar supplies the existing direct-action branch instead of CD210's plan-derived action branch; the model replacement itself can therefore change driving behavior. Road behavior, concurrent onroad deadline margin and thermal endurance remain unmeasured. The full release build and broader CI run after publication.
 
 Private follow-up evidence is under `.analysis/scratch/2026-11-19-cheddar-integration`. The device disconnected during a subsequent fresh production-compiler run; its completion and scratch cleanup require reconnection. Successful timing/reset results above were observed before that disconnection. No installed vehicle source/model, Params or control commands were changed.
+
+## November 19 evening: installed-device validation and cleanup
+
+The owner restored device access and explicitly requested installation. With
+`IsOnroad=0` and no tracked device edits, fast-forwarded the installed checkout
+from `a9811adce075a81f6a719e611f28ae444193f750` to
+`93c5c6afafa5016f9c94347da6982c967d9dd39b`, then used the normal reboot path.
+The production SCons compiler completed a fresh QCOM Cheddar bundle and the
+full device build. The installed ONNX SHA-256 matches `350a47ea...d1d82`.
+The production worker passes warmup, changed-input, catch-up and exact reset
+checks at both 1928x1208 and 1344x760. No scratch bundle was substituted for the
+installed build. The earlier interrupted scratch compiler had not produced a
+completed artifact.
+
+After the owner enabled vehicle READY, the real cameras were 1344x760. Modeld
+and its Cheddar worker ran on core 7, FIFO54. An initial 70-second live window
+contained 1,398 consecutive valid model frames, mean 34.30 ms, maximum
+44.97 ms, none above 50 ms, with valid camera odometry and livePose. All samples
+were P, zero speed, lateral and longitudinal controls inactive. Because Jetson
+became ready during the overall startup observation, the subsequent test
+explicitly tracked backend status rather than treating this first window as
+an isolated backend benchmark.
+
+A bounded test suspended only the Jetlink daemon for 45 seconds, continuously
+requiring fresh P/zero/inactive state. It retained the exact process identity,
+restored the daemon in `finally`, and used an independent 50-second resume
+watchdog. No model selection or control Params were changed.
+
+| Observed stable backend | Frames | Mean | Maximum | Above 50 ms |
+| --- | ---: | ---: | ---: | ---: |
+| Cheddar internal fallback, seconds 3–44 | 820 | 34.32 ms | 45.21 ms | 0 |
+| N16 after external recovery | 1,406 | 41.43 ms | 50.03 ms | 1 |
+
+All samples in these stable windows had valid model, camera odometry and pose.
+The deliberate link interruption itself cost 207.41 ms before fallback,
+followed by a three-frame ID gap and one invalid camera-odometry observation.
+Pose remained valid and no selfdrive alert appeared in the sampled test. This
+is successful fault recovery, not seamless zero-gap switching. N16 resumed
+about ten seconds after the daemon was restored. The device was left with its
+existing N16 selection active and Cheddar available as the internal fallback.
+These are parked live-camera checks, not a road trial or thermal-endurance test.
+
+Earlier raw timing arrays, prediction captures, scripts and logs were recovered.
+The retained scratch bundle and warp were copied to private evidence with
+matching device/local SHA-256. After confirming no process used the exact
+scratch directory, removed its 5,319 files and verified the directory absent.
+The live worker's shared mmap file and installed model/runtime were retained.
+Evidence is under `.analysis/scratch/2026-11-19-cheddar-install`.
+
+The published code's final full build and actual SCons-artifact execution
+([tests 44456161179](https://github.com/ajouatom/openpilot/actions/runs/44456161179)),
+[model compatibility](https://github.com/ajouatom/openpilot/actions/runs/44456161337),
+[Jetson integration](https://github.com/ajouatom/openpilot/actions/runs/44456161249)
+and documentation-policy checks all passed before this installation.

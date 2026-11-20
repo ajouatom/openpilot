@@ -363,3 +363,54 @@ Recorded output feedback cannot prove how a newly emitted lamp would affect a
 closed-loop drive. No vehicle installation, CAN actuation or physical cure is
 claimed. Private inputs, frozen sources, all comparison tables and visual evidence
 are indexed in `.analysis/archive/2026-11-18/indicator-continuity-fixes/INDEX.md`.
+
+## November 20: owner-requested manual admission and short-attempt rearm
+
+Remove the OEM left-marking/centre-line and right-road-edge-clearance gates from
+the manual boundary observer. Intent, speed, valid lane width, boundary movement,
+confidence, driver cancellation and lamp-to-steering isolation remain. Model
+desire/path admission and Tesla's explicitly supplied lane policy are unchanged.
+
+A manual boundary attempt ending within two seconds through return or lane
+reassignment may seed an independently confirmed same-side manual turn. It needs
+same-side steering at termination, a fresh growing turn, valid yaw and at least
+10 km/h within three seconds; driver/input cancellations cannot seed recovery.
+A fresh opposite boundary approach may rearm after one continuous dark second
+following a short abandoned attempt. Neither path revives the old request identity
+or shortens the 12-second automatic-steering feedback protection.
+
+The retained corpus remains 467 full segments, 60 routes and 523,934 aligned
+inputs. Against 34ce0aa171, request counts change 365→406 for immediate native
+submission, 364→405 with a simulated 410 ms first-send delay, and 366→407 for
+external output. Each comparison adds 42 requests, loses one model-turn request
+and changes 12 matched requests; 352 immediate-native observations retain exact
+start/source/end. Matching reserves exact observations, then same-source matches,
+then same-side matches within two seconds. Counts are not truth labels.
+
+The new boundary indication at 11f1/1+10.827..11.774 no longer suppresses the
+existing right turn at +13.976. In 1186/3, the subsequent manual turn reappears at
+18.736 (245 ms later than baseline) and retains its 22.187 end. The opposite
+manual request at 11d5/3+46.771 is also retained after a short new left indication.
+
+This does **not** establish zero additional misses or false indications:
+
+- The old 118a/9+57.114 model turn is blocked by the existing isolation after a
+  newly admitted manual indication. Recorded lever/lamp activity also exists;
+  no retained video establishes a physical miss. Driver/isolation guards were
+  not bypassed to force this counterfactual match.
+- Five matched holds end earlier. Three encounter recorded lever inputs under
+  the new request's tap-echo timing (11e1/7 twice and 11d8/0); two end on boundary
+  return (116f/3 and 11f5/7). The largest reductions are 26.516 and 9.151 seconds
+  in 11e1/7. Earlier requests shift the echo window while historical lever/lamp
+  feedback remains fixed, so physical hold changes cannot be inferred directly.
+- Added-request video is retained for 17 of 42 events. Sampled frames show a
+  right turn in 11f1/1, but parked-car avoidance in 11d6/0, 11e3/6 and 11f3/9
+  is also admitted. These are potential unwanted indications. The other sampled
+  scenes are not fully labeled; 25 additions lack matching retained video.
+
+Local isolated checks pass 1,196 tests with nine platform skips; Wiki tests pass
+25. Prior-source checks reproduce removed admission/rearm behavior (30 failures,
+including assertions about newly introduced state). Native/full CI is recorded
+against the published commit. No vehicle writes, CAN actuation or physical lamp
+validation were performed. Full before/after tables and private snapshots are in
+`.analysis/scratch/2026-11-20-manual-indicator-fix/INDEX.md`.
