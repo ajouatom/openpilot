@@ -50,7 +50,7 @@ CANFD_HDA_INFO_MSG = "CANFD_HDA_INFO_364"
 CANFD_NAVI_PROFILE_MSG = "CANFD_NAVI_PROFILE_093"
 CANFD_NAVI_SEGMENT_MSG = "CANFD_NAVI_SEGMENT_099"
 CANFD_NAVI_STATUS_MSG = "CANFD_NAVI_STATUS_380"
-LEGACY_NAVI_PROFILE_4B8_MSG = "NEW_MSG_4B8"  # GV80 stock navi sends the PROLONG profile on 0x4B8 instead of 0x4BE (live-captured 2026-11-18)
+LEGACY_NAVI_PROFILE_4B8_MSG = "NEW_MSG_4B8"  # Alternate 8-byte PROLONG address, selected by receipt rather than vehicle model.
 CANFD_NAVI_CAMERA_ACTIVE_BIT = 0x40
 CANFD_NAVI_STATUS_TIMEOUT_NS = 1_000_000_000
 STANDSTILL_THRESHOLD = 12 * 0.03125 * CV.KPH_TO_MS
@@ -537,7 +537,7 @@ class CarState(CarStateBase):
             add_and_cache(self.cp, "NEW_MSG_4B4", "navi_position_4b4")
             add_and_cache(self.cp, self.navi_segment_msg, "navi_segment_4b9")
             add_and_cache(self.cp, self.navi_profile_msg, "navi_profile_4be")
-            add_and_cache(self.cp, LEGACY_NAVI_PROFILE_4B8_MSG, "navi_profile_4b8")
+          add_and_cache(self.cp, LEGACY_NAVI_PROFILE_4B8_MSG, "navi_profile_4b8")
           add_and_cache(self.cp, "STEER_TOUCH_2AF", "steer_touch_2af")
         elif self.controls_ready_count == 124:
           add_and_cache(self.cp, self.cruise_btns_msg_canfd, "cruise_buttons_msg")
@@ -1217,9 +1217,9 @@ class CarState(CarStateBase):
       self._update_pv5_navi_section(cp, cp_alt)
     profile_timestamp = self._vehicle_navi_message_timestamp(cp, self.navi_profile_msg)
     profile_4b8_timestamp = 0
-    if not (self.canfd_wrapped_navi or self.canfd_ev4_navi):
-      # Some legacy head units (GV80) emit the same PROLONG profile on 0x4B8
-      # instead of 0x4BE; both sources feed the same event pipeline.
+    if len(cp.dat.get(0x4b8, b"")) == 8:
+      # The address alone is insufficient: other CAN-FD payload sizes must
+      # not be decoded as this legacy profile, on any vehicle model.
       profile_4b8_timestamp = self._vehicle_navi_message_timestamp(cp, LEGACY_NAVI_PROFILE_4B8_MSG)
       profile_timestamp = max(profile_timestamp, profile_4b8_timestamp)
     hda_timestamp = self._vehicle_navi_message_timestamp(cp, self.hda_info_msg) if self.canfd_ev4_navi else 0
@@ -1286,16 +1286,16 @@ class CarState(CarStateBase):
     if not (self.vehicleNaviCanControl or self.vehicleNaviSchoolZoneControl):
       return False
 
-    if self.navi_profile_4be is not None:
-      timestamp = self._vehicle_navi_message_timestamp(cp, self.navi_profile_msg)
-      if timestamp > self.vehicleNaviProfileTimestamp:
-        self.vehicleNaviProfileTimestamp = timestamp
-        self._handle_vehicle_navi_profile(self.navi_profile_4be, timestamp, ret, speed_limit_cam, on_controlled_access_road)
-
-    navi_profile_4b8 = getattr(self, "navi_profile_4b8", None)
-    if navi_profile_4b8 is not None and profile_4b8_timestamp > getattr(self, "vehicleNaviProfile4b8Timestamp", 0):
-      self.vehicleNaviProfile4b8Timestamp = profile_4b8_timestamp
-      self._handle_vehicle_navi_profile(navi_profile_4b8, profile_4b8_timestamp, ret, speed_limit_cam, on_controlled_access_road)
+    # Both addresses use the same policy. Consume each new profile once and
+    # in timestamp order so an older alternate cannot overwrite a newer zone.
+    profiles = (
+      (self._vehicle_navi_message_timestamp(cp, self.navi_profile_msg), self.navi_profile_4be, "vehicleNaviProfileTimestamp"),
+      (profile_4b8_timestamp, self.navi_profile_4b8, "vehicleNaviProfile4b8Timestamp"),
+    )
+    for timestamp, values, timestamp_attr in sorted(profiles, key=lambda profile: profile[0]):
+      if values is not None and timestamp > getattr(self, timestamp_attr):
+        setattr(self, timestamp_attr, timestamp)
+        self._handle_vehicle_navi_profile(values, timestamp, ret, speed_limit_cam, on_controlled_access_road)
 
     if position_seen:
       if not range_section_active or not self.vehicleNaviCanControl or 0 < ret.speedLimit <= 30:
@@ -1775,8 +1775,9 @@ class CarState(CarStateBase):
       msgs = [(CANFD_HDA_INFO_MSG, math.nan), (CANFD_NAVI_SEGMENT_MSG, math.nan), (CANFD_NAVI_PROFILE_MSG, math.nan)]
       alt_msgs = []
     else:
-      msgs = [("NEW_MSG_4B4", math.nan), ("NEW_MSG_4B9", math.nan), ("NEW_MSG_4BE", math.nan), ("NEW_MSG_4B8", math.nan)]
+      msgs = [("NEW_MSG_4B4", math.nan), ("NEW_MSG_4B9", math.nan), ("NEW_MSG_4BE", math.nan)]
       alt_msgs = []
+    msgs.append((LEGACY_NAVI_PROFILE_4B8_MSG, math.nan))
     if not (CP.flags & HyundaiFlags.CANFD_ALT_BUTTONS):
       # TODO: this can be removed once we add dynamic support to vl_all
       msgs += [
