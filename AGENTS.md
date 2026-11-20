@@ -1,5 +1,17 @@
 # Repository memory
 
+- 2026-11-20: Latest-labelled wip device edb4204468f19127 (unidentified, not
+  confirmed Tesla) repeatedly exits UI1 on lazy reboot/signal_mode imports;
+  tmux diagnostics also cannot import egpu_diagnostics. All helpers are tracked
+  in ad0943; mismatched traceback source supports runtime/checkout inconsistency,
+  but its cause is unproven. Load these stdlib-only helpers with their callers
+  during startup, preserving setting reads and reboot/diagnostic behavior.
+  Four isolated caller paths reproduce missing/replaced-helper failure before
+  correction and pass afterward (eight cases); no blanket exception suppression.
+  This prevents those late imports, not arbitrary damaged installations. No
+  reporter device writes or physical recovery proof. Evidence in private
+  .analysis/scratch/2026-11-20-tesla-startup/INDEX.md.
+
 - 2026-11-20: Merge PR583 alternate 8-byte0x4B8 PROLONG navigation receiver.
   Owner requests data-based support across Hyundai/Kia/Genesis CAN-FD, including
   EV4/PV5 optional reception, with no GV80 fingerprint gate. Share the existing

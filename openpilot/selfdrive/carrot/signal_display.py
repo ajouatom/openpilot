@@ -4,6 +4,8 @@ import math
 from pathlib import Path
 import time
 
+from openpilot.selfdrive.carrot.signal_mode import flag_override
+
 DISPLAY_FLAG = Path('/data/signal-color-shadow/display_enabled')
 DISPLAY_PATH = Path('/dev/shm/carrot_signal_display.json')
 STATUS_PATH = Path('/dev/shm/carrot_signal_display_status.json')
@@ -15,7 +17,6 @@ SIZE = (1344, 760)
 
 
 def display_requested(path=DISPLAY_FLAG):
-  from openpilot.selfdrive.carrot.signal_mode import flag_override
   override = flag_override(path)
   if override is not None:
     return override
