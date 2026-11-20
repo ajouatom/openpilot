@@ -639,7 +639,8 @@ def create_spas_steer(packer, CAN, mode, angle):
   return [packer.make_can_msg("SPAS1", CAN.ECAN, {"BYTE3": 0x4b, "NEW_SIGNAL_2": mode, "NEW_SIGNAL_1": angle})]
 
 
-def create_spas_messages(packer, CAN, frame, left_blink, right_blink, spas2_template=None, hazard=False, spas1=True, raw=None):
+def create_spas_messages(packer, CAN, frame, left_blink, right_blink, spas2_template=None, hazard=False, spas1=True, raw=None,
+                         park=False):
   ret = []
 
   if spas1:  # CanfdBlinkerSpas2Only leaves SPAS1 to the parking ECU (or to nobody)
@@ -656,13 +657,19 @@ def create_spas_messages(packer, CAN, frame, left_blink, right_blink, spas2_temp
     blink = 4
   # GV80: the car's own SPAS2 (bytes 3/4=01, 10..13=80, 15=03, 20=10 via the BYTEn signals, 10-26 rlog 00000331);
   # other cars keep the zero-filled frame that lit the lamp on the Ioniq 5 and EV4
-  values = {k: v for k, v in (spas2_template or {}).items() if k not in ("CHECKSUM", "COUNTER", "BYTE18")}
+  values = {k: v for k, v in (spas2_template or {}).items() if k not in ("CHECKSUM", "COUNTER", "BYTE5", "BYTE6", "BYTE7", "BYTE18")}
   values["BLINKER_CONTROL"] = blink
   # GV80 (11-20, 02_logs s71): in 3 stock auto-parking runs the parking ECU's own lamp frames carried byte 18 = 0x40 together
   # with BLINKER_CONTROL 3/4 (set with it or 20 ms before; the lamp came on 10-20 ms later); its idle frames have 0. Our
   # copies left it 0 and never lit the GV80 lamps (s58, 10-27), so ask the way the parking ECU does. Template = GV80 only.
   if spas2_template is not None and blink in (3, 4):
     values["BYTE18"] = 0x40
+  # CanfdBlinkerMenuTest 3/4 (GV80 only, 11-20 s76): byte 18 alone lit nothing in P (route 378, frames on the bus, no
+  # rejects). Every stock lamp frame (375/376, 3788) also carried the parking-active body below and came in D, so the
+  # tester runs 1/2 and 3/4 in P and in D to tell the bytes from the gear. park comes only from the menu test: Kick,
+  # remote and hazard frames never carry it, and cars without the GV80 template never do.
+  if spas2_template is not None and park and blink in (3, 4):
+    values.update(BYTE3=0x26, BYTE4=0x41, BYTE5=0x19, BYTE6=0x04, BYTE7=0x01, BYTE15=0x13)
   ret.append(packer.make_can_msg("SPAS2", CAN.ECAN, values))
 
   return ret

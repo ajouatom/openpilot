@@ -344,6 +344,7 @@ class CarController(CarControllerBase):
     self.blinker_kick_model = False  # CanfdBlinkerKickModelMode != 1: also kick on a model lane change start (kick_pulse)
     self.model_flashes = 0  # CanfdBlinkerKickModelMode 2/3/4 -> 3/5/7 flashes; 0 = hold through the change
     self.blinker_test = 0  # CanfdBlinkerMenuTest: 1 left, 2 right (menu test, any speed/gear)
+    self.blinker_park = False  # CanfdBlinkerMenuTest 3/4: 1/2 plus the GV80 parking-active SPAS2 body (GV80 template only)
     self.hazard_test = 0  # CanfdHazardTest (remote hazard, 2 = fast flash): SPAS2 hazards when no camera 0x1ea carries bit 104
     self.hazard_shot_sent = False  # CanfdHazardTest 3: the single value-1 frame went out (resets when the value leaves 3)
     self.hazard_shot_frame = 0
@@ -729,7 +730,9 @@ class CarController(CarControllerBase):
       right = (pulse and self.blinker_side == 4) or self.blinker_test == 2 or (alternate and side == 1)
       haz = hazard and (haz_mode == 3 or hyundaicanfd.hazard_request(haz_mode, self.frame))
       ret.extend(hyundaicanfd.create_spas_messages(self.packer, self.CAN, self.frame, left, right, getattr(CS, "spas2", None),
-                                                         haz, spas1=not spas2_only, raw=raw))
+                                                         haz, spas1=not spas2_only, raw=raw,
+                                                         park=self.blinker_park and raw is None and
+                                                         (self.blinker_test == 1 or (self.blinker_test == 2 and not left))))
       self.spas2_sent = self.frame
       if haz_mode == 3 and haz:
         self.hazard_shot_sent, self.hazard_shot_frame = True, self.frame  # given back next frame unless another test runs
@@ -797,7 +800,9 @@ class CarController(CarControllerBase):
       self.spas2_only = params.get_int("CanfdBlinkerSpas2Only")
       model_mode = params.get_int("CanfdBlinkerKickModelMode")  # 0 hold, 1 off, 2/3/4: 3/5/7 flashes
       self.blinker_kick_model, self.model_flashes = model_mode != 1, MODEL_FLASH_COUNTS.get(model_mode, 0)
-      self.blinker_test = params.get_int("CanfdBlinkerMenuTest")
+      menu = params.get_int("CanfdBlinkerMenuTest")
+      # 3/4 are 1/2 for every check here; only hyundaicanfd adds the GV80 body, so a car without the template runs them as 1/2
+      self.blinker_test, self.blinker_park = (menu - 2, True) if menu in (3, 4) else (menu, False)
       stalk = params.get_int("BlinkerStalkTest")  # 1-4 lever replay (CAN-FD), 5/6 one high beam / flash-to-pass
       self.blinker_stalk = stalk if stalk in (1, 2, 3, 4) else 0
       self.highbeam_test = stalk - 4 if stalk in (5, 6) else 0

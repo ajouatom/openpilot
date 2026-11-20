@@ -43,7 +43,7 @@ class Ecu:
 
 
 def make_cc(control=True, test=0, spas=0, ecu=None, mode=1, model=True, spas2_only=0):
-  cc = SimpleNamespace(blinker_control=control, blinker_test=test, blinker_kick_mode=mode, spas2_only=spas2_only, aprk_spas2_only=0, spas2_sent=-100, aprk_state=0, aprk_frame=0, aprk_nanos=0, aprk_acked=False,
+  cc = SimpleNamespace(blinker_control=control, blinker_test=test, blinker_park=False, blinker_kick_mode=mode, spas2_only=spas2_only, aprk_spas2_only=0, spas2_sent=-100, aprk_state=0, aprk_frame=0, aprk_nanos=0, aprk_acked=False,
                          lane_crossing=Crossing(), blinker_side=0, blinker_pulse_end=0, frame=0, yellow_until=[0, 0],
                          blinker_kick_model=model, lane_change_prev="off", model_pulse=False, blinker_pulse_start=0, model_hold={}, model_flashes=0, cgw_kick=False, cgw_trial=0, cgw_last_tx=-carcontroller.CGW_REARM_FRAMES,
                          remote_blinker=0, remote_pulse=False, hazard_test=False, hazard_shot_sent=False, hazard_shot_frame=0,
@@ -860,3 +860,62 @@ def test_hazard_one_shot_rearms_through_update_after_0(monkeypatch):
   assert ones(100) == 0 and not controller.hazard_shot_sent
   value["CanfdHazardTest"] = 3
   assert ones(100) == 1
+
+
+def test_menu_test_3_4_runs_as_1_2_and_only_the_gv80_template_gets_the_body(monkeypatch):
+  # CanfdBlinkerMenuTest 3/4 (11-20, 02_logs s76) through the real update(): read as 1/2 + blinker_park. Without the GV80
+  # template (every other car) the 0x16A is the 1/2 frame byte for byte; with it the parking-active body rides along
+  from opendbc.car import Bus
+  from opendbc.car.hyundai.values import CAR, HyundaiFlags
+  from opendbc.car.hyundai.tests.test_spas_echo import GV80_SPAS2
+  value = {"CanfdBlinkerMenuTest": 3, "CanfdBlinkerKickMode": 1}
+  monkeypatch.setattr(carcontroller, "Params", lambda: SimpleNamespace(get_int=lambda key: value.get(key, 0),
+                                                                        get_bool=lambda key: False))
+  for name in ("create_steering_messages_camera_scc", "create_steering_messages", "create_lfa_icon_non_camera_scc"):
+    monkeypatch.setattr(hyundaicanfd, name, lambda *a, **kw: [])
+  monkeypatch.setattr(carcontroller.CarController, "create_button_messages", lambda *a, **kw: [])
+  cp = structs.CarParams(carFingerprint=CAR.HYUNDAI_TUCSON_4TH_GEN, flags=int(HyundaiFlags.CANFD | HyundaiFlags.CAMERA_SCC),
+                         wheelbase=2.7, steerRatio=14.0,
+                         safetyConfigs=[structs.CarParams.SafetyConfig(safetyModel=structs.CarParams.SafetyModel.hyundaiCanfd)])
+  sigs = CANPacker('hyundai_canfd_generated').dbc.name_to_msg['SPAS2'].sigs
+  gv80 = {k: get_raw_value(GV80_SPAS2, s) for k, s in sigs.items()}
+
+  def frames(menu, template):
+    value["CanfdBlinkerMenuTest"] = menu
+    controller = carcontroller.CarController({Bus.pt: "hyundai_canfd_generated"}, cp)
+    cs = SimpleNamespace(out=structs.CarState(canValid=True, gearShifter=P), modelV2=None, is_metric=True, adrv_0x161=None,
+                         controls_ready_count=200, lfahda_cluster=None, lfa=None, mdps=None, scc_control=None, spas2=template)
+    cc = structs.CarControl().as_reader()
+    out = [dat for _ in range(100) for addr, dat, _ in controller.update(cc, cs, 0)[1] if addr == 0x16A]
+    return controller, {bytes(d[3:]) for d in out}  # from byte 3: checksum/counter aside
+  for menu, side in ((3, 1), (4, 2)):
+    controller, as_park = frames(menu, None)
+    assert controller.blinker_test == side and controller.blinker_park
+    assert as_park and as_park == frames(side, None)[1]  # no template: 3/4 send exactly what 1/2 send
+    _, body = frames(menu, gv80)
+    assert {d[0:5] for d in body} == {bytes([0x26, 0x41, 0x19, 0x04, 0x01])} and {d[12] for d in body} == {0x13}
+    assert {d[0:5] for d in frames(side, gv80)[1]} == {GV80_SPAS2[3:8]}  # GV80 menu 1/2: no body
+
+
+def test_gv80_parking_body_only_on_the_menu_side():
+  # review 11-20: menu 4 (right + body) while a remote/Kick asks left - left wins the frame (BC 3), so the body must not
+  # ride on it; it comes back on BC 4 once the press is over. And a stock auto-parking template (b4 41, b15 13) never
+  # puts a half body on a menu 1/2 frame - panda refuses those as a whole (safety test)
+  from opendbc.car.hyundai.tests.test_spas_echo import GV80_SPAS2
+  sigs = CANPacker('hyundai_canfd_generated').dbc.name_to_msg['SPAS2'].sigs
+  template = {k: get_raw_value(GV80_SPAS2, s) for k, s in sigs.items()}
+  out = lambda: SimpleNamespace(controls_ready_count=200, spas2=template, out=SimpleNamespace(
+    gearShifter=P, vEgo=0., leftBlinker=False, rightBlinker=False, steeringTorque=0, naviTunnel=False,
+    naviRoundabout=False, leftLaneLine=10, rightLaneLine=10))
+  body = bytes([0x26, 0x41, 0x19, 0x04, 0x01])
+
+  def bc_body(sent):
+    return [(get_raw_value(m[1], sigs['BLINKER_CONTROL']), m[1][3:8] == body) for m in sent if m[0] == 0x16A]
+  cc = make_cc(control=False, test=2, ecu=Ecu(answers=False))
+  cc.blinker_park = True
+  assert set(bc_body(run(cc, carcontroller.APRK_REPLY_FRAMES + 20, out))) == {(4, True)}
+  cc.remote_blinker = 3
+  pressed = bc_body(run(cc, 100, out))
+  assert set(pressed) == {(3, False)}
+  run(cc, carcontroller.REMOTE_FLASHES * carcontroller.MODEL_FLASH_FRAMES, out)
+  assert set(bc_body(run(cc, 20, out))) == {(4, True)}
