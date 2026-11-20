@@ -43,7 +43,7 @@ class Ecu:
 
 
 def make_cc(control=True, test=0, spas=0, ecu=None, mode=1, model=True, spas2_only=0):
-  cc = SimpleNamespace(blinker_control=control, blinker_test=test, blinker_kick_mode=mode, spas2_only=spas2_only, aprk_spas2_only=0, aprk_state=0, aprk_frame=0, aprk_nanos=0, aprk_acked=False,
+  cc = SimpleNamespace(blinker_control=control, blinker_test=test, blinker_kick_mode=mode, spas2_only=spas2_only, aprk_spas2_only=0, spas2_sent=-100, aprk_state=0, aprk_frame=0, aprk_nanos=0, aprk_acked=False,
                          lane_crossing=Crossing(), blinker_side=0, blinker_pulse_end=0, frame=0, yellow_until=[0, 0],
                          blinker_kick_model=model, lane_change_prev="off", model_pulse=False, blinker_pulse_start=0, model_hold={}, model_flashes=0, cgw_kick=False, cgw_trial=0, cgw_last_tx=-carcontroller.CGW_REARM_FRAMES,
                          remote_blinker=0, remote_pulse=False, hazard_test=False, hazard_shot_sent=False, hazard_shot_frame=0,
@@ -308,6 +308,24 @@ def test_spas2_only_3_4_send_spas2_in_bursts(value):
   assert all(n == on_frames for n in [n for k, n in runs if k][1:])  # the first is one short: the session-start frame sends none
   assert all(n == carcontroller.SPAS2_BURST_OFF for k, n in runs[1:-1] if not k)
   assert {v for f in per for v in spas2(cc, f)} == {3}
+
+
+@pytest.mark.parametrize("restart", ["value", "test"])
+def test_spas2_only_burst_restart_keeps_the_gap(restart):
+  # 11-20 car test (s73): switching 3 -> 4 mid-burst restarted after 2 frames, the ESC saw 0.66 s in a row and tripped.
+  # A restart - value change, or the test/kick ending for a frame and coming back - still waits SPAS2_BURST_OFF.
+  cc = make_cc(control=False, test=1, spas2_only=3)
+  per = [step(cc, 1, P, 0) for _ in range(20)]  # 19 frames into the first burst
+  if restart == "value":
+    cc.spas2_only = 4
+  else:
+    cc.blinker_test = 0
+    per.append(step(cc, 1, P, 0))
+    cc.blinker_test = 1
+  per += [step(cc, 1, P, 0) for _ in range(200)]
+  runs = [(k, len(list(g))) for k, g in __import__("itertools").groupby(bool(spas2(cc, f)) for f in per)]
+  assert max(n for k, n in runs if k) <= carcontroller.SPAS2_BURST_ON[4]
+  assert min(n for k, n in runs[1:-1] if not k) >= carcontroller.SPAS2_BURST_OFF
 
 
 def test_spas2_only_2_silences_the_ecu_and_sends_spas2_only():

@@ -77,6 +77,9 @@ APRK_DEFAULT_SESSION = bytes([0x02, 0x10, 0x01, 0, 0, 0, 0, 0])
 # resumed. 3/4 = 1 sent in bursts, SPAS2_BURST_ON[value] frames on and SPAS2_BURST_OFF off, so it never runs 0.5 s (3: 0.35 s,
 # 4: 0.45 s - more on-time, 50 ms under the shortest trip seen; the gap stays above the 30-55 ms the ESC needs); the BCM keeps
 # the side it was asked for over a short gap (s70: one more flash 0.48 s after our last frame).
+# 11-20 car test (s73, P): 3 and 4 each ran ~20 s with no fault and the lamp kept 0.36/0.36 s. The one fault came at the
+# 3 -> 4 switch: the restart left a 2-frame gap, so the ESC saw 0.66 s in a row. A new burst session therefore starts
+# SPAS2_BURST_OFF after the last SPAS2 frame of any session (spas2_sent).
 SPAS2_BURST_ON = {3: int(0.35 / DT_CTRL), 4: int(0.45 / DT_CTRL)}
 SPAS2_BURST_OFF = int(0.1 / DT_CTRL)
 APRK_IDLE, APRK_ASK, APRK_WAIT_QUIET, APRK_ACTIVE, APRK_FAILED = range(5)
@@ -331,6 +334,7 @@ class CarController(CarControllerBase):
     self.blinker_kick_mode = 1  # CanfdBlinkerKickMode: 0 only after an ack, 1 panda piggyback, 2 direct 25 Hz, 3 direct 100 Hz
     self.spas2_only = 0  # CanfdBlinkerSpas2Only: 0 SPAS1+SPAS2, 1 ECU left on + SPAS2 only, 2 ECU silenced + SPAS2 only, 3/4 = 1 in bursts
     self.aprk_spas2_only = 0  # the value the running APRK session started with
+    self.spas2_sent = -SPAS2_BURST_OFF - 1  # last frame any SPAS2 went out; a 3/4 session starts SPAS2_BURST_OFF after it
     # set by card's KickOutput only on the CANFD_BLINKER_KICK harness (carrot-wip's kick_compatible); our Kick does not gate on it
     self.kick_output_ready = False
     self.remote_blinker = 0  # card: 3 left / 4 right from a Bluetooth remote blinker press, taken by kick_pulse
@@ -667,7 +671,9 @@ class CarController(CarControllerBase):
     elif self.aprk_state == APRK_IDLE and spas2_only in (1, 3, 4):
       # no handshake: aprk_buses stays empty, so no tester present and no 10 01 restore; not acked, so a stock frame
       # never ends it (KickMode 2 still thins it to 25 Hz)
-      self.aprk_state, self.aprk_frame, self.aprk_nanos, self.aprk_acked = APRK_ACTIVE, self.frame, now, False
+      # 3/4: a restart (value change, test or kick ending and coming back) still owes the last burst its gap
+      start = max(self.frame, self.spas2_sent + SPAS2_BURST_OFF + 1) if spas2_only in SPAS2_BURST_ON else self.frame
+      self.aprk_state, self.aprk_frame, self.aprk_nanos, self.aprk_acked = APRK_ACTIVE, start, now, False
       self.aprk_spas2_only = spas2_only
     elif self.aprk_state == APRK_IDLE:
       self.aprk_buses, self.aprk_spas2_only = (self.CAN.ECAN, self.CAN.ACAN), spas2_only
@@ -713,7 +719,8 @@ class CarController(CarControllerBase):
       if not self.aprk_acked and self.blinker_kick_mode == 2 and self.frame % 4:
         return ret  # direct 25 Hz: a quarter of the frames, a quarter of the collision chances
       burst = SPAS2_BURST_ON.get(spas2_only)
-      if burst and (self.frame - self.aprk_frame) % (burst + SPAS2_BURST_OFF) >= burst:
+      k = self.frame - self.aprk_frame  # < 0 while a restarted session waits out the gap
+      if burst and (k < 0 or k % (burst + SPAS2_BURST_OFF) >= burst):
         return ret  # burst gap: the Sorento ESC never sees 0.5 s of our SPAS2 in a row
       side = (self.frame // HAZARD_ALT_FRAMES) % 2
       left = (pulse and self.blinker_side == 3) or self.blinker_test == 1 or (alternate and side == 0)
@@ -721,6 +728,7 @@ class CarController(CarControllerBase):
       haz = hazard and (haz_mode == 3 or hyundaicanfd.hazard_request(haz_mode, self.frame))
       ret.extend(hyundaicanfd.create_spas_messages(self.packer, self.CAN, self.frame, left, right, getattr(CS, "spas2", None),
                                                          haz, spas1=not spas2_only, raw=raw))
+      self.spas2_sent = self.frame
       if haz_mode == 3 and haz:
         self.hazard_shot_sent, self.hazard_shot_frame = True, self.frame  # given back next frame unless another test runs
     return ret
