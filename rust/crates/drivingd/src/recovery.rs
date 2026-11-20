@@ -233,6 +233,7 @@ fn write(path: &Path, value: &impl serde::Serialize) -> Result<(), Error> {
 pub fn retryable(detail: &str, runtime: &str) -> bool {
     failure::gpu_transport_failure(detail)
         || failure::gpu_usb_link_failure(detail, runtime)
+        || failure::gpu_unreachable(detail)
         || detail == "precompiled eGPU worker timed out"
 }
 #[must_use]

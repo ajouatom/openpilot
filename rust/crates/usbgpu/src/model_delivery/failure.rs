@@ -3,7 +3,8 @@ mod retry;
 mod terminal;
 pub use retry::retry_rejection;
 pub use terminal::{
-    gpu_bootloader_timeout, gpu_transport_failure, gpu_usb_link_failure, gpu_worker_busy,
+    gpu_bootloader_timeout, gpu_transport_failure, gpu_unreachable, gpu_usb_link_failure,
+    gpu_worker_busy,
 };
 
 use crate::Error;
@@ -106,6 +107,7 @@ pub fn record_with_worker(
         || gpu_bootloader_timeout(detail, phase)
         || gpu_worker_busy(detail)
         || gpu_transport_failure(detail)
+        || gpu_unreachable(detail)
         || gpu_usb_link_failure(
             detail,
             value["runtime"]["sha256"]

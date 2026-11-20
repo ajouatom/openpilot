@@ -36,6 +36,19 @@ pub fn gpu_bootloader_timeout(detail: &str, phase: &str) -> bool {
     decimal(ms) && decimal(actual) && decimal(expected)
 }
 
+/// The GPU stopped answering PCIe requests through the USB bridge: tinygrad
+/// reports Unsupported Request as "target might not be reachable". On the
+/// IONIQ 9 (comma four) VRAM and MMIO reads both failed right after 640 MiB
+/// of weights were written, i.e. the device dropped off, not a model defect.
+/// Retried later instead of quarantining the model.
+#[must_use]
+pub fn gpu_unreachable(detail: &str) -> bool {
+    let line = runtime_terminal(detail);
+    line.starts_with("TLP completion status: Unsupported Request")
+        || line.starts_with("TLP completion status: Completer Abort")
+        || line.starts_with("TLP error after retries")
+}
+
 #[must_use]
 pub fn gpu_worker_busy(detail: &str) -> bool {
     runtime_terminal(detail) == "previous eGPU worker is still exiting"
@@ -85,4 +98,25 @@ pub fn gpu_usb_link_failure(detail: &str, runtime_sha256: &str) -> bool {
     };
     matches!(code, "-1" | "1")
         && (device == "AMD" || device.strip_prefix("AMD:").is_some_and(decimal))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::gpu_unreachable;
+
+    #[test]
+    fn an_unreachable_gpu_is_not_a_model_defect() {
+        // Worker output from the IONIQ 9 (comma four, Light Speed 2), 2026-11-20.
+        let detail = "eGPU worker startup: bind_model\neGPU worker startup: prepare_runtime\n\
+            usbgpu AMD finalization failed: TLP completion status: Unsupported Request: 0x10004b80\n\
+            TLP completion status: Unsupported Request: 0x80298000c\n";
+        assert!(gpu_unreachable(detail));
+        assert!(gpu_unreachable(
+            "TLP error after retries: ret_status=1, address=0x10000000"
+        ));
+        // Only the terminal line counts; a numerical failure stays a model failure.
+        assert!(!gpu_unreachable(
+            "TLP completion status: Unsupported Request: 0x1\nnon-finite model output"
+        ));
+    }
 }
