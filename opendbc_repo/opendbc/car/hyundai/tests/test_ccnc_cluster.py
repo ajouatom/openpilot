@@ -744,4 +744,4 @@ def test_fast_hazard_request_is_switched_on_and_off():
   on = [hyundaicanfd.hazard_request(2, f) for f in frames]
   assert on[0] and not on[hyundaicanfd.HAZARD_FAST_ON] and sum(on) == 2 * hyundaicanfd.HAZARD_FAST_ON
   assert all(hyundaicanfd.hazard_request(1, f) for f in frames) and not any(hyundaicanfd.hazard_request(0, f) for f in frames)
-  assert not any(hyundaicanfd.hazard_request(m, f) for m in (3, 4, 10, 17) for f in frames)  # SPAS2-only: no 0x1ea bit 104
+  assert not any(hyundaicanfd.hazard_request(m, f) for m in (3, 4, 5, 10, 17) for f in frames)  # SPAS2-only: no 0x1ea bit 104

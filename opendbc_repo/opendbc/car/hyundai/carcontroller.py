@@ -82,6 +82,10 @@ APRK_QUIET_NANOS = 100_000_000
 # on; held: one short flash); 0 then 3 sends it again. 4 asks left (3) and right (4) in turn, 0.4 s each: the BCM runs its
 # own clean 0.4 s timer for 3/4 even with the stock 0 frames in between (s66 seg1 113 s).
 HAZARD_ALT_FRAMES = int(0.4 / DT_CTRL)
+# CanfdHazardTest 5 (11-20, s71): the stock parking ECU's own hazards during Tucson remote parking are not value 1 held but
+# BLINKER_CONTROL 2 (0.34 s) and 1 (0.32 s) in turn at 50 Hz, starting with 2, while 0x413 shows both lamps on throughout.
+# 5 copies that rhythm on the same SPAS2 path (raw values, panda allows all 8).
+HAZARD_STOCK_FRAMES = int(0.33 / DT_CTRL)
 # CanfdHazardTest 10-17 (user 11-19): BLINKER_CONTROL 0-7 held as is, same path. 2 is "hazards button backlight" in the
 # DBC, 5-7 have no name; none of them was tried on a car before (panda allows all 8 values since then).
 HAZARD_RAW_FIRST = 10
@@ -635,6 +639,8 @@ class CarController(CarControllerBase):
     hazard = haz_mode in (1, 2) or (haz_mode == 3 and not self.hazard_shot_sent)
     alternate = haz_mode == 4  # left/right in turn, HAZARD_ALT_FRAMES each
     raw = haz_mode - HAZARD_RAW_FIRST if HAZARD_RAW_FIRST <= haz_mode <= HAZARD_RAW_FIRST + 7 else None
+    if haz_mode == 5:  # stock remote-parking rhythm: 2 then 1, HAZARD_STOCK_FRAMES each
+      raw = 2 if (self.frame // HAZARD_STOCK_FRAMES) % 2 == 0 else 1
     want = self.blinker_test in (1, 2) or kick or remote or spas or hazard or alternate or raw is not None
     spas2_only = 0 if spas else self.spas2_only  # SpasSteerTest: its request is SPAS1 itself
     now, stock, ack = getattr(CS, "can_nanos", 0), getattr(CS, "aprk_stock_nanos", 0), getattr(CS, "aprk_ack_nanos", 0)

@@ -1070,7 +1070,7 @@ HAZARD_FAST_ON = 20
 
 
 def hazard_request(mode, frame):
-  """CanfdHazardTest 1: hazards held on. 2: the same request switched on/off for a fast flash. 0: off. 3/4/10-17 are SPAS2-only
+  """CanfdHazardTest 1: hazards held on. 2: the same request switched on/off for a fast flash. 0: off. 3/4/5/10-17 are SPAS2-only
   tests (carcontroller.aprk_blinkers) and ask nothing on 0x1ea."""
   return mode == 1 or (mode == 2 and frame % HAZARD_FAST_PERIOD < HAZARD_FAST_ON)
 
