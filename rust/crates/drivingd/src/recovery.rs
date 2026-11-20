@@ -177,7 +177,7 @@ impl Recovery {
             // Persist consumption before any preparer thread or child can start.
             self.save()?;
             let preparation = self.preparation.clone();
-            let prepare = move |cancel| preparation.prepare(cancel);
+            let prepare = move |cancel| preparation.prepare(cancel, startup);
             self.task = Some(if startup {
                 Task::start_held(Arc::clone(&self.health), prepare)
             } else {

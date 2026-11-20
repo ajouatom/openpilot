@@ -64,11 +64,15 @@ impl Preparation {
             asset_manifest_sha256: binding.manifest_sha256().into(),
         })
     }
-    pub fn prepare(self, cancelled: Arc<AtomicBool>) -> Result<UsbModel, String> {
-        self.prepare_inner(cancelled)
+    /// `startup`: the drive's first eGPU load. carrot loads it at modeld start
+    /// with no memory floor; the floor below is carrot's rule for background
+    /// recovery only (egpu_recovery.py). Applying it at startup refused Light
+    /// Speed 2 on the IONIQ 9 (comma four) on every drive.
+    pub fn prepare(self, cancelled: Arc<AtomicBool>, startup: bool) -> Result<UsbModel, String> {
+        self.prepare_inner(cancelled, startup)
             .map_err(|error| error.to_string())
     }
-    fn prepare_inner(self, cancelled: Arc<AtomicBool>) -> Result<UsbModel, Error> {
+    fn prepare_inner(self, cancelled: Arc<AtomicBool>, startup: bool) -> Result<UsbModel, Error> {
         let identity: serde_json::Value = serde_json::from_slice(&fs::read(&self.identity_file)?)
             .map_err(openpilot_usbgpu::Error::from)?;
         if identity != self.identity
@@ -83,7 +87,7 @@ impl Preparation {
         }
         let available = mem_available(&fs::read_to_string("/proc/meminfo")?)
             .ok_or(Error::Contract("recovery MemAvailable missing"))?;
-        if available < memory_floor(self.model.metadata()?.len()) {
+        if !startup && available < memory_floor(self.model.metadata()?.len()) {
             return Err(Error::Contract(
                 "insufficient memory for background eGPU recovery",
             ));
