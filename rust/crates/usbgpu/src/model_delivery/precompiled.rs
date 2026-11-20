@@ -53,7 +53,12 @@ pub fn catalog_url(model: &Manifest) -> Result<String, Error> {
 pub fn installed(model: &Manifest, cache: &Path, assets: &Path) -> Result<Option<PathBuf>, Error> {
     let root = cache.join("precompiled").join(&model.sha256);
     let Some(catalog) = marker(&root, model)? else {
-        return packaged::installed(model, cache, assets);
+        // A native-package-only install would run the Rust native worker;
+        // wait for carrot's artifacts instead unless that worker is forced.
+        if native_worker_forced() {
+            return packaged::installed(model, cache, assets);
+        }
+        return Ok(None);
     };
     if root.join("rejected").exists() {
         return Ok(None);
@@ -101,6 +106,7 @@ pub fn ensure_fallible(
     assets: &Path,
     progress: &mut impl FnMut(u64, u64) -> Result<(), Error>,
 ) -> Result<Option<PathBuf>, Error> {
+    let native = native_worker_forced();
     if let Some(existing) = installed(model, cache, assets)? {
         let root = existing
             .parent()
@@ -113,12 +119,40 @@ pub fn ensure_fallible(
                     return Ok(Some(existing));
                 }
             }
-            None => return packaged::ensure(model, cache, assets),
+            None if native => return packaged::ensure(model, cache, assets),
+            // A native-package install has no carrot runtime: install carrot's
+            // artifacts so its own worker runs the model (client::python_worker).
+            None => {}
         }
     }
-    if packaged::present(assets, model)? {
+    if native && packaged::present(assets, model)? {
         return packaged::ensure(model, cache, assets);
     }
+    ensure_original(
+        catalog_agent,
+        artifact_agent,
+        model,
+        cache,
+        assets,
+        progress,
+    )
+}
+
+/// USBGPU_NATIVE_WORKER=1 keeps the Rust native eGPU runtime and its packages.
+fn native_worker_forced() -> bool {
+    std::env::var_os("USBGPU_NATIVE_WORKER").is_some_and(|value| value == "1")
+}
+
+/// carrot's precompiled.json artifacts: model.pkl, the pinned tinygrad runtime
+/// and installed.json, exactly as carrot-wip installs them.
+fn ensure_original(
+    catalog_agent: &ureq::Agent,
+    artifact_agent: &ureq::Agent,
+    model: &Manifest,
+    cache: &Path,
+    assets: &Path,
+    progress: &mut impl FnMut(u64, u64) -> Result<(), Error>,
+) -> Result<Option<PathBuf>, Error> {
     let url = catalog_url(model)?;
     let catalog = Catalog::fetch(catalog_agent, &model.sha256, url.as_str())?;
     let root = cache.join("precompiled").join(&model.sha256);

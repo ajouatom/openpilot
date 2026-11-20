@@ -78,7 +78,13 @@ impl Client {
             .stdin
             .as_mut()
             .ok_or(Error::Contract("missing worker input"))?
-            .write_all(if prepare_only { b"p" } else { b"r" })?;
+            // carrot's worker knows only 'r': its fused graph advances history
+            // and returns a full policy on catch-up frames too.
+            .write_all(if prepare_only && !self.python {
+                b"p"
+            } else {
+                b"r"
+            })?;
         let stdout = self
             .child
             .stdout
@@ -89,7 +95,9 @@ impl Client {
             Duration::from_secs(if self.first { 20 } else { 1 }),
             &self.cancelled,
         )?;
-        if response == b"0\n" && prepare_only {
+        // '0': no new output this cycle (Rust worker: prepare only; carrot's
+        // worker: it restored recurrent history and holds the last output).
+        if response == b"0\n" && (prepare_only || (self.python && !self.first)) {
             return Ok(false);
         }
         if response != b"1\n" {

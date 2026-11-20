@@ -1,5 +1,6 @@
 """Run a pinned compiled model in its own tinygrad interpreter and shared input buffer."""
 import hashlib
+import faulthandler
 import json
 import mmap
 import os
@@ -9,12 +10,36 @@ import threading
 import time
 import traceback
 
+_gpu_owner = None
 
-def watch_parent(parent):
+
+def claim_gpu_owner():
+  # Keep the lock for the process lifetime, including teardown/native USB waits.
+  # A modeld restart must not open the device while its old worker is exiting.
+  global _gpu_owner
+  if sys.platform == 'linux':
+    import fcntl
+    _gpu_owner = open('/tmp/carrot-precompiled-gpu.lock', 'a')
+    try:
+      fcntl.flock(_gpu_owner, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError as exc:
+      raise RuntimeError('previous eGPU worker is still exiting') from exc
+
+
+def watch_parent(parent, progress):
   # PR_SET_PDEATHSIG follows the creating *thread*. modeld's loading thread exits
   # after startup, so monitor the parent process instead of killing a healthy worker.
+  reported = set()
   while os.getppid() == parent:
-    time.sleep(.2)
+    stage, frame, started = progress.current
+    age = time.monotonic() - started
+    if (frame > 0 and stage in ('input_upload', 'warp', 'model_call', 'output_read') and age > .075
+        and frame not in reported and len(reported) < 3):
+      reported.add(frame)
+      print(json.dumps({'precompiledWorkerStall': {'stage': stage, 'frame': frame, 'age_ms': round(age * 1000)}}),
+            file=sys.stderr, flush=True)
+      faulthandler.dump_traceback(file=sys.stderr, all_threads=True)
+    time.sleep(.05)
   os._exit(1)
 
 
@@ -23,43 +48,58 @@ def main():
   parent = os.getppid()
   if parent == 1:
     return
-  threading.Thread(target=watch_parent, args=(parent,), daemon=True).start()
   control = sys.stdout.buffer
   sys.stdout = sys.stderr  # tinygrad diagnostics must not enter the control protocol
   pkl, shared_path, width, height = Path(sys.argv[1]), Path(sys.argv[2]), int(sys.argv[3]), int(sys.argv[4])
+  background_recovery = sys.argv[5:] == ['--recovery']
+  # This entry point is executed by filename; keep early diagnostics stdlib-only.
+  from egpu_worker_progress import WorkerProgress
+  progress = WorkerProgress(Path(str(shared_path) + '.progress'))
+  threading.Thread(target=watch_parent, args=(parent, progress), daemon=True).start()
   manifest = json.loads((pkl.parent / 'installed.json').read_text())
+  progress.mark('verify_model')
   with pkl.open('rb') as f:
     if hashlib.file_digest(f, 'sha256').hexdigest() != manifest['pickle']['sha256']:
       raise ValueError('precompiled PKL checksum mismatch')
+  claim_gpu_owner()
   runtime = pkl.parent / ('runtime-' + manifest['runtime']['sha256'][:16])
   sys.path.insert(0, str(runtime))
   os.environ.update(DEV='USB+AMD:LLVM', GMMU='0', JIT_BATCH_SIZE='0')
   import numpy as np
+  from openpilot.selfdrive.modeld.output_validation import validate_compiled_output
   generic = manifest['format'] == 'comma-generic-onnx'
+  if background_recovery and not generic:
+    raise ValueError('background recovery requires generic AMD model')
   if generic:
     os.environ.update(FLOAT16='1', TC_OPT='2', TC_MIN_GLOBALS='32')
+    if manifest.get('serialization') == 'persistent-buffer-v1':
+      os.environ['OPENPILOT_HACKS'] = '1'
   if not generic:
     import model_runtime
   from tinygrad import Device, Tensor
-  from openpilot.selfdrive.modeld.helpers import load_oob
+  from openpilot.selfdrive.modeld.egpu_usb_wait import configure_usb_wait
+  configure_usb_wait(manifest)
+  from openpilot.selfdrive.modeld.egpu_usb_wrap import configure_usb_wrap
+  configure_usb_wrap(manifest)
+  from openpilot.selfdrive.modeld.precompiled_artifact import load_artifact
   from openpilot.common.runtime_diagnostics import RuntimeDiagnostics
   from openpilot.common.swaglog import cloudlog
   from openpilot.system.camerad.cameras.nv12_info import get_nv12_info
 
-  with pkl.open('rb') as f:
-    jits = load_oob(f)
-    if f.read(1):
-      raise ValueError('trailing precompiled model data')
+  progress.mark('load_model')
+  jits = load_artifact(pkl, manifest.get('serialization', 'oob-v1'))
   if not generic and ('run_policy' in jits or 'run_model' not in jits):
     raise ValueError('wrong precompiled runtime format')
   if generic:
-    from openpilot.selfdrive.modeld.generic_model_runtime import model_metadata
+    progress.mark('prepare_runtime')
+    from openpilot.selfdrive.modeld.generic_model_runtime import model_metadata, use_compiled_copies
     from openpilot.selfdrive.modeld.local_gpu_warp import LocalWarpRuntime, bind_runtime, create_runtime, vehicle_device_type
     checkpoint, _, _, _ = model_metadata(jits)
     if checkpoint != manifest['model_checkpoint']:
       raise ValueError('precompiled checkpoint mismatch')
-    adapter_args = (jits, width, height, runtime, get_nv12_info(width, height))
-    adapter = create_runtime(adapter_args, vehicle_device_type(), cloudlog.exception)
+    adapter_args = (jits, width, height, runtime, get_nv12_info(width, height), use_compiled_copies(manifest))
+    # Concurrent recovery must not compile or execute on the internal QCOM GPU.
+    adapter = create_runtime(adapter_args, '' if background_recovery else vehicle_device_type(), cloudlog.exception)
     metadata = {'model_checkpoint': adapter.checkpoint, 'input_shapes': adapter.input_shapes, 'output_slices': adapter.output_slices}
     device = adapter.device
   else:
@@ -85,6 +125,7 @@ def main():
   input_bytes = packed.nbytes
   total = input_bytes + count * 4
   with shared_path.open('r+b') as f:
+    progress.mark('bind_buffers')
     f.truncate(total)
     with mmap.mmap(f.fileno(), total) as shared:
       packed_shared = np.ndarray((input_bytes,), np.uint8, buffer=shared)
@@ -92,8 +133,11 @@ def main():
       output = np.ndarray((count,), np.float32, buffer=shared, offset=input_bytes)
       if generic:
         adapter = bind_runtime(adapter, adapter_args, packed_shared, cloudlog.exception)
+        adapter.progress = progress.mark
         cloudlog.event('precompiledWarp', backend='qcom' if isinstance(adapter, LocalWarpRuntime) else 'amd',
                        input_bytes=input_bytes, usb_input_bytes=getattr(adapter, 'upload_bytes', input_bytes))
+        from openpilot.selfdrive.modeld.egpu_output_recovery import OutputRecovery
+        recovery = OutputRecovery(adapter, count, cloudlog.event)
       else:
         queues['packed_npy_inputs'] = Tensor(packed_shared, device='NPY').realize()
       info = {'size': total, 'input_bytes': input_bytes, 'output_count': count, 'layout': layout,
@@ -102,26 +146,43 @@ def main():
               'checkpoint': metadata['model_checkpoint'], 'frame_size': frame_size}
       control.write(json.dumps(info).encode() + b'\n')
       control.flush()
+      progress.mark('idle')
       diagnostics = RuntimeDiagnostics('precompiled_worker', cloudlog.event)
       while command := sys.stdin.buffer.read(1):
         if command == b'q':
           break
+        if command == b'z' and background_recovery:
+          adapter.reset_state()
+          recovery.last_good, recovery.failures = None, 0
+          control.write(b'Z\n')
+          control.flush()
+          continue
         if command != b'r':
           raise ValueError('invalid model worker command')
+        progress.frame += 1
         started, cpu_started = time.monotonic(), time.thread_time()
         if generic:
-          result = adapter.run()
+          result = recovery.run()
           dispatched = time.monotonic()
+          if result is None:
+            # Shared output and original publication timestamps remain untouched.
+            control.write(b'0\n')
+            control.flush()
+            progress.mark('idle')
+            continue
         else:
+          progress.mark('model_call')
           outs, = run_model(**{k: queues[k] for k in model_runtime.MODELD_INPUTS})
           dispatched = time.monotonic()
+          progress.mark('output_read')
           result = outs.numpy().reshape(-1)
-        if result.size != count or not np.isfinite(result).all():
-          raise ValueError('invalid precompiled model output')
+        validate_compiled_output(result, count)
+        progress.mark('publish')
         output[:] = result
         finished, cpu_finished = time.monotonic(), time.thread_time()
         control.write(b'1\n')
         control.flush()
+        progress.mark('idle')
         # Timings include transfers/synchronization; these are not pure GPU
         # kernel durations. Keep the pipe protocol and the compiled graph intact.
         diagnostics.record(context={'gpu_arch': manifest['gpu_arch'], 'format': manifest['format'],

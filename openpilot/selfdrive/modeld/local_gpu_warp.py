@@ -8,6 +8,7 @@ import time
 import numpy as np
 
 from openpilot.selfdrive.modeld.generic_model_runtime import GenericModelRuntime, input_view
+from openpilot.selfdrive.modeld.precompiled_artifact import compile_warp, load_warp, prepare_jit
 
 
 def use_local_warp(device_type: str) -> bool:
@@ -106,18 +107,17 @@ class LocalWarpRuntime(GenericModelRuntime):
   with from_blob would not establish CPU/GPU cache coherence for later writes.
   No inference runs during validation, so recurrent state is not advanced.
   """
-  def __init__(self, jits, width, height, runtime_dir, frame_info):
+  def __init__(self, jits, width, height, runtime_dir, frame_info, compiled_copies=False):
     from tinygrad import Context
-    from examples.openpilot.compile_warp import NV12Frame, compile_warp
+    from examples.openpilot.compile_warp import NV12Frame
 
-    super().__init__(jits, width, height, runtime_dir, frame_info)
+    super().__init__(jits, width, height, runtime_dir, frame_info, compiled_copies)
     self.camera_size, self.frame_info = (width, height), frame_info
     self.amd_warp = self.run_warp
     cache = runtime_dir / f'warp-qcom-preupload-v1-{width}x{height}.pkl'
     with Context(DEV='QCOM'):
       if cache.is_file():
-        with cache.open('rb') as f:
-          warp = pickle.load(f)
+        self.run_warp = load_warp(cache)
       else:
         warp = compile_warp(NV12Frame(width, height, *frame_info[:3], self.frame_size),
                             (512, 256), layout='yuv420', frames=2, benchmark_runs=1)
@@ -125,7 +125,7 @@ class LocalWarpRuntime(GenericModelRuntime):
         with temporary.open('wb') as f:
           pickle.dump(warp, f)
         os.replace(temporary, cache)
-    self.run_warp = warp['run']
+        self.run_warp = prepare_jit(warp['run'])
     self.upload_bytes = self.frames_offset + int(np.prod(self.specs['new_img'][0]))
 
   def bind_shared(self, packed):
@@ -138,11 +138,10 @@ class LocalWarpRuntime(GenericModelRuntime):
     self.frames = input_view(self.local_buffer, (2, self.frame_size), dtypes.uint8, self.frames_offset)
     self.transforms = input_view(self.local_buffer, (2, 3, 3), dtypes.float32)
     self.compact = np.zeros(self.upload_bytes, np.uint8)
-    self.host = Tensor(self.compact, device='NPY')._buffer()
-    self.device_buffer = Tensor(np.zeros_like(self.compact), device=self.device)._buffer()
+    self.bind_transfers(self.compact)
     for name, value in self.views.items():
       if name not in ('img', 'big_img', 'tfm', 'big_tfm'):
-        self.queues[name] = input_view(self.device_buffer, value.shape, dtypes.float32,
+        self.queues[name] = input_view(self.device_buffer, value.shape, getattr(dtypes, str(value.dtype)),
                                        value.ctypes.data - self.packed.ctypes.data)
     self.queues['new_img'] = input_view(self.device_buffer, tuple(self.specs['new_img'][0]), dtypes.uint8, self.frames_offset)
     self.validate_warp()
@@ -190,16 +189,21 @@ class LocalWarpRuntime(GenericModelRuntime):
       self.raw[:] = 0
 
   def run(self):
+    progress = getattr(self, 'progress', lambda stage: None)
     started, cpu_started = time.monotonic(), time.thread_time()
+    progress('local_prepare')
     images = self.prepare_images()
     np.copyto(self.compact[:self.frames_offset], self.raw[:self.frames_offset])
     np.copyto(self.compact[self.frames_offset:], images.reshape(-1))
     prepared, cpu_prepared = time.monotonic(), time.thread_time()
-    self.device_buffer.copy_from(self.host)
+    progress('input_upload')
+    self.copy_inputs()
     uploaded, cpu_uploaded = time.monotonic(), time.thread_time()
+    progress('model_call')
     self.run_model(output_buffers=self.outputs, **self.queues)
     dispatched, cpu_dispatched = time.monotonic(), time.thread_time()
-    result = self.outputs['outputs'].numpy().reshape(-1)
+    progress('output_read')
+    result = self.copy_outputs().numpy().reshape(-1)
     finished, cpu_finished = time.monotonic(), time.thread_time()
     self.last_timings = {
       'local_prepare_ms': (prepared - started) * 1000,

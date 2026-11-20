@@ -1,5 +1,5 @@
 //! A previous boot's recoverable failure permits revalidation, never a receipt.
-use super::{gpu_bootloader_timeout, gpu_transport_failure, gpu_usb_link_failure};
+use super::{gpu_bootloader_timeout, gpu_transport_failure, gpu_unreachable, gpu_usb_link_failure};
 use serde_json::Value;
 use std::{fs, path::Path};
 
@@ -25,7 +25,12 @@ pub fn retry_rejection(root: &Path, digest: &str, current_boot: &str) -> bool {
     {
         return false;
     }
-    if gpu_transport_failure(detail) || gpu_bootloader_timeout(detail, phase) {
+    // An unreachable GPU (TLP Unsupported Request) was recorded as a model
+    // defect before b88eed0c7; lift those quarantines on the next boot too.
+    if gpu_transport_failure(detail)
+        || gpu_bootloader_timeout(detail, phase)
+        || gpu_unreachable(detail)
+    {
         return true;
     }
     let manifest = fs::read(root.join("installed.json"))
