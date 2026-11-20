@@ -114,14 +114,6 @@ for usbgpu, pkl_path, driving_onnx_deps, driving_onnx, cmd_flags in model_builds
         f'--onnx {driving_onnx} '
         f'--output {target_pkl_path} --frame-skip {frame_skip}')
   compiler_deps = tinygrad_files + compile_modeld_script
-  if not usbgpu:
-    # The internal policy uses Cheddar's exact upstream runtime. Legacy DM and
-    # locally compiled external models keep their existing interpreter/ABI.
-    cmd = (f'{cmd_flags} {mac_brew_string} {taskset}python3 {modeld_dir}/cheddar_runtime.py '
-           f'--camera-resolutions {camera_res_args} --onnx {driving_onnx} --output {target_pkl_path}')
-    compiler_deps = [File(f'{modeld_dir}/cheddar_runtime.py'), File(f'{modeld_dir}/precompiled_artifact.py'),
-                     File('#openpilot/system/camerad/cameras/nv12_info.py')]
-    compiler_deps += Glob('runtimes/*.tar.gz')
   onnx_sizes_sum = sum(os.path.getsize(f) for f in driving_onnx_deps)
   chunk_targets = get_chunk_targets(target_pkl_path, estimate_pickle_max_size(onnx_sizes_sum))
   def do_chunk(target, source, env, pkl=target_pkl_path, chunks=chunk_targets):
