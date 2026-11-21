@@ -75,11 +75,7 @@ pub struct DrivingRuntime<'a> {
 
 /// The internal model a bundle runs, for logs and the web status.
 pub fn model_name(bundle: &Bundle) -> &'static str {
-    if is_recurrent(bundle) {
-        "Cheddar"
-    } else {
-        "CD210"
-    }
+    crate::internal_model::identify(bundle).name
 }
 
 fn is_recurrent(bundle: &Bundle) -> bool {
@@ -150,13 +146,9 @@ impl<'a> DrivingRuntime<'a> {
         })
     }
 
-    /// `cd210` or `cheddar`, as InternalDrivingModelStatus reports it.
+    /// The running model's id, as InternalDrivingModelStatus reports it.
     pub fn model_id(&self) -> &'static str {
-        if self.recurrent {
-            "cheddar"
-        } else {
-            "cd210"
-        }
+        crate::internal_model::identify(self.bundle).id
     }
 
     pub fn reset_internal(&mut self) -> Result<(), Error> {

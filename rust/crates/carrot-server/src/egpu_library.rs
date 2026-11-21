@@ -68,12 +68,17 @@ fn write_pick(library: &Library, key: &str, at: f64) -> Result<(), String> {
     openpilot_jetlink::app_pick::write(&jetlink_cache(), &pick).map_err(|e| e.to_string())
 }
 
-/// The comma's own driving model (`InternalDrivingModel`): 0 CD210, 1 Cheddar.
+/// The comma's own driving model (`InternalDrivingModel` = index here).
 /// drivingd reads it when it starts, so a change applies from the next drive.
+/// Keep in the order of drivingd's `internal_model::MODELS`.
 const INTERNAL_KEY: &str = "InternalDrivingModel";
-const INTERNAL_MODELS: [&str; 2] = ["cd210", "cheddar"];
+const INTERNAL_MODELS: [(&str, &str, &str); 3] = [
+    ("cd210", "CD210", "driving-models"),
+    ("cheddar", "Cheddar", "driving-models-cheddar"),
+    ("popv2", "POPv2", "driving-models-popv2"),
+];
 
-fn internal_status() -> serde_json::Value {
+fn internal_status(repository: &Path) -> serde_json::Value {
     let params = openpilot_params::Params::for_runtime().ok();
     let read = |key| {
         params
@@ -81,19 +86,31 @@ fn internal_status() -> serde_json::Value {
             .and_then(|params| params.get(key).ok().flatten())
     };
     let value = read(INTERNAL_KEY).unwrap_or_default();
-    let selected = if value.trim_ascii() == b"1" {
-        "cheddar"
-    } else {
-        "cd210"
-    };
+    let index = std::str::from_utf8(value.trim_ascii())
+        .ok()
+        .and_then(|text| text.parse::<usize>().ok())
+        .filter(|index| *index < INTERNAL_MODELS.len())
+        .unwrap_or(0);
     // What drivingd actually loaded on the last start: {selected, running,
     // error}. Missing until the first drive after the comma starts.
     let last = read("InternalDrivingModelStatus")
         .and_then(|bytes| serde_json::from_slice::<serde_json::Value>(&bytes).ok())
         .unwrap_or(serde_json::Value::Null);
+    let models: Vec<_> = INTERNAL_MODELS
+        .iter()
+        .map(|(id, name, directory)| {
+            // A bundle that failed to unpack cannot run; the web marks it.
+            let available = repository
+                .join("rust/bin")
+                .join(directory)
+                .join("current.json")
+                .is_file();
+            serde_json::json!({"id": id, "name": name, "available": available})
+        })
+        .collect();
     serde_json::json!({
-        "selected": selected,
-        "models": [{"id": "cd210", "name": "CD210"}, {"id": "cheddar", "name": "Cheddar"}],
+        "selected": INTERNAL_MODELS[index].0,
+        "models": models,
         "last": last,
     })
 }
@@ -101,7 +118,7 @@ fn internal_status() -> serde_json::Value {
 fn select_internal(key: &str) -> Result<(), String> {
     let index = INTERNAL_MODELS
         .iter()
-        .position(|model| *model == key)
+        .position(|(id, _, _)| *id == key)
         .ok_or("unknown internal model")?;
     openpilot_params::Params::for_runtime()
         .and_then(|params| params.put(INTERNAL_KEY, index.to_string().as_bytes()))
@@ -113,7 +130,7 @@ pub fn status(repository: &Path) -> serde_json::Value {
     let mut value = Library::for_runtime(repository)
         .status(monotonic())
         .unwrap_or_else(|error| serde_json::json!({"error": error.to_string()}));
-    value["internal_model"] = internal_status();
+    value["internal_model"] = internal_status(repository);
     let cache = jetlink_cache();
     if let Some(pick) = openpilot_jetlink::app_pick::read(&cache) {
         let failed = openpilot_jetlink::app_pick::current(&cache).is_none();
@@ -160,7 +177,7 @@ pub async fn handle(request: Request<RequestBody>, repository: &Path) -> Respons
         if body["action"] == "internal" {
             select_internal(key)?;
             let mut status = library.status(monotonic()).map_err(|e| e.to_string())?;
-            status["internal_model"] = internal_status();
+            status["internal_model"] = internal_status(&repository);
             return Ok(serde_json::json!({"ok": true, "library": status}));
         }
         let available = library.available().map_err(|e| e.to_string())?;
@@ -173,7 +190,7 @@ pub async fn handle(request: Request<RequestBody>, repository: &Path) -> Respons
             eprintln!("model library: App pick not saved: {error}");
         }
         let mut status = library.status(monotonic()).map_err(|e| e.to_string())?;
-        status["internal_model"] = internal_status();
+        status["internal_model"] = internal_status(&repository);
         if app_pick.is_ok() {
             status["app_pick"] = serde_json::json!({"model": key});
         }

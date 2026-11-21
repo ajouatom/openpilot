@@ -166,3 +166,18 @@ test('internal model shows what the last drive ran, including a Cheddar load fai
     last: { selected: 'cd210', running: 'cd210', error: null } } });
   assert.ok(texts(editor).includes('Last drive ran: CD210 · Cheddar applies at the next ignition'));
 });
+
+test('internal model choices include POPv2 and an uninstalled model is not selectable', t => {
+  const old = globalThis.document;
+  t.after(() => { globalThis.document = old; });
+  const { root, editor } = setupDocument();
+  const models = [{ id: 'cd210', name: 'CD210', available: true }, { id: 'cheddar', name: 'Cheddar', available: false },
+    { id: 'popv2', name: 'POPv2', available: true }];
+  renderLibrary({ ...data, reboot_required: false, internal_model: { selected: 'popv2', models,
+    last: { selected: 'popv2', running: 'cd210', error: 'model files: missing' } } });
+  const select = editor.querySelector('select');
+  assert.deepEqual(select.children.map(x => x.value), ['cd210', 'cheddar', 'popv2']);
+  assert.equal(select.children[1].disabled, true);
+  assert.match(select.children[1].textContent, /not installed/);
+  assert.match(root.querySelector('p').textContent, /^Internal model: CD210 · POPv2 failed/);
+});

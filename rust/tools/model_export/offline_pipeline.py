@@ -81,6 +81,36 @@ def capture_stage(name: str, function: Callable[[], tuple[Tensor, ...]]) -> tupl
     return OfflineStage(name, UOp(Ops.LINEAR, src=tuple(call for linear in collector.linears for call in linear.src))), outputs
 
 
+def realize_prediction_heads(runner) -> int:
+    """Compute each prediction head at its own width before the output Concat.
+
+    Fusing head reductions into the final Concat makes every output lane run
+    every head's reduction: Cheddar's r_645_… kernel (70 ms -> 32.7 ms once
+    split), and the vision heads of CD210-style combined models (r_1576_…).
+    Descends through nested Concats (combine_outputs -> vision/policy).
+    """
+    producers = {name: node for node in runner.graph_nodes for name in node.outputs}
+    heads: list[Tensor] = []
+
+    def visit(name: str) -> None:
+        node = producers.get(name)
+        if node is not None and node.op in ("Cast", "Identity"):
+            visit(node.inputs[0])
+        elif node is not None and node.op == "Concat":
+            for source in node.inputs:
+                visit(source)
+        elif name != "outputs" and isinstance(runner.graph_values.get(name), Tensor):
+            heads.append(runner.graph_values[name])
+
+    root = producers.get("outputs")
+    if root is None or root.op not in ("Cast", "Identity", "Concat"):
+        return 0
+    visit("outputs")
+    if heads:
+        Tensor.realize(*heads)
+    return len(heads)
+
+
 def driver_pipeline(loaded: OfflineOnnx, spec: OfflinePipelineSpec, nv12: NV12Frame) -> OfflinePipeline:
     with Context(DEV="CPU:LLVM"):
         metadata = Metadata.from_original(make_metadata_dict(spec.model))
@@ -115,8 +145,14 @@ def driving_pipeline(loaded: OfflineOnnx, spec: OfflinePipelineSpec, nv12: NV12F
     warp = make_warp(nv12, *MEDMODEL_INPUT_SIZE, frame_skip)
     prepare, (warped,) = capture_stage("prepare", lambda: (warp(queues["tfm"], queues["big_tfm"], frame, big_frame),))
     policy = make_run_policy(loaded.runner, raw, frame_skip)
-    policy_stage, (output,) = capture_stage("policy", lambda: policy(warped, queues["img_q"], queues["big_img_q"],
-                                                                    queues["feat_q"], queues["desire_q"], queues["packed_npy_inputs"]))
+
+    def run_policy() -> tuple[Tensor, ...]:
+        outputs = policy(warped, queues["img_q"], queues["big_img_q"],
+                         queues["feat_q"], queues["desire_q"], queues["packed_npy_inputs"])
+        realize_prediction_heads(loaded.runner)
+        return outputs
+
+    policy_stage, (output,) = capture_stage("policy", run_policy)
     bindings = Bindings({"tfm": queues["tfm"], "big_tfm": queues["big_tfm"], "frame": frame, "big_frame": big_frame,
                         **{name: queues[name] for name in ("img_q", "big_img_q", "feat_q", "desire_q", "packed_npy_inputs")}},
                        {"model": output, "warped": warped, **{name: queues[name] for name in ("img_q", "big_img_q", "feat_q", "desire_q")}})
@@ -164,14 +200,7 @@ def recurrent_driving_pipeline(loaded: OfflineOnnx, spec: OfflinePipelineSpec, n
         Tensor.realize(packed, image)
         outputs = loaded.runner({"new_img": image, "desire": packed[0:8], "traffic_convention": packed[8:10].reshape(1, 2),
                                  "action_t": packed[10:12].reshape(1, 2), **states})
-        # Compute each prediction head at its own width. Fusing the reductions
-        # into Cheddar's final Concat evaluates all heads for every output lane.
-        producers = {name: node for node in loaded.runner.graph_nodes for name in node.outputs}
-        prediction = producers["outputs"]
-        if prediction.op == "Cast":
-            prediction = producers[prediction.inputs[0]]
-        if prediction.op == "Concat":
-            Tensor.realize(*(loaded.runner.graph_values[name] for name in prediction.inputs))
+        realize_prediction_heads(loaded.runner)
         model = outputs["outputs"].cast(dtypes.float32).contiguous()
         following = [outputs[f"next_{name}"].contiguous() for name in RECURRENT_STATES]
         Tensor.realize(model, *following)

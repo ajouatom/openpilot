@@ -520,7 +520,7 @@ CCNC 계기판(`CcncClusterDisplay`에 적은 차량):
 
 Carrot Web의 **도구 → Nav Map / 내비 지도**에서 지도를 보고 목적지를 검색·선택하거나 취소합니다. **설정 → 네트워크 → Mapbox**에 Public 키를 먼저 등록하세요. Secret 키는 이 기능에 필요하지 않습니다. 목적지는 재시작 후에도 유지하며, 외부 네비가 연결되어 있으면 외부 TBT와 경로를 우선합니다. 외부 경로가 없을 때 저장된 Mapbox 경로를 섞어 쓰지 않습니다.
 
-지도는 onroad에서 위치와 안내가 유효할 때 생성됩니다. USB 화면은 `ClusterHudScreenMode=7`로 주행 화면 오른쪽에 같은 이미지를 표시합니다. N16 Nav는 eGPU와 Jetson 모두에서 내비 경로 입력을 사용합니다. Flip Flop, Light speed, Light speed 2는 NOO를 지원하지 않으며 내부 모델(CD210 또는 Cheddar, 당근웹에서 선택)과 운전자 감시 모델은 별도로 유지됩니다. Mapbox 검색·경로·타일은 네트워크와 사용 가능한 계정/키가 필요하며, 저장 가능한 검색 결과를 요청하므로 Permanent Geocoding 권한이 필요합니다. [설계·검증 범위](../../nav_model_integration_20261012.md)를 참고하세요.
+지도는 onroad에서 위치와 안내가 유효할 때 생성됩니다. USB 화면은 `ClusterHudScreenMode=7`로 주행 화면 오른쪽에 같은 이미지를 표시합니다. N16 Nav는 eGPU와 Jetson 모두에서 내비 경로 입력을 사용합니다. Flip Flop, Light speed, Light speed 2는 NOO를 지원하지 않으며 내부 모델(CD210, Cheddar 또는 POPv2, 당근웹에서 선택)과 운전자 감시 모델은 별도로 유지됩니다. Mapbox 검색·경로·타일은 네트워크와 사용 가능한 계정/키가 필요하며, 저장 가능한 검색 결과를 요청하므로 Permanent Geocoding 권한이 필요합니다. [설계·검증 범위](../../nav_model_integration_20261012.md)를 참고하세요.
 # 앞차 브레이크등 관찰 (시험)
 
 `dev-md` 후보는 준비 중 호환 호스트에 저장된 Wi-Fi 프로필을 비공개 연결로 전달할 수 있습니다. 암호는 상태 파일이나 로그에 남기지 않습니다. 호스트 준비와 검증된 레거시 모델 전송은 오프로드에서 진행하며 케이블이 분리되면 중단합니다.

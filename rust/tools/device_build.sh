@@ -146,21 +146,22 @@ fi
 # Downloaded eGPU weights share the installed camera kernels and firmware.
 cp -R device-inputs/usbgpu-models/. rust/bin/usbgpu-assets/models/ \
   || fail 'Could not install eGPU model descriptors'
-# The Cheddar internal model ships as its own bundle so adding it did not
-# change the large runtime bundle. Optional: CD210 runs if it is missing.
-cheddar_id=$(bundle_id cheddar)
-cheddar_stamp=rust/bin/.cheddar
-if grep -q ' cheddar\.tar\.zst\.' device-inputs/MANIFEST \
-  && [[ ! -f $cheddar_stamp || $(<"$cheddar_stamp") != "$cheddar_id" ]]; then
-  status 'Preparing Cheddar model'
-  rm -rf rust/bin/driving-models-cheddar
-  if unpack cheddar .; then
-    echo "$cheddar_id" > "$cheddar_stamp"
+# Selectable internal models ship as their own bundles so adding one does not
+# change the large runtime bundle. Optional: CD210 runs if one is missing.
+for internal in cheddar popv2; do
+  grep -q " $internal\.tar\.zst\." device-inputs/MANIFEST || continue
+  internal_id=$(bundle_id "$internal")
+  internal_stamp=rust/bin/.$internal
+  [[ -f $internal_stamp && $(<"$internal_stamp") == "$internal_id" ]] && continue
+  status "Preparing internal model $internal"
+  rm -rf "rust/bin/driving-models-$internal"
+  if unpack "$internal" .; then
+    echo "$internal_id" > "$internal_stamp"
   else
-    rm -rf rust/bin/driving-models-cheddar
-    status 'Cheddar model unavailable; CD210 stays the internal model'
+    rm -rf "rust/bin/driving-models-$internal"
+    status "Internal model $internal unavailable; CD210 stays the internal model"
   fi
-fi
+done
 
 export PATH="$sdk/rust/bin:$sdk/capnp/usr/bin:$PATH"
 export CARGO_HOME=$store/cargo-home CARGO_TARGET_DIR=$store/target CARGO_INCREMENTAL=0

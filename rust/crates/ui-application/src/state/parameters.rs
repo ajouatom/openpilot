@@ -80,22 +80,28 @@ pub struct SlowParams {
     pub recovery_badge: Option<Badge>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub jetlink_badge: Option<Badge>,
-    /// Cheddar running (white) or chosen but not loaded (red); none for CD210.
+    /// A non-default internal model running (white) or chosen but not loaded
+    /// (red); none for CD210.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub internal_model_badge: Option<Badge>,
 }
 
-/// The badge for drivingd's InternalDrivingModelStatus.
+/// The badge for drivingd's InternalDrivingModelStatus (ids such as cheddar
+/// or popv2; the badge shows the id in capitals).
 fn internal_model_badge(bytes: Option<&[u8]>) -> Option<Badge> {
     let status: serde_json::Value = serde_json::from_slice(bytes?).ok()?;
-    let badge = |text: &str, style: &str| Badge {
-        text: text.into(),
+    let badge = |text: String, style: &str| Badge {
+        text,
         style: style.into(),
     };
-    match (status["selected"].as_str(), status["running"].as_str()) {
-        (_, Some("cheddar")) => Some(badge("CHEDDAR", "ready")),
-        (Some("cheddar"), _) => Some(badge("CHEDDAR ERROR", "error")),
-        _ => None,
+    let selected = status["selected"].as_str().unwrap_or("cd210");
+    let running = status["running"].as_str().unwrap_or("cd210");
+    if running != selected && selected != "cd210" {
+        Some(badge(format!("{} ERROR", selected.to_uppercase()), "error"))
+    } else if running != "cd210" {
+        Some(badge(running.to_uppercase(), "ready"))
+    } else {
+        None
     }
 }
 
@@ -153,6 +159,14 @@ mod internal_model_badge_tests {
         assert_eq!(
             badge(r#"{"selected":"cd210","running":"cd210","error":null}"#),
             None
+        );
+        assert_eq!(
+            badge(r#"{"selected":"popv2","running":"popv2","error":null}"#),
+            Some(("POPV2".into(), "ready".into()))
+        );
+        assert_eq!(
+            badge(r#"{"selected":"popv2","running":"cd210","error":"model files: x"}"#),
+            Some(("POPV2 ERROR".into(), "error".into()))
         );
         assert_eq!(internal_model_badge(None).map(|badge| badge.text), None);
     }

@@ -60,45 +60,49 @@ pub fn run(
         .client
         .layout()
         .ok_or(Error::Contract("connected camera has no layout"))?;
-    // InternalDrivingModel 1: Cheddar, shipped next to CD210's catalog. Any
-    // failure to load it keeps driving on CD210, and the screen badge and
-    // Carrot Web show it through InternalDrivingModelStatus.
-    let wants_cheddar = parameters::integer(&params, "InternalDrivingModel").unwrap_or(0) == 1;
-    let mut cheddar_error = None;
-    let cheddar = if wants_cheddar {
-        let path = options.catalog.with_file_name("driving-models-cheddar");
-        Catalog::load(&path)
-            .map_err(|error| cheddar_error = Some(format!("model files: {error}")))
-            .ok()
-    } else {
-        None
-    };
-    let mut runtime = match cheddar
+    // InternalDrivingModel selects a model from internal_model::MODELS; each
+    // non-CD210 model is a catalog next to CD210's. Any failure to load it
+    // keeps driving on CD210, and the screen badge and Carrot Web show it
+    // through InternalDrivingModelStatus.
+    let wanted = openpilot_driving_modeld::internal_model::selected(
+        parameters::integer(&params, "InternalDrivingModel").unwrap_or(0),
+    );
+    let mut selection_error = None;
+    let alternative =
+        if wanted.directory == openpilot_driving_modeld::internal_model::CD210.directory {
+            None
+        } else {
+            let path = options.catalog.with_file_name(wanted.directory);
+            Catalog::load(&path)
+                .map_err(|error| selection_error = Some(format!("model files: {error}")))
+                .ok()
+        };
+    let mut runtime = match alternative
         .as_ref()
-        .map(|cheddar| process::model(cheddar, &layout, logger))
+        .map(|alternative| process::model(alternative, &layout, logger))
     {
         Some(Ok(runtime)) => runtime,
         Some(Err(error)) => {
-            cheddar_error = Some(format!("load: {error}"));
+            selection_error = Some(format!("load: {error}"));
             process::model(&catalog, &layout, logger)?
         }
         None => process::model(&catalog, &layout, logger)?,
     };
-    if let Some(error) = &cheddar_error {
+    if let Some(error) = &selection_error {
         logger.emit(
             log_site!(),
             Record::text(
                 Level::Error,
-                format!("Cheddar unavailable, using CD210: {error}"),
+                format!("{} unavailable, using CD210: {error}", wanted.name),
             ),
         )?;
     }
     params.put(
         "InternalDrivingModelStatus",
         serde_json::json!({
-            "selected": if wants_cheddar { "cheddar" } else { "cd210" },
+            "selected": wanted.id,
             "running": runtime.model_id(),
-            "error": cheddar_error,
+            "error": selection_error,
         })
         .to_string()
         .as_bytes(),

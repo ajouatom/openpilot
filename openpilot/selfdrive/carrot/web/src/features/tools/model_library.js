@@ -4,7 +4,8 @@ const EN = {
   internal_help: "The comma's own driving model, used when no eGPU or Jetlink host runs the model. Applies from the next ignition.",
   internal_saved: "Saved. The internal model changes at the next ignition.",
   internal_running: "Last drive ran", internal_pending: "applies at the next ignition",
-  internal_failed: "could not be loaded; the drive ran on CD210", internal_failed_short: "Cheddar failed",
+  internal_failed: "could not be loaded; the drive ran on CD210", internal_failed_short: "failed",
+  internal_unavailable: "not installed",
   help: "One choice for eGPU and Jetlink hosts. eGPU applies it after the next reboot. A Jetlink App (phone, tablet, Mac) or Jetson switches to it while parked, at its next connection; if the host lacks the model, the comma downloads it and sends it over the cable. A model chosen later in the App wins over this one.",
   change: "Change model", close: "Close", pending_apply: "Apply after restart",
   current: "eGPU this boot", next: "Model", saved: "Saved. eGPU: reboot to apply. Jetlink host: switches while parked.",
@@ -55,7 +56,7 @@ function internalLastLine(internal) {
   const last = internal?.last;
   if (!last?.running) return "";
   const running = `${t("internal_running")}: ${internalModelName(internal, last.running)}`;
-  if (last.error) return `${running} · Cheddar ${t("internal_failed")} (${last.error})`;
+  if (last.error) return `${running} · ${internalModelName(internal, last.selected)} ${t("internal_failed")} (${last.error})`;
   if (last.selected !== internal.selected) return `${running} · ${internalModelName(internal, internal.selected)} ${t("internal_pending")}`;
   return running;
 }
@@ -92,7 +93,7 @@ export function renderLibrary(library, force = false, host = null) {
   const internalName = internalModelName(internal, internal?.selected);
   const failed = internal?.last?.error && internal.last.selected === internal.selected;
   const state = card && !card.hidden ? document.getElementById("egpuModelState").textContent
-    : `${t("internal")}: ${failed ? `CD210 · ${t("internal_failed_short")}` : internalName}`;
+    : `${t("internal")}: ${failed ? `CD210 · ${internalName} ${t("internal_failed_short")}` : internalName}`;
   const amount = card && !card.hidden ? document.getElementById("egpuModelAmount").textContent : "";
   root.querySelector("p").textContent = library.reboot_required
     ? `${t("pending_apply")} · ${t("current")} ${effectiveName} · ${state}`
@@ -112,7 +113,9 @@ export function renderLibrary(library, force = false, host = null) {
     const internalSelect = document.createElement("select");
     internalSelect.setAttribute("aria-label", t("internal"));
     for (const model of internal.models) {
-      const option = text("option", model.name);
+      // A bundle that is not on the device cannot run; keep it visible but not selectable.
+      const option = text("option", model.available === false ? `${model.name} (${t("internal_unavailable")})` : model.name);
+      if (model.available === false && model.id !== internal.selected) option.disabled = true;
       option.value = model.id;
       internalSelect.append(option);
     }
