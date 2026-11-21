@@ -779,6 +779,7 @@ uint8_t service_id(const std::string &service) {
   if (service == "cameraOdometry") return 19;
   if (service == "livePose") return 20;
   if (service == "carrotNavi") return 21;
+  if (service == "classicRadarTracks") return 22;
   throw std::invalid_argument("unsupported compact state service");
 }
 
@@ -811,7 +812,7 @@ void encode_service(std::string &out, const std::string &service, const DynamicR
   } else if (service == "liveParameters") {
     append_f32(out, value, "angleOffsetDeg");
     append_f32(out, value, "steerRatio");
-  } else if (service == "liveTracks") append_radar_points(out, value);
+  } else if (service == "liveTracks" || service == "classicRadarTracks") append_radar_points(out, value);
   else if (service == "cameraOdometry") encode_camera_odometry(out, value);
   else if (service == "livePose") encode_live_pose(out, value);
   else if (service == "carrotNavi") encode_carrot_navi(out, value);

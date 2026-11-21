@@ -385,6 +385,10 @@ SERVICE_SCHEMAS: dict[str, tuple[int, tuple[tuple[Any, ...], ...]]] = {
   "liveTracks": (18, (
     ("points", ("struct_list", RADAR_POINT_SCHEMA)),
   )),
+  # 0x238 계열 후보는 표시 전용 서비스로 유지하며 liveTracks와 합치지 않는다.
+  "classicRadarTracks": (22, (
+    ("points", ("struct_list", RADAR_POINT_SCHEMA)),
+  )),
   # ── AR 앵커 입력 (ar 채널 임대 시에만 구독) ─────────────────────────
   # 앵커를 프레임 사이에 유지하는 데 쓴다. std 가 나쁘거나 frame gap 이
   # 벌어지면 적분을 멈추고 앵커를 숨겨야 하므로 std 도 함께 보낸다.
@@ -445,6 +449,7 @@ COMPACT_SERVICE_INTERVALS = {
   # A full track list is far larger than a lead struct, and it only feeds the
   # Drive Insights forward view, so it runs at half the radarState cadence.
   "liveTracks": 0.1,
+  "classicRadarTracks": 0.1,
   # AR anchor inputs. Full 20Hz - anchor hold between frames needs every sample.
   # Only subscribed while an "ar" lease is held, so the cost is opt-in.
   "cameraOdometry": 0.05,

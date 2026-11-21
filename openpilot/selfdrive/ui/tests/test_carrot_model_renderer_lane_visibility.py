@@ -140,6 +140,35 @@ def model_renderer_module(monkeypatch):
   return module
 
 
+@pytest.mark.parametrize(('track_id', 'v_lead', 'is_metric', 'expected'), [
+  (42, 10.0, True, '42 36'), (42, 10.0, False, '42 22'), (1003, 0.0, True, '- 0'), (42, float('nan'), True, '42'),
+])
+def test_classic_radar_label_shows_object_id_and_speed(model_renderer_module, monkeypatch, track_id, v_lead, is_metric, expected):
+  module = model_renderer_module
+  renderer = object.__new__(module.ModelRenderer)
+  renderer._get_path_length_idx = lambda *_args: 0
+  renderer._map_to_screen = lambda *_args: (100, 100)
+  lines = SimpleNamespace(x=[0.0], z=[0.0])
+  module.ui_state.is_metric = is_metric
+  point = SimpleNamespace(dRel=7.0, yRel=0.3, trackState=2, trackId=track_id, vLead=v_lead)
+
+  class Messages(dict):
+    valid = {'classicRadarTracks': True, 'modelV2': True, 'radarState': False}
+
+  messages = Messages(classicRadarTracks=SimpleNamespace(points=[point]),
+                      modelV2=SimpleNamespace(laneLines=[None, None, lines]))
+  labels = []
+  markers = []
+  monkeypatch.setattr(module, 'draw_text_ui_style', lambda *args, **kwargs: labels.append(args[0]))
+  monkeypatch.setattr(module.rl, 'draw_circle', lambda *args: markers.append(args))
+
+  renderer._draw_classic_radar_tracks_carrot(messages)
+
+  assert labels == [expected]
+  assert len(markers) == 1
+  assert markers[0][3] == module.rl.Color(53, 224, 193, 230)
+
+
 def test_lane_draw_skips_zero_alpha_projection(model_renderer_module, monkeypatch):
   module = model_renderer_module
   renderer = object.__new__(module.ModelRenderer)

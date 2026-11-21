@@ -368,12 +368,57 @@ def test_model_overlay_draw_order():
   renderer._draw_lane_lines_carrot = lambda _: calls.append("laneLines")
   renderer._draw_blind_spot_carrot = lambda _: calls.append("blindSpot")
   renderer._draw_radar_info_carrot = lambda _: calls.append("radar")
+  renderer._draw_classic_radar_tracks_carrot = lambda _: calls.append("classicRadar")
   renderer._render_diagnostics = SimpleNamespace(start=lambda: None, finish=lambda: None,
                                                  call=lambda name, callback, *args: callback(*args), values={})
 
   renderer._draw_carrot_overlays(object())
 
-  assert calls == ["path", "laneLines", "blindSpot", "radar"]
+  assert calls == ["path", "laneLines", "blindSpot", "radar", "classicRadar"]
+
+
+def test_classic_track_matching_a_lead_keeps_only_a_small_dot(monkeypatch):
+  renderer = object.__new__(model_renderer.ModelRenderer)
+  renderer._carrot_show_radar_info = 0
+  renderer._map_to_screen = lambda d, y, z: (100.0 + y, 500.0 - d)
+  circles, texts = [], []
+  monkeypatch.setattr(model_renderer.rl, "draw_circle", lambda x, y, r, c: circles.append(r))
+  monkeypatch.setattr(model_renderer, "draw_text_ui_style", lambda text, *a, **k: texts.append(text))
+  monkeypatch.setattr(model_renderer.ui_state, "is_metric", True, raising=False)
+  lane = SimpleNamespace(x=[float(i) for i in range(0, 200, 5)], z=[0.0] * 40)
+  lead = SimpleNamespace(status=True, dRel=30.0, yRel=0.2)
+  no_lead = SimpleNamespace(status=False, dRel=0.0, yRel=0.0)
+  point = lambda track_id, d, y: SimpleNamespace(dRel=d, yRel=y, trackId=track_id, trackState=2, vLead=10.0)
+  data = {
+    "modelV2": SimpleNamespace(laneLines=[lane, lane, lane]),
+    "radarState": SimpleNamespace(leadOne=lead, leadTwo=no_lead),
+    "classicRadarTracks": SimpleNamespace(points=[point(7, 31.0, 0.5), point(9, 60.0, 3.5)]),
+  }
+
+  class SM:
+    valid = {"classicRadarTracks": True, "modelV2": True, "radarState": True}
+
+    def __getitem__(self, key):
+      return data[key]
+
+  renderer._draw_classic_radar_tracks_carrot(SM())
+
+  # Object 7 is the displayed lead: small dot, no label. Object 9 keeps its ID and speed.
+  assert circles == [5.0, 9.0]
+  assert texts == ["9 36"]
+
+  # A label that would cover another distance/speed label moves below the dot, or is skipped.
+  lead.status = False
+  data["classicRadarTracks"].points = [point(9, 60.0, 3.5)]
+  x, y = 103.5, 440.0
+  texts.clear()
+  renderer._carrot_label_rects = [(x - 30, y - 24 - 10, 60, 20)]
+  renderer._draw_classic_radar_tracks_carrot(SM())
+  assert texts == ["9 36"] and renderer._carrot_label_rects[-1][1] == y + 24 - 15
+  texts.clear()
+  renderer._carrot_label_rects = [(x - 30, y - 24 - 10, 60, 20), (x - 30, y + 24 - 10, 60, 20)]
+  renderer._draw_classic_radar_tracks_carrot(SM())
+  assert texts == []
 
 
 def test_render_stale_data_skips_overlays(monkeypatch):

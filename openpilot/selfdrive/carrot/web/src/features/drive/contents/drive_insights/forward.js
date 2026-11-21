@@ -85,6 +85,8 @@ function normalizedEntities(snapshot) {
         // A radar entry the normalizer matched to a radarState lead, or any
         // vision lead: these are the targets the planner is actually following.
         selected: kind === "lead" || entry?.selected === true,
+        // Radar object ID when the source reports one (K7 0x238).
+        label: kind === "radar" ? nonEmptyText(entry?.label) : null,
       }));
     }
   };
@@ -123,14 +125,14 @@ function normalizePresentation(entity, presentation) {
     : selected ? "lead" : (entity.kind === "lead" ? "lead" : "neutral");
   const defaultShape = telemetryForwardSourceStyle(entity.source).shape;
   const shape = FORWARD_SHAPES.includes(combined.shape) ? combined.shape : defaultShape;
-  const label = nonEmptyText(combined.label);
+  const label = nonEmptyText(combined.label) ?? entity.label ?? null;
   return Object.freeze({
     shape,
     tone,
     selected,
     visible: combined.visible !== false,
     filled: combined.filled !== false,
-    showLabel: combined.showLabel ?? entity.kind === "lead",
+    showLabel: combined.showLabel ?? (entity.kind === "lead" || Boolean(entity.label)),
     label,
     sourceLabel: nonEmptyText(combined.sourceLabel),
     radiusPx,
@@ -476,6 +478,9 @@ export function createDriveInsightsForwardRenderer(options = {}) {
         label: uiText("replay_sensor_row_speed", "Rel. speed"),
         value: `${entity.relativeSpeedMps >= 0 ? "+" : ""}${entity.relativeSpeedMps.toFixed(1)} m/s`,
       });
+    }
+    if (entity.label) {
+      rows.unshift({ label: uiText("replay_sensor_row_track", "No."), value: `#${entity.label}` });
     }
     const isLead = entity.kind === "lead" || entity.selected;
     surface.showTooltip({

@@ -17,6 +17,10 @@ from openpilot.selfdrive.controls.lib.cutin_predecel import (
   apply_cutin_predecel_accel_limit,
   get_cutin_predecel_accel_limit,
 )
+from openpilot.selfdrive.controls.lib.closing_lead_accel import (
+  apply_closing_lead_accel_limit,
+  get_closing_lead_accel_limit,
+)
 from openpilot.selfdrive.controls.lib.longitudinal_preview import (
   apply_preview_target,
   clip_preview_offset,
@@ -32,6 +36,8 @@ from openpilot.selfdrive.carrot.carrot_man_input import get_carrot_man
 from openpilot.selfdrive.carrot.signal_stop_prepare import PrepareAccel
 from openpilot.selfdrive.controls.lib.cruise_coasting import CruiseCoastingPlan, coasting_percent, no_coasting_lead
 from openpilot.selfdrive.controls.lib.tesla_traffic_stop import STOP_BUFFER, create_tesla_traffic_stop
+from openpilot.selfdrive.carrot.radar import radar_lead_comfort_extras_enabled
+from opendbc.car.hyundai.values import HyundaiExtFlags
 
 
 LON_MPC_STEP = 0.2  # first step is 0.2s
@@ -58,6 +64,9 @@ class LongitudinalPlanner:
     self.fcw = False
     # VW MEB(ID.4/ID.5)에서만 True. 가속 오버라이드 중 출발 FCW 오탐을 끄기 위한 게이트.
     self.is_vw_meb = is_volkswagen_meb(CP)
+    # The K7 0x238 radar follows its radar lead like a vision lead.
+    self.radar_comfort_extras = radar_lead_comfort_extras_enabled(
+      CP.brand, bool(CP.extFlags & HyundaiExtFlags.RADAR_CLASSIC_238.value))
     self.dt = dt
     self.allow_throttle = True
 
@@ -272,10 +281,20 @@ class LongitudinalPlanner:
       cutin_predecel_limit,
     )
 
+    # K7 0x238 radar: no catch-up acceleration toward a slower lead (only removes acceleration).
+    if (not self.radar_comfort_extras and not reset_state and not sm['carState'].gasPressed
+        and not carrot.lane_change_active):
+      accel_limits_turns[1] = apply_closing_lead_accel_limit(
+        accel_limits_turns[1],
+        self.a_desired,
+        get_closing_lead_accel_limit(sm['radarState'].leadOne, v_ego, accel_limits_turns[1]),
+      )
+
     lead_track_frames = self.update_lead_tracks(sm['radarState'])
     # Response strength is a driver preference at every following-distance level.
     lead_accel_response_enabled = (
-      carrot.leadAccelResponse > 0
+      self.radar_comfort_extras
+      and carrot.leadAccelResponse > 0
       and not carrot.lane_change_active
       and not reset_state
       and not sm['carState'].gasPressed
@@ -293,7 +312,8 @@ class LongitudinalPlanner:
       a_change_cost_starting=carrot.aChangeCostStarting,
       lead_accel_response_enabled=lead_accel_response_enabled,
       lead_gap_enabled=(
-        not reset_state and not sm['carState'].gasPressed
+        self.radar_comfort_extras
+        and not reset_state and not sm['carState'].gasPressed
         and not force_slow_decel and not carrot.lane_change_active
       ),
       cutout_relief_enabled=(
@@ -349,7 +369,8 @@ class LongitudinalPlanner:
     leads = (sm['radarState'].leadOne, sm['radarState'].leadTwo)
     lead = leads[lead_index]
     preview_enabled = (
-      self.mpc.mode == 'acc'
+      self.radar_comfort_extras
+      and self.mpc.mode == 'acc'
       and not reset_state
       and not sm['carState'].gasPressed
       and not sm['carState'].brakePressed

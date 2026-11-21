@@ -167,7 +167,7 @@ def draw_standard_renderer(sm, level, *, now, positions=None):
   root = Path(__file__).resolve().parents[4]
   path = root / "openpilot/selfdrive/ui/onroad/model_renderer.py"
   cls = next(node for node in ast.parse(path.read_text(encoding="utf-8")).body if isinstance(node, ast.ClassDef) and node.name == "ModelRenderer")
-  names = ("_draw_radar_info_carrot", "_get_path_length_idx", "_map_to_screen")
+  names = ("_draw_radar_info_carrot", "_get_path_length_idx", "_map_to_screen", "_note_label_rect")
   nodes = [node for node in cls.body if isinstance(node, ast.FunctionDef) and node.name in names]
   output = []
   rl = SimpleNamespace(Color=lambda *args: args, draw_circle=lambda *args: None)
@@ -178,6 +178,7 @@ def draw_standard_renderer(sm, level, *, now, positions=None):
   exec(compile(ast.Module(body=nodes, type_ignores=[]), str(path), "exec"), namespace)
   renderer = type("RendererProbe", (), {name: namespace[name] for name in names})()
   renderer._carrot_show_radar_info = level
+  renderer._carrot_label_rects = []
   renderer._carrot_radar_lat_factor = .5
   renderer._car_space_transform = np.array([[640., 800., 0.], [360., 0., -800.], [1., 0., 0.]])
   renderer._clip_region = SimpleNamespace(x=0., y=0., width=1280., height=720.)

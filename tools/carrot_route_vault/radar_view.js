@@ -29,10 +29,14 @@ export function attachRadarReview(video) {
     <div class="radar-toolbar"><label>레이더 소스<select data-sensor><option value="auto">자동</option><option value="front">전방</option><option value="corner">코너 포함</option></select></label>
     <label>표시 거리<select data-range><option>60</option><option selected>130</option><option>200</option></select></label>
     <label>전방 레이더 좌우<select data-radar-flip><option value="recorded">기록된 설정</option><option value="normal">정상</option><option value="flipped">반전</option></select></label>
+    <label>객체 정보<select data-label-mode><option value="off">끄기</option><option value="track" selected>Track ID</option><option value="distance">거리</option><option value="lateral">좌우 위치</option><option value="speed">속도</option><option value="relativeSpeed">상대속도</option></select></label>
+    <label><input type="checkbox" data-show-live checked>일반 트랙</label>
+    <label><input type="checkbox" data-show-classic checked>K7 0x238</label>
+    <label><input type="checkbox" data-hide-scc>SCC 제외</label>
     <button type="button" data-retry>다시 불러오기</button></div>
     <p class="radar-status" role="status" aria-live="polite"></p>
     <canvas class="radar-map" aria-label="레이더와 차선, 선행차를 위에서 본 화면"></canvas>
-    <div class="radar-legend">● <span style="color:#56baff">전방</span> · <span style="color:#cd91ff">코너</span> · <span style="color:#ffb653">비전</span> / <span style="color:#67edc0">실선: 재계산 Lead</span> · <span style="color:#ffda70">점선: 기록된 Lead</span><br>레이더 점을 누르면 해당 트랙의 판정 근거를 볼 수 있습니다.</div>
+    <div class="radar-legend">● <span style="color:#56baff">전방</span> · <span style="color:#cd91ff">코너</span> · <span style="color:#ffb653">비전</span> · ◇ <span style="color:#35e0c1">0x238 상태 2</span> · <span style="color:#7d8792">0x238 미확정 상태</span> / <span style="color:#67edc0">실선: 재계산 Lead</span> · <span style="color:#ffda70">점선: 기록된 Lead</span><br>레이더 점을 누르면 해당 트랙의 판정 근거를 볼 수 있습니다.</div>
     <pre class="radar-detail"></pre>`;
   const videoSection = video.closest('section');
   const review = document.createElement('section');
@@ -59,12 +63,25 @@ export function attachRadarReview(video) {
   const map = find('.radar-map'), graph = find('.radar-graph'), scrub = find('.radar-scrub');
   const status = find('.radar-status'), play = find('[data-toggle-play]');
   let frames = [], times = [], payload = null, index = 0, segment = null;
-  let generation = 0, controller = null, running = false, lastTick = 0, current = 0, selectedTrack = null;
+  let generation = 0, controller = null, running = false, lastTick = 0, current = 0, selectedTrack = null, selectedClassicSlot = null;
   let hitPoints = [], frameHandle = 0;
   let graphTimes = new Map(), graphCacheKey = '';
   const graphBackground = document.createElement('canvas');
   const num = (v, digits=1) => Number.isFinite(v) ? v.toFixed(digits) : '—';
+  const hexBytes = value => typeof value === 'string' ? (value.match(/../g)||[]).join(' ') : '—';
+  const classicAddress = (slot, role) => `0x${(0x238+Number(slot)*3+role).toString(16).toUpperCase()}`;
   const valid = v => typeof v === 'number' && Number.isFinite(v);
+  const checked = selector => find(selector).checked;
+  function objectLabel(point, frame, classic=false) {
+    const mode=find('[data-label-mode]').value;
+    if(mode==='off')return '';
+    if(mode==='track')return classic?`T${point.track_id??point.slot}`:String(point.track_id);
+    if(mode==='distance')return `${num(point.d_rel)} m`;
+    if(mode==='lateral')return `${num(point.y_rel)} m`;
+    if(mode==='speed')return `${num(point.v_lead*3.6)} km/h`;
+    const relative=classic?point.v_lead-frame.v_ego:point.v_rel;
+    return `${num(relative*3.6)} km/h`;
+  }
   const videoAvailable = () => Boolean(video.getAttribute('src')) && Number.isFinite(video.duration) && video.duration > 0;
   const usesVideo = () => videoAvailable() && (!payload || payload.videoAligned);
   const duration = () => frames.length ? times.at(-1) : (videoAvailable() ? video.duration : 0);
@@ -92,7 +109,8 @@ export function attachRadarReview(video) {
     line(frame.path.map(([x,y])=>[x,-y]),'#3b9687',3);
     const [cx,cy]=xy(0,0);ctx.fillStyle='#dae3eb';ctx.fillRect(cx-7,cy-3,14,22);
     function ring(d,y,color,label,dashed=false){if(!valid(d)||!valid(y))return;const [x,z]=xy(d,y);ctx.strokeStyle=color;ctx.lineWidth=2;ctx.setLineDash(dashed?[4,3]:[]);ctx.strokeRect(x-10,z-10,20,20);ctx.setLineDash([]);ctx.fillStyle=color;ctx.fillText(label,x+13,z-6);}
-    for(const p of frame.points||[]){if(p.d_rel < -30||p.d_rel>range||Math.abs(p.y_rel)>15)continue;const [x,y]=xy(p.d_rel,p.y_rel);const chosen=p.track_id===selectedTrack;ctx.beginPath();ctx.arc(x,y,chosen?6:3.5,0,Math.PI*2);ctx.fillStyle=p.source.startsWith('corner')?'#cd91ff':'#56baff';ctx.fill();ctx.fillText(String(p.track_id),x+6,y+12);hitPoints.push({x,y,id:p.track_id});}
+    if(checked('[data-show-classic]'))for(const p of frame.classic_238_objects||[]){if(p.d_rel < -30||p.d_rel>range||Math.abs(p.y_rel)>15)continue;const [x,y]=xy(p.d_rel,p.y_rel),chosen=p.slot===selectedClassicSlot;ctx.beginPath();ctx.moveTo(x,y-(chosen?7:5));ctx.lineTo(x+(chosen?7:5),y);ctx.lineTo(x,y+(chosen?7:5));ctx.lineTo(x-(chosen?7:5),y);ctx.closePath();ctx.strokeStyle=p.confirmed_candidate?'#35e0c1':'#7d8792';ctx.lineWidth=chosen?2.5:1.5;ctx.stroke();ctx.fillStyle=ctx.strokeStyle;const label=objectLabel(p,frame,true);if(label)ctx.fillText(label,x+7,y-7);hitPoints.push({x,y,kind:'classic',slot:p.slot});}
+    if(checked('[data-show-live]'))for(const p of frame.points||[]){if(checked('[data-hide-scc]')&&String(p.source).toLowerCase()==='scc')continue;if(p.d_rel < -30||p.d_rel>range||Math.abs(p.y_rel)>15)continue;const [x,y]=xy(p.d_rel,p.y_rel);const chosen=p.track_id===selectedTrack;ctx.beginPath();ctx.arc(x,y,chosen?6:3.5,0,Math.PI*2);ctx.fillStyle=p.source.startsWith('corner')?'#cd91ff':'#56baff';ctx.fill();const label=objectLabel(p,frame);if(label)ctx.fillText(label,x+6,y+12);hitPoints.push({x,y,id:p.track_id});}
     for(const lead of frame.model_leads||[]){if(lead.probability>=.1)ring(lead.x-payload.radarToCamera,-lead.y,'#ffb653',`V ${num(lead.probability,2)}`);}
     for(const [key,label] of [['recorded_one','R1'],['recorded_two','R2']]){const p=frame[key];if(p?.status)ring(p.d_rel,p.y_rel,'#ffda70',label,true);}
     for(const [key,label] of [['lead_one','L1'],['lead_two','L2']]){const p=frame.selection?.[key];if(p)ring(p.d_rel,p.y_rel,'#67edc0',label);}
@@ -137,9 +155,12 @@ export function attachRadarReview(video) {
     play.textContent=(running||(usesVideo()&&!video.paused))?'일시정지':'재생';
     if(!frame){find('.radar-readout').textContent='';find('.radar-detail').textContent='';return;}
     const lead=p=>p?`#${p.track_id} · ${num(p.d_rel)} m · ${num(p.v_lead*3.6)} km/h`:'없음';
-    find('.radar-readout').textContent=`차속 ${num(frame.v_ego*3.6)} km/h · 조향 ${num(frame.steering_angle_deg)}°\n재계산 L1 ${lead(frame.selection?.lead_one)}\n재계산 L2 ${lead(frame.selection?.lead_two)}\n기록된 L1 ${lead(frame.recorded_one?.status?frame.recorded_one:null)}\nSCC ${num(frame.scc_distance_m)} m · SCC 가속 ${num(frame.scc_a_req_raw,2)} · Carrot 목표 ${num(frame.carrot_a_target,2)} m/s²`;
+    const classic=frame.classic_238_objects||[],confirmed=classic.filter(p=>p.confirmed_candidate).length;
+    const changed=classic.filter(p=>(p.second_unknown_changed_bits||0)+(p.third_unknown_changed_bits||0)>0).length;
+    find('.radar-readout').textContent=`차속 ${num(frame.v_ego*3.6)} km/h · 조향 ${num(frame.steering_angle_deg)}°\n재계산 L1 ${lead(frame.selection?.lead_one)}\n재계산 L2 ${lead(frame.selection?.lead_two)}\n기록된 L1 ${lead(frame.recorded_one?.status?frame.recorded_one:null)}\n0x238 ${classic.length}개 · 상태 2 확인 후보 ${confirmed}개 · 후속 미해석 변화 ${changed}개 · CAN bus ${payload.classic238?.bus??'—'}\nSCC ${num(frame.scc_distance_m)} m · SCC 가속 ${num(frame.scc_a_req_raw,2)} · Carrot 목표 ${num(frame.carrot_a_target,2)} m/s²`;
     const candidates=frame.selection?.cutin_diagnostics||[], chosen=candidates.find(p=>p.track_id===selectedTrack);
-    find('.radar-detail').textContent=chosen?`#${chosen.track_id} ${chosen.stage} · ${chosen.reason}\n${chosen.detail}`:candidates.filter(p=>['CUT-IN','RAW-CUTIN','PREDECEL'].includes(p.stage)).map(p=>`#${p.track_id} ${p.stage}: ${p.reason}`).join('\n');
+    const classicChosen=classic.find(p=>p.slot===selectedClassicSlot);
+    find('.radar-detail').textContent=classicChosen?`T${classicChosen.track_id} · 슬롯 ${classicChosen.slot} · 상태 ${classicChosen.status} ${classicChosen.confirmed_candidate?'· 실측 일치 확인 후보':'· 의미 미확정'}\n거리 ${num(classicChosen.d_rel)} m · 좌우 ${num(classicChosen.y_rel)} m · 절대속도 ${num(classicChosen.v_lead*3.6)} km/h\n순번 ${classicChosen.object_sequence} (Δ ${classicChosen.object_sequence_delta??'—'}) · rolling counter ${classicChosen.rolling_counter} · ${classicChosen.counter_consistent?'triplet 일치':'triplet 불일치'}\n${classicAddress(classicChosen.slot,0)} 운동학  ${hexBytes(classicChosen.first_raw_hex)}\n${classicAddress(classicChosen.slot,1)} 미해석  ${hexBytes(classicChosen.second_raw_hex)}\n  Δ mask ${hexBytes(classicChosen.second_unknown_change_mask)} · ${classicChosen.second_unknown_changed_bits??'—'} bit\n${classicAddress(classicChosen.slot,2)} 미해석  ${hexBytes(classicChosen.third_raw_hex)}\n  Δ mask ${hexBytes(classicChosen.third_unknown_change_mask)} · ${classicChosen.third_unknown_changed_bits??'—'} bit\n※ Δ는 rolling counter와 확인된 순번 byte를 제외한 동일 추적 객체의 직전 표본 대비 변화입니다.`:chosen?`#${chosen.track_id} ${chosen.stage} · ${chosen.reason}\n${chosen.detail}`:candidates.filter(p=>['CUT-IN','RAW-CUTIN','PREDECEL'].includes(p.stage)).map(p=>`#${p.track_id} ${p.stage}: ${p.reason}`).join('\n');
   }
   function seek(t){if(!duration())return;current=Math.max(0,Math.min(t,duration()));index=nearest(current);if(usesVideo())video.currentTime=Math.min(current,video.duration);draw();}
   function tick(now){
@@ -157,12 +178,13 @@ export function attachRadarReview(video) {
   video.addEventListener('play',animate);
   for(const event of ['loadedmetadata','durationchange','timeupdate','seeked','pause','ended','emptied'])video.addEventListener(event,()=>{if(usesVideo()){current=Math.max(0,Math.min(video.currentTime,duration()));index=nearest(current);}draw();});
   scrub.oninput=()=>{const time=Number(scrub.value);pause();seek(time);};
-  map.onclick=e=>{const rect=map.getBoundingClientRect();let distance=18;selectedTrack=null;for(const p of hitPoints){const d=Math.hypot(e.clientX-rect.left-p.x,e.clientY-rect.top-p.y);if(d<distance){distance=d;selectedTrack=p.id;}}draw();};
+  map.onclick=e=>{const rect=map.getBoundingClientRect();let distance=18;selectedTrack=null;selectedClassicSlot=null;for(const p of hitPoints){const d=Math.hypot(e.clientX-rect.left-p.x,e.clientY-rect.top-p.y);if(d<distance){distance=d;if(p.kind==='classic')selectedClassicSlot=p.slot;else selectedTrack=p.id;}}draw();};
   new ResizeObserver(draw).observe(review);
   find('[data-range]').onchange=draw;
+  for(const selector of ['[data-label-mode]','[data-show-live]','[data-show-classic]','[data-hide-scc]'])find(selector).onchange=draw;
   async function load(selected) {
     segment=selected;generation++;const token=generation;controller?.abort();controller=new AbortController();
-    const signal=controller.signal;running=false;frames=[];times=[];payload=null;index=0;current=0;selectedTrack=null;scrub.disabled=true;draw();
+    const signal=controller.signal;running=false;frames=[];times=[];payload=null;index=0;current=0;selectedTrack=null;selectedClassicSlot=null;scrub.disabled=true;draw();
     setStatus('레이더 검증 데이터를 준비하고 있습니다…');
     const query=new URLSearchParams({sensor:find('[data-sensor]').value,radar_track_flip:find('[data-radar-flip]').value});
     const url=`${location.pathname.replace(/\/$/,'')}/radar/${encodeURIComponent(selected.index)}?${query}`;
@@ -173,7 +195,7 @@ export function attachRadarReview(video) {
         if(response.status===202||response.status===503){if(Date.now()>deadline)throw new Error('분석 준비가 지연되고 있습니다. 잠시 후 다시 불러와 주세요.');await new Promise((resolve,reject)=>{const abort=()=>{clearTimeout(timer);reject(new DOMException('Aborted','AbortError'));};const timer=setTimeout(()=>{signal.removeEventListener('abort',abort);resolve();},2000);signal.addEventListener('abort',abort,{once:true});});continue;}
         if(!response.ok)throw new Error(response.status===404?'이 세그먼트에는 분석할 로그가 없습니다.':response.status===422?'레이더 분석에 실패했습니다. 로그 또는 서버 분석 환경을 확인해 주세요.':`레이더 데이터를 불러오지 못했습니다 (${response.status}).`);
         const data=await response.json();if(token!==generation)return;
-        if(data.schemaVersion!==1||!Array.isArray(data.frames)||!data.frames.length)throw new Error('레이더 검증 데이터가 비어 있습니다.');
+        if(data.schemaVersion!==4||!Array.isArray(data.frames)||!data.frames.length)throw new Error('레이더 검증 데이터가 비어 있습니다.');
         data.videoAligned=data.videoAligned&&Boolean(selected.videoUrl);
         payload=data;frames=data.frames;times=frames.map(f=>data.videoAligned?f.video_time_s:f.time_s);
         graphTimes=new Map(frames.map((f,i)=>[f.time_s,times[i]]));graphCacheKey='';

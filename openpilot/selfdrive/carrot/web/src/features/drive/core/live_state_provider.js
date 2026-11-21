@@ -85,6 +85,7 @@ function runtimeCacheMatches(cache, rawHudState, rawOverlayState, liveServices) 
     && refs.rawLiveTorqueParameters === rawOverlayState?.liveTorqueParameters
     && refs.rawLiveParameters === rawOverlayState?.liveParameters
     && refs.rawLiveTracks === rawOverlayState?.liveTracks
+    && refs.rawClassicRadarTracks === rawOverlayState?.classicRadarTracks
     && refs.rawCameraOdometry === rawOverlayState?.cameraOdometry
     && refs.rawLivePose === rawOverlayState?.livePose
     && refs.rawCarrotNavi === rawOverlayState?.carrotNavi
@@ -128,6 +129,7 @@ function captureRuntimeRefs(rawHudState, rawOverlayState, liveServices) {
     rawLiveTorqueParameters: rawOverlayState?.liveTorqueParameters,
     rawLiveParameters: rawOverlayState?.liveParameters,
     rawLiveTracks: rawOverlayState?.liveTracks,
+    rawClassicRadarTracks: rawOverlayState?.classicRadarTracks,
     rawCameraOdometry: rawOverlayState?.cameraOdometry,
     rawLivePose: rawOverlayState?.livePose,
     rawCarrotNavi: rawOverlayState?.carrotNavi,

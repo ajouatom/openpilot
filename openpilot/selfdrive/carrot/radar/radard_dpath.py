@@ -13,7 +13,7 @@ from openpilot.common.runtime_diagnostics import RuntimeDiagnostics
 from openpilot.selfdrive.carrot.radar_motion.native import BACKEND as MOTION_BACKEND
 from openpilot.common.swaglog import cloudlog
 from opendbc.car.hyundai.values import HyundaiExtFlags
-from openpilot.selfdrive.carrot.radar import effective_radar_track_mode
+from openpilot.selfdrive.carrot.radar import classic_238_track_mode, effective_radar_track_mode
 from openpilot.selfdrive.carrot.radar_motion.coordinates import device_yaw_to_radar
 from openpilot.selfdrive.carrot.radar_motion.timing import front_radar_distance_delay_s
 from openpilot.selfdrive.carrot.radar_motion import (
@@ -103,6 +103,7 @@ class DPathRadarD:
 
   def __init__(self, CP: car.CarParams) -> None:
     params = Params()
+    classic_238 = bool(CP.extFlags & HyundaiExtFlags.RADAR_CLASSIC_238.value)
     enable_radar_tracks = effective_radar_track_mode(
       CP.brand,
       CP.radarUnavailable,
@@ -117,7 +118,10 @@ class DPathRadarD:
       cut_in_sensitivity=PRODUCTION_CUT_IN_SENSITIVITY,
       front_radar_measurement_delay_s=front_radar_distance_delay_s(CP),
       production_live_tracks=True,
+      near_vision_priority=classic_238 and enable_radar_tracks == 1,
     )
+    self.classic_238 = classic_238 and enable_radar_tracks == 1
+    self.enable_radar_tracks = enable_radar_tracks
     self.radar_state = log.RadarState.new_message()
     self.radar_state_valid = False
 
@@ -138,6 +142,8 @@ class DPathRadarD:
       if model_time_s > 0.0
       else 1e-9 * max(sm.logMonoTime.values())
     )
+    if self.classic_238:
+      self.controller.enable_radar_tracks = classic_238_track_mode(self.enable_radar_tracks, rr.points)
     output = self.controller.update(
       time_s=time_s,
       v_ego=float(sm["carState"].vEgo),

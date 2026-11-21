@@ -11,6 +11,7 @@ window.CarrotVisionCompact = (() => {
   const OVERLAY_SERVICES = [
     "modelV2", "liveCalibration", "roadCameraState", "lateralPlan",
     "radarState", "carControl", "liveDelay", "liveTorqueParameters", "liveParameters",
+    "classicRadarTracks",
   ];
   // Kept out of OVERLAY_SERVICES so the always-on overlay group does not pay
   // for a full radar track list. Decoded frames still land in the overlay
@@ -191,6 +192,7 @@ window.CarrotVisionCompact = (() => {
     ]]],
     [17, ["liveParameters", [["angleOffsetDeg", "f32"], ["steerRatio", "f32"]]]],
     [18, ["liveTracks", [["points", "structlist", radarPoint]]]],
+    [22, ["classicRadarTracks", [["points", "structlist", radarPoint]]]],
     [19, ["cameraOdometry", [
       ["frameId", "u32"], ["timestampEof", "u64"],
       ["trans", "f32list"], ["rot", "f32list"],
