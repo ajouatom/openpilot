@@ -414,3 +414,66 @@ including assertions about newly introduced state). Native/full CI is recorded
 against the published commit. No vehicle writes, CAN actuation or physical lamp
 validation were performed. Full before/after tables and private snapshots are in
 `.analysis/scratch/2026-11-20-manual-indicator-fix/INDEX.md`.
+
+## November 21: repeated probe delay and a missed consecutive turn
+
+Read-only retrieval added 24 complete rlogs and matching qcamera files from the
+two latest drives, 1206 and 1207. All 48 files match the source SHA-256 manifest.
+The vehicle ran 3d43de5ca6, whose indicator implementation matches the comparison
+baseline 5c970aa516. No device settings, software or actuators were changed.
+
+All 28 observed requests have outgoing SPAS and raw lamp response. Observation
+to first SPAS takes approximately 0.43–0.52 seconds; observation to first raw lamp
+is 0.503–0.651 seconds, mean 0.576. Each request repeats an unanswered APRK
+extended-session probe before the existing 400 ms mode-1 fallback. This is a
+controller wait, not evidence that USB transport lost these requests.
+
+Mode 1 now remembers a failed probe for 60 seconds from that probe, only while
+stock reception and output ownership remain continuous. New ECU replies, stale
+stock, lost ownership, settings changes, expiry or time reversal invalidate it.
+Reusing the result does not extend expiry or create a new diagnostic session.
+Mode 0 still requires acknowledgement. Panda synchronization, exclusive output
+ownership and driver cancellation remain unchanged. An exact before/after
+controller-method simulation using the 28 recorded request windows, continuously
+healthy stock and no ECU acknowledgement saves 400 ms on 16 requests, averaging
+228.6 ms across all 28. These are simulated transmission improvements, not newly
+measured physical lamp timings.
+
+A second counterfactual run uses the actual stock CAN frames/CRC progression,
+recorded driver validity and direction, model/control freshness and lamp state.
+It also transmits all 28 requests and improves the same 16, averaging 229.5 ms
+across 28 with recorded scheduling intervals. It assumes continuous process
+ownership and unchanged historical ECU responses; it is still not live validation.
+
+In 1207/9, opposite driver steering ends a left turn at 58.104. The following
+rightward steering reaches its peak during rearm; the previous detector forgets
+its confirmed growth before emission becomes available. Retain that blocked
+peak for at most 0.3 seconds and five degrees of unwind, requiring current
+same-direction torque and yaw. A new growing movement after admission, released
+or opposite torque, a road-curve classification or invalid input clears this
+memory. The existing two-second rearm and one continuous dark second remain.
+The right request now starts at 1207/10+0.206 and ends at +1.907 on opposite
+driver input. Sampled video supports a right turn; the recovered start is still
+late relative to steering onset.
+
+The complete retained corpus is now 491 full segments, 62 routes and 550,793
+aligned inputs. Immediate-native requests change 434→436, simulated 410 ms
+delayed-native 433→435, and external 435→437. Each adds the same two manual-turn
+requests, with no removed request and exact start/source/end for every matched
+request. The other addition, 118a/10+40.708, lacks retained video; its delayed
+native hold reaches the retained-log boundary. Thus these results do not prove
+zero false indications or physical lamp completion. Earlier broader candidates
+were rejected for suppressing later requests or delaying an existing start by
+748 ms; the final bounded-peak rule removes those regressions.
+
+Remaining misses have distinct causes: active automatic lane-change state in
+1206/5, narrow/low-confidence modeled lane geometry in 1207/1, and stale or
+missing model inputs in 1207/2. Some candidate steering movements are parked-car
+avoidance. No broad freshness, lane-width, automatic-steering isolation or
+turn-angle gate was removed to force those cases to light.
+
+Local isolated checks pass 1,237 with nine platform skips. Two independent
+before/after reproductions confirm the old peak miss and repeated 410 ms wait,
+with the latter reduced to 10 ms for a reusable result. Native/full CI is tied
+to the published commit. Private raw evidence and replay outputs are indexed in
+`.analysis/scratch/2026-11-21-indicator-fixes/INDEX.md`.

@@ -1,5 +1,23 @@
 # Repository memory
 
+- 2026-11-21: Latest I5PE drives1206/1207 add24 full rlogs+qcamera,48 SHA-matched
+  files, read-only retrieval on3d43de5ca6. All28 requests have SPAS and raw lamp
+  response, observation-to-lamp503..651ms/mean576. Each repeats unanswered APRK
+  400ms wait. Mode1 caches failed probe60s without renewal while stock/ownership
+  remain healthy; new ACK, stale stock, lost ownership, settings/clock/expiry
+  invalidate. Mode0 and Panda synchronization/driver guards unchanged. Exact
+  controller simulation with recorded request windows saves400ms on16/28,
+  mean228.6ms; physical improvement unmeasured. Bound confirmed blocked turn peak
+  to0.3s/5deg with current torque/yaw; clear on admitted growth/release/opposite/
+  curve/invalid. Existing2s rearm/1s-dark remain. Entire491segments/62routes/
+  550793inputs: native434->436, delayed410ms433->435, external435->437; twoadded,
+  no removed/changed existing requests. Recover1207/10+0.206 right, stilllate;
+  added118a/10 lacksvideo/delayedholdclipped. Reject broader rearm/growth causing
+  loss or748ms delay. Busy/narrow-model/stale-input misses remain; no zero-false
+  rate claim.1237localpass/9skip, two baseline reproductions pass. No device
+  writes/actuation. Private scratch2026-11-21-indicator-fixes/INDEX.md and updated
+  replay review. CI follows publication.
+
 - 2026-11-20: Owner requests internal CD210 again after disliking Cheddar.
   Restore exact60792584B/f73a9e535523 ONNX, vendored compile_modeld and ordinary
   ModelState together; Carrot Web fixed name is CD210. External eGPU/Jetson
