@@ -57,7 +57,8 @@ def test_controlsd_applies_live_setting_changes_to_vehicle_model(is_vw_meb):
                              CP=SimpleNamespace(steerRatio=15.0),
                              sm=Messages(carState=SimpleNamespace(), liveParameters=live),
                              params=SimpleNamespace(get_float=lambda key: settings[key]),
-                             VM=SimpleNamespace(update_params=lambda stiff, sr: updates.append((stiff, sr))))
+                             VM=SimpleNamespace(update_geometry=lambda _ratio: None,
+                                                update_params=lambda stiff, sr: updates.append((stiff, sr))))
   for custom, rate, learned, expected in [(0, 100, 14.97, 14.97), (159, 30, 14.97, 15.9),
                                          (200, 30, 14.97, 20.0), (0, 30, 14.97, 4.491),
                                          (0, 100, 15.1, 15.1), (0, 0, 15.1, 15.1)]:

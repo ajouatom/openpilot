@@ -20,16 +20,28 @@ from openpilot.selfdrive.carrot.carrot_navi import (
 )
 from openpilot.selfdrive.carrot.carrot_navi_cereal import build_carrot_navi_payload
 
-from cluster_h264_decoder import HardwareH264DecoderError, create_tici_h264_decoder
-from cluster_models import (
-    ClusterUiState,
-    NaviDashboardState,
-    NaviItemStatus,
-    NaviMediaFrame,
-    SimulatorInput,
-)
-from cluster_navi import parse_carrot_navi
-from cluster_simulator import ClusterSimulator
+if __package__:
+    from .cluster_h264_decoder import HardwareH264DecoderError, create_tici_h264_decoder
+    from .cluster_models import (
+        ClusterUiState,
+        NaviDashboardState,
+        NaviItemStatus,
+        NaviMediaFrame,
+        SimulatorInput,
+    )
+    from .cluster_navi import parse_carrot_navi
+    from .cluster_simulator import ClusterSimulator
+else:  # Direct cluster_run.py execution keeps this directory on sys.path.
+    from cluster_h264_decoder import HardwareH264DecoderError, create_tici_h264_decoder
+    from cluster_models import (
+        ClusterUiState,
+        NaviDashboardState,
+        NaviItemStatus,
+        NaviMediaFrame,
+        SimulatorInput,
+    )
+    from cluster_navi import parse_carrot_navi
+    from cluster_simulator import ClusterSimulator
 
 
 DISCOVERY_PORT = 7705
@@ -490,7 +502,7 @@ def _ipc_value(data: Any, name: str, default: Any = None) -> Any:
 class NaviIpcMediaSource:
     """Projects standalone carrot_navi media messages into the cluster dashboard."""
 
-    def __init__(self, messaging_module: Any | None = None) -> None:
+    def __init__(self, messaging_module: Any | None = None, *, decode_media: bool = True) -> None:
         if messaging_module is None:
             import openpilot.cereal.messaging as messaging_module
 
@@ -511,6 +523,15 @@ class NaviIpcMediaSource:
         self._map_frame_at_s = 0.0
         self._received_count = 0
         self._error: str | None = None
+        self._decode_media = bool(decode_media)
+
+    def set_decode_media(self, enabled: bool) -> None:
+        enabled = bool(enabled)
+        if enabled == self._decode_media:
+            return
+        self._decode_media = enabled
+        if not enabled:
+            self._clear_media(keep_configs=True)
 
     def update(self, navi_live: Any | None) -> NaviDashboardState:
         now_s = time.monotonic()
@@ -586,6 +607,7 @@ class NaviIpcMediaSource:
             self._session_id = session_id
 
         kind = str(_ipc_value(data, "kind", "") or "")
+        kind = {"web_image": "image", "web_render": "render"}.get(kind, kind)
         name = str(_ipc_value(data, "name", "") or "")
         if kind not in ("image", "render") or not name:
             return
@@ -599,7 +621,6 @@ class NaviIpcMediaSource:
         self._received_count += 1
 
         message_type = int(_ipc_value(data, "messageType", 0))
-        payload = bytes(_ipc_value(data, "payload", b"") or b"")
         if not present or message_type == 4:
             self._h264_requested_sequences[key] = sequence
             self._h264_worker.discard(key)
@@ -611,14 +632,18 @@ class NaviIpcMediaSource:
         width = max(0, int(_ipc_value(data, "width", 0)))
         height = max(0, int(_ipc_value(data, "height", 0)))
         format_or_reason = int(_ipc_value(data, "formatOrReason", 0))
+        if message_type == 2:
+            payload = bytes(_ipc_value(data, "payload", b"") or b"")
+            self._h264_configs[key] = (sequence, payload)
+            return
+        if not self._decode_media:
+            return
+        payload = bytes(_ipc_value(data, "payload", b"") or b"")
         if message_type == 1:
             self._h264_requested_sequences[key] = sequence
             self._h264_worker.discard(key)
             mime = "image/png" if format_or_reason == 1 else "image/jpeg"
             self._store_media(NaviMediaFrame(key, sequence, True, mime, width, height, payload))
-        elif message_type == 2:
-            self._h264_configs[key] = (sequence, payload)
-            return
         elif message_type == 3:
             config_sequence, config_payload = self._h264_configs.get(key, (-1, b""))
             self._h264_requested_sequences[key] = sequence
@@ -651,14 +676,15 @@ class NaviIpcMediaSource:
             if frame.key == "render:map_main":
                 self._map_frame_at_s = now_s
 
-    def _clear_media(self) -> None:
+    def _clear_media(self, *, keep_configs: bool = False) -> None:
         self._media.clear()
         self._media_snapshot = ()
         self._media_snapshot_dirty = False
         self._media_epoch += 1
         self._h264_requested_sequences.clear()
         self._h264_worker.reset()
-        self._h264_configs.clear()
+        if not keep_configs:
+            self._h264_configs.clear()
         self._map_frame_at_s = 0.0
 
 

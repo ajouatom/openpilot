@@ -93,3 +93,32 @@ git apply --unidiff-zero /absolute/path/to/rav4-radar-display.patch
 
 Only the matching manual regions are edited. Validate both pages and regenerate
 the catalog before publishing, following the authoring guide.
+
+## Porter / Ioniq manual selection
+
+The automatic-switch setting and its staged patch have been removed from both
+fork catalogs. The comma Toggles action now writes the chosen vehicle and only
+CAMERA SCC, radar tracks, HDA2 and steering-ratio values. This UI action has no
+catalog parameter or generated setting page; its current behavior is documented in the Korean and
+English user settings guides. Legacy automatic-switch Wiki pages must disappear
+when regenerating from the matching branch catalog. No live upstream Wiki is changed.
+
+## Ioniq 5 control safety
+
+`ioniq5-control-safety.patch` documents the ported strict torque-steering
+Ioniq 5 HDA2/CAMERA SCC=2 safety profile for `AlwaysLateral` and `AutoEngage`.
+It preserves this branch's Tesla-specific catalog behavior. Apply to fresh
+branch-generated pages with `git apply --check --unidiff-zero` and
+`git apply --unidiff-zero`, regenerate and validate. No upstream Wiki publication.
+
+## Manual vehicle steering-ratio presets
+
+`manual-vehicle-steering-ratio.patch` documents the comma Toggles action's
+`CustomSR` presets for Porter II EV and Ioniq 5 HDA2, preserving the Porter
+feature toggles and other manual tuning. Ignition-on Park choices are queued
+for manager startup after an OS reboot; same-boot manager/card restarts keep
+the active profile. Generate fresh pages from the matching
+fork catalog, apply with `git apply --check --unidiff-zero` and
+`git apply --unidiff-zero`, regenerate with staging as `--wiki-dir` and validate.
+Only Korean, English and Chinese MANUAL regions change. This fork-specific
+patch is staged; no live upstream Wiki publication.

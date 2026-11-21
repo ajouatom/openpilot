@@ -139,10 +139,10 @@ Carrot Web 설정 화면에서는 다음 기능을 사용할 수 있습니다.
 | 주행 제어 > Tesla 전용 > Tesla 기능 | `TeslaAutoTurnSignals`, `TeslaCanTrafficStop`, `TeslaManualLaneSignals`, `TeslaModelDesireSignals`, `TeslaModelPathSignals`, `TeslaAutoSpeedLimit` | 여섯 독립 스위치, 기본 꺼짐, 변경 후 전체 재시작 |
 | 오토크루즈 | `AutoCruiseControl`, `AutoGasTokSpeed`, `AutoGasCancelSpeed`, `AutoGasSyncSpeed`, `CruiseOnDist` | 크루즈 자동 활성화와 가속 페달 입력 시 동작 |
 
-- `AlwaysLateral`: 크루즈가 켜져 있지 않아도 조향 제어를 허용합니다. Tesla 화면의 세 손가락 접촉으로 실험 모드 대신 이 설정을 즉시 전환합니다. 끄더라도 활성 주행 제어의 조향까지 해제하지는 않습니다. 지원 Tesla 차량에서는 전진 기어의 실제 정차 상태에서도 조향할 수 있으며, 최소 조향 속도 이하로 이동할 때의 제한은 유지됩니다. [Tesla 제어 진입](tesla.md#engagement-and-standstill)을 참고하세요.
+- `AlwaysLateral`: 크루즈가 켜져 있지 않아도 조향 제어를 허용합니다. Tesla 화면의 세 손가락 접촉으로 실험 모드 대신 이 설정을 즉시 전환합니다. 끄더라도 활성 주행 제어의 조향까지 해제하지는 않습니다. 지원 Tesla 차량에서는 전진 기어의 실제 정차 상태에서도 조향할 수 있으며, 최소 조향 속도 이하로 이동할 때의 제한은 유지됩니다. [Tesla 제어 진입](tesla.md#engagement-and-standstill)을 참고하세요. 2022~24 아이오닉5 HDA2·CAMERA SCC=2 토크 조향에서는 변경 후 콤마를 재시작해야 하며, Panda가 유효하고 최신인 차량 입력을 계속 확인합니다. 크루즈 해제 상태의 상시 조향 허가는 가감속 시작 권한과 별개입니다.
 - 지속적인 CAN 제어기 오류 또는 반복되는 캐스퍼 전방 안전 시스템 오류가 확인되면 경고와 함께 상시 조향도 해제되며, 오류가 해소되기 전에는 다시 켤 수 없습니다.
 - 상시 조향도 시스템 시작 후 최초 준비 확인 전에는 조향하지 않습니다. 모델·차량 파라미터·자세 정보 등 필수 입력이 한 번 정상으로 확인되면 이 시작 검사는 종료되며, 이후 입력의 일시적 불량이나 조향 해제·재작동으로 다시 차단하지 않습니다. 기존 주행 중 안전 처리는 그대로 유지됩니다. 초기 대기시간 경과만으로 준비를 통과하지 않습니다.
-- `AutoEngage`: `0` 끄기, `1` 조향 ON, `2` 조향 ON과 크루즈 대기입니다.
+- `AutoEngage`: `0` 끄기, `1` 조향 ON, `2` 조향 ON과 크루즈 대기입니다. 2022~24 아이오닉5 HDA2·CAMERA SCC=2 토크 조향의 강화 안전 프로필에서는 이 설정만으로 가감속 권한을 켜지 않으며, 시작과 브레이크·CANCEL·MAIN 조작 후 실제 SET−/RES+ 입력이 필요합니다.
 - `TeslaAutoTurnSignals`: 기본 꺼짐이며 재부팅 후 적용됩니다. 차량 CAN과 실제 스토크가 있는 Model 3/Y에서 회전 desire 시작 시 점등하며 준비나 거리만으로 켜지지 않습니다. 실측 방위·핸들 복귀로 완료하고 확인된 회전만 신선한 횡방향 허용 아래 정차 대기합니다. 차로변경 준비 점등은 유지하며 조향·출발 권한은 늘리지 않습니다. 조건과 폐쇄 시험장 검증은 [Tesla 자동 방향지시등](tesla.md#자동-방향지시등)을 참고하세요.
 - `TeslaCanTrafficStop`: 독립적인 기본 꺼짐 Tesla CAN 빨간불 정지이며 재시작이 필요합니다. 순정 TACC가 아닌 실제 openpilot 종제어와 지원 8바이트 비전 APP 프로필이 필요합니다. 126m 미만에서 확인된 빨간불 제약을 추가하고 초록불은 이 제약만 해제합니다. 신호 고장은 인계·soft-disable을 요청하고 다른 차종은 무시합니다. 프로토콜·페달 개입·폐쇄 시험장 한계는 [Tesla CAN 정지](tesla.md#can-빨간불-정지)를 참고하세요.
 - `TeslaManualLaneSignals`, `TeslaModelDesireSignals`, `TeslaModelPathSignals`: 독립적인 기본 꺼짐 Tesla 램프 관찰 옵션이며 재부팅이 필요합니다. 모두 `TeslaAutoTurnSignals`·`ShareData`와 30km/h 이상에서 신선한 ONNX 연속 점선·인접 차로 형상이 필요합니다. 수동 토크·접근은 크루즈 없이 가능하고 모델 의도·경로 예측은 횡제어 활성이 필요하며 오점등할 수 있습니다. 점선은 색상·진행 방향 증거가 아닙니다. 조향 권한·내비 회전 사전점등·유턴 기능은 추가하지 않습니다. 완료·시각·실차 검증 한계는 [Tesla 안내](tesla.md#선택형-차로변경-램프-관찰)를 참고하세요.
@@ -253,6 +253,8 @@ VW MEB(ID.4 포함)에도 수동 조향비와 학습 비율이 적용됩니다. 
 
 `CruiseGapLevels`(갭 단계 수)는 버튼 순환을 2단계부터 차량 최대 단계까지 줄일 수 있으며 기본값은 차량 최대 단계입니다. 2는 TF1·TF2, 3은 TF1~TF3을 사용합니다. 다음 갭 버튼 조작부터 적용하며 사용하지 않는 TF·추종응답성 값은 보관합니다. openpilot 가감속 제어에 적용합니다.
 
+콤마 주행 화면 왼쪽 아래 GAP 숫자·막대 주변의 넓은 영역도 한 번 터치할 때 한 단계 변경합니다. openpilot 가감속 제어가 있는 경우에만 동작하며, [화면 터치 동작](cruise-gap.md#following-gap)은 같은 단계 순환을 따릅니다.
+
 `TFollowGap1`~`TFollowGap4`는 저장값에 `0.01초`를 곱한 시간 간격입니다. 값을 줄이면 선행차와 가까워집니다. 앞차 가속 추종은 `LeadAccelResponse`로 조절합니다. 1~3은 완만한 반응, 4는 빠른 추종, 5는 최대 추종이며 감속 시작 거리를 별도로 기억해 차간을 늘리지는 않습니다.
 
 `LeadAccelResponse`: 앞차가 출발하거나 속도를 높일 때 따라가는 반응을 조절합니다. 낮을수록 차간을 천천히 좁히고, 높을수록 빠르게 따라갑니다. 0은 가속 반응 강화를 끄고, 5는 가장 적극적으로 따라가는 시험 단계입니다. 자세한 동작은 [추종응답성 설명](cruise-gap.md#lead-response)을 확인하세요. 추가 여유의 유지 조건은 TF 거리(속도×TF＋정지거리)의 1.2배까지 적용하고, 1.2~1.5배에서 점차 해제합니다. 1.5배 이상에서는 앞차 속도와 관계없이 여유를 회수합니다.
@@ -279,7 +281,7 @@ VW MEB(ID.4 포함)에도 수동 조향비와 학습 비율이 적용됩니다. 
 | CANFD·HDA | `CanfdHDA2`, `HyundaiCanfdClusterDirectTx`, `CanfdDebug`, `HDPuse`, `CcncClusterDisplay`, `CcncTrafficBackground` | HDA2 차량, 계기판 직접 송신, 차로변경 깜빡이 자동, CAN FD 디버그·HDP 기능과 CCNC 계기판 표시 옵션 |
 | 레이더 | `EnableRadarTracks`, `RadarTrackFlip`, `EnableCornerRadar`, `CarrotRadarMode`, `CarrotRadarCutInSensitivity` | SCC 레이더, 전방 트랙 좌우 보정, 코너 레이더와 당근레이더 처리·컷인 감도 |
 | 운전자 모니터링 | `DriverMonitoringEnabled`(검색 전용), `DriverMonitoringMode`, `CarrotVisionEnabled`, `MuteDoor`, `MuteSeatbelt` | 운전자 모니터링과 일부 차량 경고음 처리 |
-| 차량 보조 | `MaxAngleFrames`, `SpeedFromPCM` | 최대 조향각 관련 프레임과 순정 SCC 속도 제어 방식 |
+| 차량 보조 | `MaxAngleFrames`, `SpeedFromPCM` | 콤마 토글의 수동 차종 선택, 최대 조향각 관련 프레임과 순정 SCC 속도 제어 방식 |
 | 기기 하드웨어 | `CommaPedalEnabled`, `HardwareC3xLite` | ACC 미장착 차량의 Comma Pedal 허용 설정, C3X Lite 하드웨어 구성 |
 
 > [!CAUTION]
@@ -328,6 +330,25 @@ Bosch MRRevo14F 수신을 지원하는 버전에서 Bosch MRRevo14F 후보 차�
 저장한 값은 **다음 차량 파라미터 초기화**부터 적용되며, 실행 중인 제어 경로는 즉시 바뀌지 않습니다. CarrotPilot에서의 Comma Pedal 실차 정상 작동은 아직 확인되지 않았습니다. 장치 펌웨어·전압 보정은 변경하지 않으며, 작동 단계별 확인 항목은 [Comma Pedal 점검 가이드](../../comma_pedal.md)를 참고하세요.
 
 `HardwareC3xLite`는 일반 C3/C3X에서는 반드시 꺼 두고 C3X Lite에서만 켠 뒤 기기를 재부팅하세요. 이 설정을 켜면 존재하지 않는 앰프를 초기화하지 않아 I2C 재시도로 인한 시작 지연을 없애고, 경고음을 GPIO 부저로 출력합니다. 또한 `micd`, `soundd`, `loggerd`를 실행하지 않고 `RecordAudio`를 끄므로 이 하드웨어 모드에서는 일반 주행 로그 기록을 사용할 수 없습니다.
+
+### 포터·아이오닉5 수동 선택
+
+이 수동 선택 메뉴는 `c3-pht-porter`와 `c3-pht`에 동일하게 적용합니다.
+
+콤마 **설정 → 토글 → 차량 (재시작)**에서 **포터2 EV** 또는 **아이오닉5 HDA2**를 선택합니다. 시동 OFF 또는 유효한 차량 신호로 확인된 P단 정차 상태에서 선택할 수 있으며, 차종과 아래 네 설정만 변경합니다.
+
+| 설정 | 포터2 EV | 아이오닉5 HDA2 |
+|---|---|---|
+| `HyundaiCameraSCC` | `0` | `2` |
+| `EnableRadarTracks` | `0` | `3` |
+| `CanfdHDA2` | `0` | `1` |
+| `CustomSR` (조향비 ×10) | `202` (20.2) | `140` (14.0) |
+
+포터는 `c3-pht-porter`, 아이오닉5는 `c3-pht` 브랜치를 직접 선택하고 주행 전에 재시작하세요. 자동 차종 판별·설정 복원·Git 브랜치 전환은 제거되었습니다. 수동 차종 선택은 능동 VIN·펌웨어 조회를 건너뛰며, CAN 버스 확인과 카메라·모델 시작은 계속 필요합니다.
+
+시동 ON·P단에서 선택하면 재시작할 차종만 예약하고 현재 차종·설정은 유지합니다. 콤마를 재부팅할 때 예약한 차종과 네 설정을 적용합니다. 같은 부팅 중의 프로세스 재시작이나 시동 OFF/ON만으로는 적용하지 않습니다. D/R/N·움직임·차량 신호 이상이나 오래된 신호에서는 선택할 수 없습니다. 시동 OFF에서의 선택은 기존처럼 바로 저장하며 주행 전에 재시작합니다.
+
+조향비는 차량 선택을 적용할 때 변경하며, 이후 직접 조정한 값은 다음 차량 선택 적용 전까지 유지합니다. 조향 강도·GAP·포터 자동 SET·저속 취소·전용 GAP 토글 등 다른 수동 설정은 유지합니다. 포터 전용 기능은 포터 차종에만 적용되므로 아이오닉5에서는 실행되지 않습니다. 공통 조향 설정은 두 차량에 적용될 수 있으므로 차량에 맞게 확인하세요. 자동 재보정은 수행하지 않으므로 다른 차량의 장착 위치로 옮긴 뒤에는 장치 메뉴에서 캘리브레이션을 초기화하세요.
 
 <a id="display"></a>
 ## 화면 표시

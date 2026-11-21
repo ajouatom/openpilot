@@ -1,5 +1,6 @@
 import time
 import pyray as rl
+from openpilot.selfdrive.carrot.cruise_gap import cruise_gap_levels, next_gap_personality, supported_gap_levels
 from dataclasses import dataclass
 from openpilot.common.constants import CV
 from openpilot.selfdrive.carrot.deceleration_source import deceleration_source_presentation
@@ -142,6 +143,24 @@ class SetSpeedOverride:
     )
 
 
+class GapTouchArea(Widget):
+  """Invisible hit target around the existing GAP number and bars."""
+  def __init__(self, callback):
+    super().__init__()
+    self._click_callback = callback
+    self.interacted = False
+
+  def _render(self, rect: rl.Rectangle) -> None:
+    self.interacted = False
+
+  def _handle_mouse_press(self, mouse_pos) -> None:
+    self.interacted = True
+
+  def _handle_mouse_release(self, mouse_pos) -> None:
+    self.interacted = True
+    super()._handle_mouse_release(mouse_pos)
+
+
 class HudRenderer(Widget):
   def __init__(self):
     super().__init__()
@@ -162,6 +181,7 @@ class HudRenderer(Widget):
     self._font_display = gui_app.font(FontWeight.DISPLAY)
 
     self._exp_button = ExpButton(UI_CONFIG.button_size, UI_CONFIG.wheel_icon_size)
+    self._gap_button = GapTouchArea(self._cycle_gap)
 
     self._txt_speed_bg = gui_app.texture('images/speed_bg.png')
 
@@ -294,11 +314,29 @@ class HudRenderer(Widget):
     button_x = rect.x + rect.width - UI_CONFIG.border_size - UI_CONFIG.button_size
     button_y = rect.y + UI_CONFIG.border_size
     self._exp_button.render(rl.Rectangle(button_x, button_y, UI_CONFIG.button_size, UI_CONFIG.button_size))
+    self._gap_button.set_enabled(self.is_cruise_available and ui_state.started and ui_state.has_longitudinal_control)
+    self._gap_button.render(self._gap_touch_rect(rect))
     self._draw_cruise_speed_animation(rect)
     from openpilot.common.indicator_display import draw as draw_indicator
     badge_width = min(500, rect.width * .62)
     draw_indicator(rect.x + (rect.width-badge_width)/2, rect.y+rect.height*.16,
                    badge_width, self._font_display, 26 if rect.width > 1200 else 19)
+
+  @staticmethod
+  def _gap_touch_rect(rect: rl.Rectangle) -> rl.Rectangle:
+    # Match the lower HUD origin, independent of sidebar/camera width.
+    return rl.Rectangle(int(rect.x + 140) + 170, int(rect.y + rect.height - 230) + 25, 200, 190)
+
+  def _cycle_gap(self) -> None:
+    if not (self.is_cruise_available and ui_state.started and ui_state.has_longitudinal_control):
+      return
+    params = ui_state.params
+    maximum = supported_gap_levels(params.get_int("LongitudinalPersonalityMax"))
+    levels = cruise_gap_levels(params.get_int("CruiseGapLevels"), maximum)
+    personality = next_gap_personality(params.get_int("LongitudinalPersonality"), levels)
+    params.put_int("LongitudinalPersonality", personality)
+    self._longitudinal_personality = personality
+    self._overlay.invalidate()
 
   def _paint(self, rect: rl.Rectangle) -> None:
 
@@ -324,7 +362,7 @@ class HudRenderer(Widget):
     self._draw_egpu_badge(rect)
 
   def user_interacting(self) -> bool:
-    return self._exp_button.is_pressed
+    return self._exp_button.is_pressed or self._gap_button.is_pressed or self._gap_button.interacted
 
   def _draw_egpu_badge(self, rect: rl.Rectangle) -> None:
     # Keep runtime state visible while the shared USB hub re-enumerates; a

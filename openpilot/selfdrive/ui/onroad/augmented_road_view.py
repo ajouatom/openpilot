@@ -13,6 +13,7 @@ from openpilot.selfdrive.ui.onroad.model_renderer import ModelRenderer
 from openpilot.selfdrive.ui.render_diagnostics import RenderDiagnostics
 from openpilot.selfdrive.ui.overlay_state import OverlayState
 from openpilot.selfdrive.ui.onroad.cameraview import CameraView
+from openpilot.selfdrive.ui.onroad.carrot_navi_map import CarrotNaviMapView
 from openpilot.system.ui.lib.application import gui_app
 from openpilot.system.ui.lib.text_draw import draw_text_ui_style
 from openpilot.common.transformations.camera import DEVICE_CAMERAS, DeviceCameraConfig, view_frame_from_device_frame
@@ -57,11 +58,13 @@ class AugmentedRoadView(CameraView):
     self._hud_renderer._overlay_state = self._overlay_state
     self.alert_renderer = AlertRenderer()
     self.driver_state_renderer = DriverPreview()
+    self._carrot_navi_map = CarrotNaviMapView()
 
     # debug
     self._pm = messaging.PubMaster(['uiDebug'])
     # uiDebug.plotMode용 ShowPlotMode 캐시 — 파일 읽기라 매 프레임 금지, ~2초 스로틀
     self._plot_mode = 0
+    self._show_carrot_navi_map = False
     self._plot_mode_next_t = 0.0
     self._border_params = TimedSnapshotCache(
       BorderParamSnapshot(),
@@ -76,6 +79,10 @@ class AugmentedRoadView(CameraView):
       self._plot_mode = min(max(ui_state.params.get_int("ShowPlotMode"), 0), 255)
     except Exception:
       self._plot_mode = 0
+    try:
+      self._show_carrot_navi_map = ui_state.params.get_bool("CarrotNaviOnroad")
+    except Exception:
+      self._show_carrot_navi_map = False
 
   def set_cluster_hud_connected(self, connected: bool, show_camera: bool = False) -> None:
     self._suppress_camera_for_cluster = connected and not show_camera
@@ -117,7 +124,12 @@ class AugmentedRoadView(CameraView):
     )
 
     _t = time.monotonic()
-    if self._suppress_camera_for_cluster:
+    showing_carrot_navi = timing.call(
+      'carrot_navi_map', self._carrot_navi_map.render, self._content_rect, self._show_carrot_navi_map,
+    )
+    if showing_carrot_navi:
+      pass
+    elif self._suppress_camera_for_cluster:
       rl.draw_rectangle_rec(self._content_rect, rl.BLACK)
     else:
       # Render the base camera view
@@ -127,10 +139,11 @@ class AugmentedRoadView(CameraView):
     self._overlay_state.update(ui_state, self.client, self.stream_type, self._suppress_camera_for_cluster)
 
     if not self._suppress_camera_for_cluster:
-      # Draw the model overlay only with the camera view
-      _t = time.monotonic()
-      timing.call('model', self.model_renderer.render, self._content_rect)
-      model_ms = (time.monotonic() - _t) * 1000.0
+      if not showing_carrot_navi:
+        # Draw the model overlay only with the camera view
+        _t = time.monotonic()
+        timing.call('model', self.model_renderer.render, self._content_rect)
+        model_ms = (time.monotonic() - _t) * 1000.0
     _t = time.monotonic()
     timing.call('hud', self._hud_renderer.render, self._content_rect)  # includes plot when enabled
     hud_ms = (time.monotonic() - _t) * 1000.0
@@ -173,6 +186,7 @@ class AugmentedRoadView(CameraView):
       self._click_callback()
 
   def close(self):
+    self._carrot_navi_map.close()
     self.model_renderer._overlay.close()
     self._hud_renderer._overlay.close()
     if preview := getattr(self, 'driver_state_renderer', None):

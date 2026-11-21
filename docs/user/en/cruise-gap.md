@@ -185,6 +185,8 @@ On vehicles with adjustable gains, tune delay first only if acceleration and bra
 <a id="following-gap"></a>
 ## 5. Following gap
 
+Tap the broad area around the GAP number and bars at the lower left of the comma driving screen to change one level on release. Holding does not repeat the change. This works only with openpilot longitudinal control and follows the vehicle maximum and `CruiseGapLevels` cycle. Pressing the GAP area does not toggle the sidebar.
+
 ### Gap cycle levels
 
 `CruiseGapLevels` sets how many levels the gap button cycles through. The minimum is 2; the maximum and default are the vehicle-supported count. Four-level vehicles offer 2–4, and three-level vehicles offer 2–3.

@@ -1,5 +1,9 @@
+import time
+
 from openpilot.cereal import log
 from openpilot.common.params import Params, UnknownKeyName
+from openpilot.common.vehicle_selection import selected_vehicle_index, select_manual_vehicle, vehicle_selection_parked
+from openpilot.common.swaglog import cloudlog
 from openpilot.system.ui.widgets import Widget
 from openpilot.system.ui.widgets.list_view import multiple_button_item, toggle_item
 from openpilot.system.ui.widgets.scroller_tici import Scroller
@@ -13,6 +17,13 @@ PERSONALITY_TO_INT = log.LongitudinalPersonality.schema.enumerants
 
 # Description constants
 DESCRIPTIONS = {
+  "ManualVehicle": tr_noop(
+    "Porter II EV: CAMERA SCC 0, radar tracks 0, HDA2 0, steering ratio 20.2. " +
+    "Ioniq 5 HDA2: 2, 3, 1, steering ratio 14.0. " +
+    "Other manual settings, including Porter toggles, stay unchanged. " +
+    "Select with ignition off or while stopped in Park. Ignition-on selections apply after restart. " +
+    "Choose the matching branch manually and restart before driving."
+  ),
   "OpenpilotEnabledToggle": tr_noop(
     "Use the openpilot system for adaptive cruise control and lane keep driver assistance. " +
     "Your attention is required at all times to use this feature."
@@ -90,6 +101,12 @@ class TogglesLayout(Widget):
         "metric.png",
         False,
       ),
+      "CarrotNaviOnroad": (
+        lambda: "CarrotNavi Map",
+        "Show the phone map on the driving screen. Speed, driver monitoring, and safety alerts remain visible.",
+        "carrot_web.png",
+        False,
+      ),
     }
 
     self._long_personality_setting = multiple_button_item(
@@ -102,7 +119,14 @@ class TogglesLayout(Widget):
       icon="speed_limit.png"
     )
 
-    self._toggles = {}
+    self._vehicle_selection = multiple_button_item(
+      lambda: tr("Vehicle (restart)"),
+      lambda: tr(DESCRIPTIONS["ManualVehicle"]),
+      buttons=[lambda: tr("Porter II EV"), lambda: tr("Ioniq 5 HDA2")],
+      selected_index=selected_vehicle_index(self._params), button_width=300,
+      callback=self._set_manual_vehicle, icon="chffr_wheel.png",
+    )
+    self._toggles = {"ManualVehicle": self._vehicle_selection}
     self._locked_toggles = set()
     for param, (title, desc, icon, needs_restart) in self._toggle_defs.items():
       toggle = toggle_item(
@@ -141,6 +165,8 @@ class TogglesLayout(Widget):
     ui_state.add_engaged_transition_callback(self._update_toggles)
 
   def _update_state(self):
+    if ui_state.sm.updated["deviceState"] or ui_state.sm.updated["carState"]:
+      self._refresh_vehicle_selection()
     if ui_state.sm.updated["selfdriveState"]:
       personality = PERSONALITY_TO_INT[ui_state.sm["selfdriveState"].personality]
       if personality != ui_state.personality and ui_state.started:
@@ -154,6 +180,7 @@ class TogglesLayout(Widget):
 
   def _update_toggles(self):
     ui_state.update_params()
+    self._refresh_vehicle_selection()
 
     e2e_description = tr(
       "openpilot defaults to driving in chill mode. Experimental mode enables alpha-level features that aren't ready for chill mode. " +
@@ -243,3 +270,22 @@ class TogglesLayout(Widget):
 
   def _set_longitudinal_personality(self, button_index: int):
     self._params.put("LongitudinalPersonality", button_index)
+
+  def _refresh_vehicle_selection(self):
+    self._vehicle_selection.action_item.selected_button = selected_vehicle_index(self._params)
+    offroad = not ui_state.started and not self._params.get_bool("IsOnroad") and self._params.get_bool("IsOffroad")
+    self._vehicle_selection.action_item.set_enabled(offroad or vehicle_selection_parked(ui_state.sm, time.monotonic()))
+
+  def _set_manual_vehicle(self, button_index: int):
+    offroad = not ui_state.started and not self._params.get_bool("IsOnroad") and self._params.get_bool("IsOffroad")
+    parked = not offroad and vehicle_selection_parked(ui_state.sm, time.monotonic())
+    if not offroad and not parked:
+      self._refresh_vehicle_selection()
+      return
+    try:
+      select_manual_vehicle(self._params, button_index, parked=parked)
+      self._vehicle_selection.set_description(lambda: tr(DESCRIPTIONS["ManualVehicle"]))
+    except Exception:
+      cloudlog.exception("Manual vehicle selection failed")
+      self._vehicle_selection.set_description(tr("Vehicle selection could not finish. Restart before driving."))
+    self._refresh_vehicle_selection()

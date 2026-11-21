@@ -139,10 +139,10 @@ These 137 settings can affect driving behavior. Change one item at a time.
 | Driving > Tesla > Tesla Features | `TeslaAutoTurnSignals`, `TeslaCanTrafficStop`, `TeslaManualLaneSignals`, `TeslaModelDesireSignals`, `TeslaModelPathSignals`, `TeslaAutoSpeedLimit` | Six independent default-OFF switches; restart required |
 | Auto cruise | `AutoCruiseControl`, `AutoGasTokSpeed`, `AutoGasCancelSpeed`, `AutoGasSyncSpeed`, `CruiseOnDist` | Automatic cruise activation and accelerator-pedal behavior |
 
-- `AlwaysLateral` permits lateral control even when cruise is not engaged. Tesla's three-finger screen contact toggles it live instead of Experimental Mode; OFF does not disengage steering under active driving control. On supported Tesla vehicles it can also steer at true standstill in a forward-driving gear; moving below the minimum steering speed remains restricted. See [Tesla engagement](tesla.md#engagement-and-standstill).
+- `AlwaysLateral` permits lateral control even when cruise is not engaged. Tesla's three-finger screen contact toggles it live instead of Experimental Mode; OFF does not disengage steering under active driving control. On supported Tesla vehicles it can also steer at true standstill in a forward-driving gear; moving below the minimum steering speed remains restricted. See [Tesla engagement](tesla.md#engagement-and-standstill). On 2022–24 torque-steering Ioniq 5 HDA2/CAMERA SCC=2, restart comma after changing this setting; Panda continuously requires valid, current vehicle inputs. Independent lateral permission while cruise is disengaged does not authorize acceleration or cruise engagement.
 - Confirmed persistent CAN-controller errors or recurring Casper front-safety-system faults trigger an alert and disable always-on steering too; re-engagement is blocked until the fault clears.
 - Always Lateral waits for the first confirmation of valid model, vehicle-parameter, pose, and other required inputs after system startup. Once confirmed, this startup check ends; later input interruptions or disengagement/reengagement do not rearm it. Existing runtime safety handling remains unchanged. Expiry of the startup waiting period alone does not pass this check.
-- `AutoEngage`: `0` off, `1` lateral on, `2` lateral on with cruise ready.
+- `AutoEngage`: `0` off, `1` lateral on, `2` lateral on with cruise ready. The strict 2022–24 torque-steering Ioniq 5 HDA2/CAMERA SCC=2 profile does not grant longitudinal permission from this setting; a physical SET−/RES+ input is required initially and after brake, CANCEL or MAIN input.
 - `TeslaAutoTurnSignals`: default OFF, reboot required. On supported Model 3/Y with vehicle CAN and valid physical stalk input, turn lamps start with turn desire, not navigation preparation or distance alone. Measured heading and wheel return govern completion; only confirmed turns can wait at standstill under fresh lateral permission. Automatic lane changes retain preparation-stage lamp confirmation. It does not authorize steering or departure. See [Tesla automatic turn signals](tesla.md#automatic-turn-signals) for prerequisites and closed-course validation.
 - `TeslaCanTrafficStop`: independent default-OFF Tesla CAN red-light stopping; restart required. Requires actual openpilot longitudinal control and the exact supported 8-byte vision-backed APP profile, not stock TACC. Below 126 m, confirmed red adds a stop constraint; green releases only its own constraint. Signal failure requests takeover/soft-disable. Other brands ignore it; see [Tesla CAN stopping](tesla.md#can-red-light-stopping) for protocol, pedal override and closed-course validation limits.
 - `TeslaManualLaneSignals`, `TeslaModelDesireSignals`, `TeslaModelPathSignals`: independent default-OFF Tesla lamp-only observations; reboot required. All require `TeslaAutoTurnSignals`, `ShareData`, fresh repeated ONNX dashed classification and supported adjacent-lane geometry above 30 km/h. Manual torque/approach can work without cruise; model desire/path predictions require active lateral control and can light early or falsely. Solid/dashed does not prove colour or traffic direction. No steering permission, navigation turn preannouncement or U-turn implementation is added; see the [Tesla guide](tesla.md#optional-lane-change-lamp-observations) for completion, timestamp and physical-validation limits.
@@ -249,6 +249,8 @@ Eco caps lead response at 2 and Safe at 3; Normal and High retain the selected v
 
 `CruiseGapLevels` (Gap cycle levels) limits button cycling to 2 through the vehicle-supported maximum, which is the default. 2 uses TF1 and TF2; 3 uses TF1 through TF3. It applies on the next gap-button press and preserves unused TF and following responsiveness values. Applies with openpilot longitudinal control.
 
+The broad touch area around the lower-left GAP number and bars on the comma driving screen also changes one level per tap. It works only with openpilot longitudinal control and follows the [same gap cycle](cruise-gap.md#following-gap).
+
 `TFollowGap1` through `TFollowGap4` are stored in hundredths of a second. Lower values reduce the time gap. Use `LeadAccelResponse` for acceleration response: levels 1–3 are gradual, 4 is quick, and 5 retains maximum response. Braking-onset distance is not separately remembered to enlarge the gap.
 
 `LeadAccelResponse`: Adjusts how the car follows a lead vehicle as it starts or speeds up. Lower levels close the gap more gradually; higher levels follow more quickly. Level 0 turns off the acceleration boost, and level 5 is the most responsive test setting. See [Following responsiveness](cruise-gap.md#lead-response) for details. Extra-headroom hold conditions apply up to 1.2 times TF distance (speed × TF + stopping distance), ease progressively from 1.2 to 1.5 times, and no longer pause recovery at or above 1.5 times regardless of lead speed.
@@ -275,7 +277,7 @@ These settings describe the car, harness, and device hardware configuration. Do 
 | CAN FD/HDA | `CanfdHDA2`, `HyundaiCanfdClusterDirectTx`, `CanfdDebug`, `HDPuse`, `CcncClusterDisplay`, `CcncTrafficBackground` | HDA2 selection, cluster direct send, lane-change auto blinker, CAN FD diagnostics, HDP, and CCNC cluster display options |
 | Radar | `EnableRadarTracks`, `RadarTrackFlip`, `EnableCornerRadar`, `CarrotRadarMode`, `CarrotRadarCutInSensitivity` | SCC radar, front-track orientation, corner radar, and Carrot Radar processing and cut-in sensitivity |
 | Driver monitoring | `DriverMonitoringEnabled` (search only), `DriverMonitoringMode`, `CarrotVisionEnabled`, `MuteDoor`, `MuteSeatbelt` | Driver monitoring and selected vehicle alerts |
-| Vehicle assistance | `MaxAngleFrames`, `SpeedFromPCM` | Steering-angle frames and stock-SCC speed control |
+| Vehicle assistance | `MaxAngleFrames`, `SpeedFromPCM` | Manual vehicle selection in comma Toggles, steering-angle frames and stock-SCC speed control |
 | Device hardware | `CommaPedalEnabled`, `HardwareC3xLite` | Comma Pedal permission for vehicles without ACC, and C3X Lite hardware configuration |
 
 > [!CAUTION]
@@ -336,6 +338,25 @@ In modes `EnableRadarTracks=1`–`3`, a confirmed departing front lead can recei
 A saved change takes effect at the **next vehicle-parameter initialization**; it does not switch the running control path immediately. Comma Pedal operation on CarrotPilot has not yet been validated in a vehicle. Pedal firmware and voltage calibration are unchanged. See the [Comma Pedal diagnostic guide](../../comma_pedal.md) for the observations required at each stage.
 
 `HardwareC3xLite` must remain off on standard C3 and C3X hardware. Enable it only on a C3X Lite, then reboot the device. The setting skips the unavailable amplifier so startup is not delayed by I2C retries, uses the GPIO buzzer for alerts, disables `micd`, `soundd`, and `loggerd`, and turns off `RecordAudio`. Normal route logging is unavailable while this hardware mode is enabled.
+
+### Porter–Ioniq 5 manual vehicle selection
+
+This manual selector is available on both `c3-pht-porter` and `c3-pht`.
+
+On the comma, open **Settings → Toggles → Vehicle (restart)** and select **Porter II EV** or **Ioniq 5 HDA2**. Selection is available with ignition off or with valid vehicle feedback confirming stopped in Park, and changes the vehicle and these four settings.
+
+| Setting | Porter II EV | Ioniq 5 HDA2 |
+|---|---|---|
+| `HyundaiCameraSCC` | `0` | `2` |
+| `EnableRadarTracks` | `0` | `3` |
+| `CanfdHDA2` | `0` | `1` |
+| `CustomSR` (steering ratio ×10) | `202` (20.2) | `140` (14.0) |
+
+Manually choose `c3-pht-porter` for the Porter or `c3-pht` for the Ioniq 5, then restart before driving. Automatic identification, preset restoration and Git branch switching have been removed. Manual selection skips active VIN/firmware queries; passive CAN bus detection and camera/model startup are still required.
+
+An ignition-on Park selection queues the next vehicle and leaves the current vehicle and settings unchanged. Reboot the comma to apply the queued vehicle and four settings. Process restarts or cycling ignition within the same OS boot do not apply it. Drive, Reverse, Neutral, motion, invalid CAN or stale vehicle feedback block selection. Ignition-off choices retain immediate storage and still require a restart before driving.
+
+The ratio preset changes when a vehicle selection is applied; later manual adjustments remain until the next selection is applied. Other manual settings, including steering strength, GAP and Porter automatic SET, low-speed cancellation and dedicated GAP toggles, are preserved. Porter-specific features run only on the Porter and remain inactive on the Ioniq 5. Shared steering settings can affect both cars; check them for the selected vehicle. Calibration is no longer reset automatically: reset calibration in the Device menu after moving to the other vehicle's mounting position.
 
 <a id="display"></a>
 ## Display

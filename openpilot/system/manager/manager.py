@@ -26,6 +26,7 @@ from openpilot.system.manager.process import ensure_running
 from openpilot.system.manager.process_config import managed_processes
 from openpilot.system.manager.update_status import UpdateStatus
 from openpilot.system.manager.xiaoge_startup import XiaogeStartupGate
+from openpilot.common.vehicle_selection import retire_automatic_switch, finish_pending_selection
 from openpilot.system.athena.registration import register, UNREGISTERED_DONGLE_ID
 from openpilot.common.swaglog import cloudlog, add_file_handler
 from openpilot.system.version import get_build_metadata
@@ -85,6 +86,8 @@ def manager_init() -> UpdateStatus:
   if params.get_bool("RecordFrontLock"):
     params.put_bool("RecordFront", True)
 
+  retire_automatic_switch(params)
+  finish_pending_selection(params, startup=True)
   configure_monitoring(params)
   migrate_atc_params(params)
   migrate_lateral_geometry_params(params)

@@ -759,6 +759,47 @@ def test_ipc_media_source_restores_standalone_navigation_images():
   assert source._projected_media() == ()
 
 
+def test_ipc_media_source_keeps_h264_config_while_display_decode_is_disabled():
+  class FakeMessaging:
+    @staticmethod
+    def sub_sock(_service, conflate):
+      assert conflate is False
+      return object()
+
+  source = NaviIpcMediaSource(FakeMessaging(), decode_media=False)
+  submitted = []
+  source._h264_worker = SimpleNamespace(
+    submit=submitted.append,
+    discard=lambda _key: None,
+    reset=lambda: None,
+    poll=lambda: (),
+    close=lambda: None,
+  )
+  base = {
+    "schemaVersion": 1,
+    "sessionId": "session",
+    "kind": "web_render",
+    "name": "map_main",
+    "present": True,
+    "reason": "",
+    "formatOrReason": 0,
+    "width": 960,
+    "height": 540,
+  }
+  source._consume({**base, "sequence": 1, "messageType": 2, "flags": 0, "payload": b"config"}, 1.0)
+  source._consume({**base, "sequence": 2, "messageType": 3, "flags": 1, "payload": b"frame-2"}, 1.1)
+
+  assert source._h264_configs["render:map_main"] == (1, b"config")
+  assert submitted == []
+
+  source.set_decode_media(True)
+  source._consume({**base, "sequence": 3, "messageType": 3, "flags": 1, "payload": b"frame-3"}, 1.2)
+
+  assert len(submitted) == 1
+  assert submitted[0].config_payload == b"config"
+  assert submitted[0].payload == b"frame-3"
+
+
 def test_navi_or_trip_report_panel_shifts_3d_camera_modes_left():
   renderer = object.__new__(ClusterUiRenderer)
   renderer.width = 1920

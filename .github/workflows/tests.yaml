@@ -150,6 +150,13 @@ jobs:
             openpilot/selfdrive/controls/tests/test_longitudinal_braking_gap.py \
             opendbc_repo/opendbc/car/hyundai/tests/test_stock_cruise_adopt.py \
             opendbc_repo/opendbc/car/hyundai/tests/test_camera_set_speed_sync.py
+      - name: Check manual Porter and Ioniq vehicle selection
+        run: >-
+          python -m pytest --noconftest -o addopts='' -q
+          openpilot/common/tests/test_vehicle_selection.py
+          openpilot/selfdrive/ui/tests/test_vehicle_selection.py
+          openpilot/system/manager/test/test_manual_vehicle_startup.py
+          opendbc_repo/opendbc/car/tests/test_car_helpers.py
       - name: Bosch provider replay regression tests
         run: |
           python -m pytest -o addopts='' -q \

@@ -62,7 +62,16 @@ def hud_module(monkeypatch):
 
   class Widget:
     def __init__(self):
-      pass
+      self.is_pressed = False
+
+    def set_enabled(self, enabled):
+      self.enabled = enabled
+
+    def render(self, rect):
+      self.rect = rect
+
+    def _handle_mouse_release(self, pos):
+      self._click_callback()
 
   fake_ui_state = SimpleNamespace(
     params=None,
@@ -70,6 +79,8 @@ def hud_module(monkeypatch):
     started_frame=0,
     status=0,
     is_metric=True,
+    started=True,
+    has_longitudinal_control=True,
     usbgpu_present=False,
     usbgpu_compiled=False,
     usbgpu_compile_pending=False,
@@ -604,6 +615,7 @@ def test_render_keeps_sampling_and_interactions_live(hud_module, monkeypatch, re
   calls = []
 
   renderer._exp_button = SimpleNamespace(render=lambda rect: calls.append("button"))
+  renderer._gap_button = SimpleNamespace(set_enabled=lambda enabled: None, render=lambda rect: calls.append("gap"))
   renderer._plot_renderer = SimpleNamespace(
     update=lambda mode: calls.append(("sample", mode)),
     paint=lambda rect, font: calls.append("plot"),
@@ -624,7 +636,61 @@ def test_render_keeps_sampling_and_interactions_live(hud_module, monkeypatch, re
     "date",
     "tpms",
     "egpu",
-  ]) + ["button", "animation"]
+  ]) + ["button", "gap", "animation"]
+
+
+@pytest.mark.parametrize("maximum,requested,current,expected", [
+  (4, 0, 0, 3), (4, 0, 3, 2), (4, 2, 0, 1), (4, 2, 3, 1), (3, 0, 0, 2),
+])
+def test_gap_touch_uses_vehicle_and_configured_cycle(hud_module, maximum, requested, current, expected):
+  module, state = hud_module
+  values = {"LongitudinalPersonalityMax": maximum, "CruiseGapLevels": requested, "LongitudinalPersonality": current}
+  state.params = SimpleNamespace(get_int=values.__getitem__, put_int=lambda key, value: values.__setitem__(key, value))
+  renderer = module.HudRenderer()
+  renderer._cycle_gap()
+  assert values["LongitudinalPersonality"] == expected
+  assert renderer._get_cruise_gap() == expected + 1
+  renderer._gap_button.is_pressed = True
+  assert renderer.user_interacting()  # The road view must not toggle the sidebar.
+
+
+@pytest.mark.parametrize("available,started,longitudinal", [(False, True, True), (True, False, True), (True, True, False)])
+def test_gap_touch_does_not_change_unavailable_control(hud_module, available, started, longitudinal):
+  module, state = hud_module
+  state.started = started
+  state.has_longitudinal_control = longitudinal
+  state.params = SimpleNamespace(get_int=lambda key: pytest.fail("disabled touch read Params"))
+  renderer = module.HudRenderer()
+  renderer.is_cruise_available = available
+  renderer._cycle_gap()
+
+
+def test_gap_touch_target_covers_number_and_all_bars_after_sidebar_shift(hud_module):
+  module, _ = hud_module
+  rect = module.rl.Rectangle(300, 40, 1800, 1080)
+  target = module.HudRenderer._gap_touch_rect(rect)
+  bx, by = 440, 890
+  for x, y in [(bx + 200, by + 40), (bx + 240, by + 77), (bx + 270, by + 105), (bx + 340, by + 185)]:
+    assert target.x <= x < target.x + target.width
+    assert target.y <= y < target.y + target.height
+
+
+def test_fast_gap_tap_does_not_fall_through_to_sidebar(hud_module):
+  module, state = hud_module
+  values = {"LongitudinalPersonalityMax": 4, "CruiseGapLevels": 4, "LongitudinalPersonality": 0}
+  writes = []
+  state.params = SimpleNamespace(get_int=values.__getitem__, put_int=lambda *args: writes.append(args))
+  renderer = module.HudRenderer()
+  button = renderer._gap_button
+  button._render(None)
+  button._handle_mouse_press(None)
+  assert writes == []
+  button._handle_mouse_release(None)
+  assert writes == [("LongitudinalPersonality", 3)]
+  assert not button.is_pressed
+  assert renderer.user_interacting()
+  button._render(None)
+  assert not renderer.user_interacting()
 
 
 def test_vehicle_navigation_profile_does_not_force_speed_with_cruise_off(hud_module):

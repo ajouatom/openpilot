@@ -171,9 +171,11 @@ def fingerprint(can_recv: CanRecvCallable, can_send: CanSendCallable, set_obd_mu
 
 def get_car(can_recv: CanRecvCallable, can_send: CanSendCallable, set_obd_multiplexing: ObdCallback, alpha_long_allowed: bool,
             is_release: bool, num_pandas: int = 1, cached_params: CarParamsT | None = None):
-  selected_car = Params().get("CarSelected3")
+  params = Params()
+  from openpilot.common.vehicle_selection import finish_pending_selection
+  finish_pending_selection(params)
+  selected_car = params.get("CarSelected3")
   forced_candidate = get_selected_car_platform(selected_car) if selected_car else None
-
   # A valid manual selection doesn't need active VIN, ECU presence, or firmware queries.
   # Keep passive CAN fingerprinting since interfaces use it to detect buses and optional equipment.
   candidate, fingerprints, vin, car_fw, source, exact_match = fingerprint(can_recv, can_send, set_obd_multiplexing, num_pandas,
@@ -199,7 +201,6 @@ def get_car(can_recv: CanRecvCallable, can_send: CanSendCallable, set_obd_multip
   CP.fingerprintSource = source
   CP.fuzzyFingerprint = not exact_match
 
-  params = Params()
   print("Carrot GitBranch = {}, {}".format(format_git_source(params.get("GitRemote"), params.get("GitBranch")),
                                          params.get("GitCommitDate")))
 

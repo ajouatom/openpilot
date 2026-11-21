@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from cluster_config import (
-    TURN_SIGNAL_BLINK_ON_SECONDS,
-    TURN_SIGNAL_BLINK_PERIOD_SECONDS,
-)
+if __package__:
+    from .cluster_config import TURN_SIGNAL_BLINK_ON_SECONDS, TURN_SIGNAL_BLINK_PERIOD_SECONDS
+else:  # Direct cluster_run.py execution.
+    from cluster_config import TURN_SIGNAL_BLINK_ON_SECONDS, TURN_SIGNAL_BLINK_PERIOD_SECONDS
 
 
 def clamp(value: float, low: float, high: float) -> float:

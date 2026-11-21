@@ -2,7 +2,30 @@ from __future__ import annotations
 
 import math
 
-from cluster_config import (
+if __package__:
+  from .cluster_config import (
+    BLUE,
+    BLUE_SOFT,
+    COAST_DECEL_MPS2,
+    CONTROLLER_ACCEL_MPS2,
+    CONTROLLER_BRAKE_MPS2,
+    DEFAULT_LANE_WIDTH_M,
+    DRAG_DECEL_PER_MPS,
+    LANE_CHANGE_MAX_SECONDS,
+    LANE_CHANGE_MIN_SECONDS,
+    MAX_ACCEL_MPS2,
+    MAX_SPEED_KPH,
+    MAX_STEERING_ANGLE_DEG,
+    MODEL_DIRECT_LANE_RECENTER_SECONDS,
+    SURROUND_MAX_PITCH_DEG,
+    SURROUND_MAX_YAW_DEG,
+    SURROUND_VIEW_SMOOTH_SECONDS,
+    TURN_SIGNAL_SECONDS,
+  )
+  from .cluster_models import ClusterUiState, LaneMarking, SimulatorInput, TpmsInfo
+  from .cluster_utils import clamp, smoothstep
+else:  # Direct cluster_run.py execution.
+  from cluster_config import (
     BLUE,
     BLUE_SOFT,
     COAST_DECEL_MPS2,
@@ -21,8 +44,8 @@ from cluster_config import (
     SURROUND_VIEW_SMOOTH_SECONDS,
     TURN_SIGNAL_SECONDS,
 )
-from cluster_models import ClusterUiState, LaneMarking, SimulatorInput, TpmsInfo
-from cluster_utils import clamp, smoothstep
+  from cluster_models import ClusterUiState, LaneMarking, SimulatorInput, TpmsInfo
+  from cluster_utils import clamp, smoothstep
 
 
 class ClusterSimulator:

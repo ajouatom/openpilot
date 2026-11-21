@@ -3,7 +3,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
-from cluster_config import DEFAULT_LANE_WIDTH_M, WHITE
+if __package__:
+    from .cluster_config import DEFAULT_LANE_WIDTH_M, WHITE
+else:  # Direct cluster_run.py execution.
+    from cluster_config import DEFAULT_LANE_WIDTH_M, WHITE
 
 CruiseDisplayState = Literal["off", "paused", "engaged"]
 GitBranchStatusState = Literal["ok", "pull", "missing", "unknown"]
