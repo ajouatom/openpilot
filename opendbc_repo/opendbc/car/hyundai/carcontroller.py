@@ -678,8 +678,8 @@ class CarController(CarControllerBase):
       if hda2 and self.CP.flags & HyundaiFlags.ENABLE_BLINKERS:
         can_sends.extend(hyundaicanfd.create_spas_messages(self.packer, self.CAN, self.frame, CC.leftBlinker, CC.rightBlinker))
       # carrot-wip's own SPAS path (CanfdBlinkerControl -> CANFD_SPAS_BLINKERS, card.py) owns APRK/SPAS when it is on;
-      # aprk_state != idle: a kick that was just switched off still restores the ECU's default session
-      elif not self.CP.flags & HyundaiFlags.CANFD_SPAS_BLINKERS and (self.blinker_control or self.aprk_state):
+      # A switched-off kick still restores its session and invalidates idle probe memory.
+      elif not self.CP.flags & HyundaiFlags.CANFD_SPAS_BLINKERS and (self.blinker_control or self.aprk_state or self.aprk_no_reply_at):
         can_sends.extend(self.aprk_blinkers(CS))
 
       if self.camera_scc_params in [2, 3]:

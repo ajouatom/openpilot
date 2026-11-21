@@ -164,6 +164,18 @@ def test_cached_piggyback_keeps_immediate_output_guards(guard):
   assert not spas2(cc, step(cc, 1, 3, request='second', gear=P if guard == 'park' else D, right=guard == 'opposite'))
 
 
+def test_controller_clears_idle_probe_cache_when_output_is_disabled(monkeypatch):
+  from opendbc.car.hyundai.tests.test_steering_handover_controller import setup_controller, step as control_step
+
+  controller, cs, cc, _ = setup_controller(monkeypatch)
+  controller.aprk_no_reply_at = 100_000_000
+  controller.frame = 50
+  _, sent = control_step(controller, cs, cc)
+  assert not controller.blinker_control
+  assert controller.aprk_no_reply_at == 0
+  assert all(message[0] not in (0x165, 0x16A, carcontroller.APRK_ADDR) for message in sent)
+
+
 def test_ack_only_mode_does_not_retry_a_continuing_request():
   cc = make_cc(ecu=Ecu(answers=False), mode=0)
   sent = step(cc, 200, 3)

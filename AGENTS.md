@@ -14,7 +14,8 @@
   no removed/changed existing requests. Recover1207/10+0.206 right, stilllate;
   added118a/10 lacksvideo/delayedholdclipped. Reject broader rearm/growth causing
   loss or748ms delay. Busy/narrow-model/stale-input misses remain; no zero-false
-  rate claim.1237localpass/9skip, two baseline reproductions pass. No device
+  rate claim.1238localpass/9skip, two baseline reproductions pass. Full controller
+  regression also reproduces/fixes disabled-idle cache cleanup. No device
   writes/actuation. Private scratch2026-11-21-indicator-fixes/INDEX.md and updated
   replay review. CI follows publication.
 

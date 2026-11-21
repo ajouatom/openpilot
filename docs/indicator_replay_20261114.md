@@ -472,8 +472,10 @@ missing model inputs in 1207/2. Some candidate steering movements are parked-car
 avoidance. No broad freshness, lane-width, automatic-steering isolation or
 turn-angle gate was removed to force those cases to light.
 
-Local isolated checks pass 1,237 with nine platform skips. Two independent
+Local isolated checks pass 1,238 with nine platform skips. Two independent
 before/after reproductions confirm the old peak miss and repeated 410 ms wait,
-with the latter reduced to 10 ms for a reusable result. Native/full CI is tied
+with the latter reduced to 10 ms for a reusable result. A full-controller test
+also reproduces and fixes cache cleanup when output is disabled while idle;
+the cleanup emits no APRK or SPAS frames. Native/full CI is tied
 to the published commit. Private raw evidence and replay outputs are indexed in
 `.analysis/scratch/2026-11-21-indicator-fixes/INDEX.md`.
