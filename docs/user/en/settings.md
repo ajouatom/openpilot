@@ -305,6 +305,8 @@ Settings > Vehicle & Hardware > Indicator Control contains Automatic Indication,
 
 `CanfdBlinkerKickMode` selects ECU-acknowledged transmission with 0 or the existing stock-frame piggyback fallback with 1. Enabling applies on the next onroad start and requires updated Panda firmware. Disabling applies immediately. Enabling Kick suspends USB2CAN/BT2CAN output and waits for outstanding commands and exclusive ownership. It disables `CanfdBlinkerControl` on the next onroad start.
 
+In mode 1, a confirmed unanswered probe can be reused for 60 seconds from that probe while stock SPAS reception and output ownership remain healthy, avoiding another 0.4s reply wait on the next request. Interrupted reception, a new ECU reply, lost ownership, changed settings or expiry require another probe. Mode 0 still requires an ECU reply; stock-frame synchronization and driver cancellation remain.
+
 Saved output and common indication settings are retained. `AutoBlinkerControl=0` disables automatic indication, so select the desired common features. Explicit Bluetooth indicator buttons produce a single tap in D. The independent hold/3/5/7-flash `CanfdBlinkerKickModelMode` setting is retired. Residual physical flashing after a SPAS request ends depends on the vehicle.
 
 For manual lane changes and manual turns, Panda/SPAS delays normal completion until two seconds after the first transmission request. While transmission is preparing, normal completion can wait up to two seconds from observation start. Physical lever input, cruise cancellation, disabling the feature, opposite lamps and input or lane errors end the request immediately. Actual flash count requires vehicle verification.

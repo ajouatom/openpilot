@@ -60,6 +60,7 @@ APRK_DEFAULT_SESSION = bytes([0x02, 0x10, 0x01, 0, 0, 0, 0, 0])
 APRK_IDLE, APRK_ASK, APRK_WAIT_QUIET, APRK_ACTIVE, APRK_FAILED = range(5)
 APRK_REPLY_FRAMES = int(0.4 / DT_CTRL)
 APRK_QUIET_NANOS = 100_000_000
+APRK_NO_REPLY_CACHE_NANOS = 60_000_000_000
 CANFD_JERK_ERROR_DELAY = 0.5
 CANFD_JERK_ERROR_FILTER_TIME = 0.4
 CANFD_JERK_ERROR_DEADBAND = 0.25
@@ -226,6 +227,7 @@ class CarController(CarControllerBase):
     self.kick_output_ready = False  # card owns the shared USB/BLE/native output lease
     self.blinker_kick_mode = 1  # CanfdBlinkerKickMode: 0 only after an ack; anything else (a stored 2/3 too) is 1, piggyback
     self.aprk_state, self.aprk_frame, self.aprk_nanos, self.aprk_acked, self.aprk_buses = APRK_IDLE, 0, 0, False, ()
+    self.aprk_no_reply_at = 0
     self.kick_direction = 0  # Fresh common-policy request, supplied by card.
     self.kick_request_id = self.aprk_request_id = None
     self.blinker_side = 0
@@ -281,13 +283,20 @@ class CarController(CarControllerBase):
     want = (self.blinker_control and self.kick_output_ready and direction in (3, 4) and
             CS.out.gearShifter == structs.CarState.GearShifter.drive and not opposite)
     if self.kick_request_id != self.aprk_request_id:
-      # A fresh policy request gets one handshake, including after an earlier
-      # failed request. A continuing request never repeatedly retries the ECU.
+      # A fresh policy request restarts admission, including after a failed
+      # request. A continuing request never repeatedly retries the ECU.
       ret += [CanData(APRK_ADDR, APRK_DEFAULT_SESSION, bus) for bus in self.aprk_buses]
       self.aprk_state, self.aprk_buses = APRK_IDLE, ()
       self.aprk_request_id = self.kick_request_id
     self.blinker_side = direction if want else 0
     now, stock, ack = getattr(CS, "can_nanos", 0), getattr(CS, "aprk_stock_nanos", 0), getattr(CS, "aprk_ack_nanos", 0)
+    # Repeated unanswered probes add 400 ms to every lamp. Remember only a
+    # recent failed probe while the verified stock stream and output owner stay
+    # healthy. Mode 0, a late reply or loss of continuity requires a new probe.
+    if (self.blinker_kick_mode == 0 or not self.blinker_control or not self.kick_output_ready or
+        not 0 <= now-stock < APRK_QUIET_NANOS or ack > self.aprk_no_reply_at or
+        not 0 <= now-self.aprk_no_reply_at < APRK_NO_REPLY_CACHE_NANOS):
+      self.aprk_no_reply_at = 0
 
     def give_back():
       restore = [CanData(APRK_ADDR, APRK_DEFAULT_SESSION, bus) for bus in self.aprk_buses]
@@ -297,11 +306,17 @@ class CarController(CarControllerBase):
     if not want:
       ret = give_back()
     elif self.aprk_state == APRK_IDLE:
-      self.aprk_buses = (self.CAN.ECAN, self.CAN.ACAN)
-      ret += [CanData(APRK_ADDR, APRK_EXT_SESSION, bus) for bus in self.aprk_buses]
-      self.aprk_state, self.aprk_frame, self.aprk_nanos = APRK_ASK, self.frame, now
+      if self.aprk_no_reply_at:
+        # Use the existing panda stock-following path without another UDS
+        # session. Fresh policy admission and all cancellation guards remain.
+        self.aprk_state, self.aprk_frame, self.aprk_nanos, self.aprk_acked = APRK_ACTIVE, self.frame, now, False
+      else:
+        self.aprk_buses = (self.CAN.ECAN, self.CAN.ACAN)
+        ret += [CanData(APRK_ADDR, APRK_EXT_SESSION, bus) for bus in self.aprk_buses]
+        self.aprk_state, self.aprk_frame, self.aprk_nanos = APRK_ASK, self.frame, now
     elif self.aprk_state == APRK_ASK:
       if ack >= self.aprk_nanos and ack > 0:
+        self.aprk_no_reply_at = 0
         ret += [CanData(APRK_ADDR, APRK_COM_DISABLE, bus) for bus in self.aprk_buses]
         self.aprk_state, self.aprk_frame = APRK_WAIT_QUIET, self.frame
       elif self.frame - self.aprk_frame >= APRK_REPLY_FRAMES:
@@ -311,6 +326,8 @@ class CarController(CarControllerBase):
         # each of our SPAS frames and sends it right behind the stock one (hyundai_canfd_rx_tx_hook), so the same id
         # never starts twice at once - 10-30..11-02 that collision made error frames in 78/111 kicks and bus-off in 33.
         self.aprk_state, self.aprk_frame, self.aprk_nanos, self.aprk_acked = APRK_ACTIVE, self.frame, now, False
+        if 0 <= now-stock < APRK_QUIET_NANOS:
+          self.aprk_no_reply_at = now
     elif self.aprk_state == APRK_WAIT_QUIET:
       if self.frame - self.aprk_frame >= APRK_QUIET_NANOS // 10_000_000 and now - stock >= APRK_QUIET_NANOS:
         self.aprk_state, self.aprk_frame, self.aprk_nanos, self.aprk_acked = APRK_ACTIVE, self.frame, now, True
@@ -661,8 +678,8 @@ class CarController(CarControllerBase):
       if hda2 and self.CP.flags & HyundaiFlags.ENABLE_BLINKERS:
         can_sends.extend(hyundaicanfd.create_spas_messages(self.packer, self.CAN, self.frame, CC.leftBlinker, CC.rightBlinker))
       # carrot-wip's own SPAS path (CanfdBlinkerControl -> CANFD_SPAS_BLINKERS, card.py) owns APRK/SPAS when it is on;
-      # aprk_state != idle: a kick that was just switched off still restores the ECU's default session
-      elif not self.CP.flags & HyundaiFlags.CANFD_SPAS_BLINKERS and (self.blinker_control or self.aprk_state):
+      # A switched-off kick still restores its session and invalidates idle probe memory.
+      elif not self.CP.flags & HyundaiFlags.CANFD_SPAS_BLINKERS and (self.blinker_control or self.aprk_state or self.aprk_no_reply_at):
         can_sends.extend(self.aprk_blinkers(CS))
 
       if self.camera_scc_params in [2, 3]:

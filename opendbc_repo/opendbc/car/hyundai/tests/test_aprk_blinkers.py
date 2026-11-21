@@ -35,7 +35,7 @@ class Ecu:
 
 def make_cc(ecu=None, mode=1):
   return SimpleNamespace(blinker_control=True, kick_output_ready=True, kick_direction=0,
-    kick_request_id=None, aprk_request_id=None,
+    kick_request_id=None, aprk_request_id=None, aprk_no_reply_at=0,
     blinker_kick_mode=mode, aprk_state=0, aprk_frame=0, aprk_nanos=0, aprk_acked=False,
     blinker_side=0, frame=0, CAN=SimpleNamespace(ECAN=0, ACAN=1),
     packer=CANPacker('hyundai_canfd_generated'), aprk_buses=(), ecu=ecu or Ecu())
@@ -102,6 +102,78 @@ def test_no_answer_uses_existing_piggyback_after_wait():
   assert set(spas2(cc, step(cc, 100, 3))) == {3}
   assert not cc.aprk_acked
   assert uds(step(cc, 1)) == [(DEFAULT, 0), (DEFAULT, 1)]
+
+
+def cached_piggyback():
+  cc = make_cc(ecu=Ecu(answers=False))
+  assert spas2(cc, step(cc, 50, 3, request='first'))
+  assert cc.aprk_no_reply_at > 0
+  step(cc, 1)
+  step(cc, 100)
+  return cc
+
+
+def test_recent_unanswered_probe_reuses_stock_following_without_new_uds():
+  cc = cached_piggyback()
+  failed_at = cc.aprk_no_reply_at
+  sent = step(cc, 2, 4, request='second')
+  assert set(spas2(cc, sent)) == {4}
+  assert uds(sent) == []
+  assert cc.aprk_no_reply_at == failed_at  # Reuse never extends the cache.
+  assert not cc.aprk_acked
+  assert not step(cc, 1)  # No UDS session was opened to restore.
+
+
+@pytest.mark.parametrize('fault', ['owner', 'setting', 'ack', 'stock', 'mode', 'expiry', 'clock'])
+def test_probe_cache_is_discarded_on_changed_or_unverified_contract(fault):
+  cc = cached_piggyback()
+  if fault == 'owner':
+    cc.kick_output_ready = False
+    step(cc, 1)
+    cc.kick_output_ready = True
+  elif fault == 'setting':
+    cc.blinker_control = False
+    step(cc, 1)
+    cc.blinker_control = True
+  elif fault == 'ack':
+    cc.ecu.ack = (cc.frame+1)*TICK
+  elif fault == 'stock':
+    cc.ecu.quiet = True
+    step(cc, 20)
+    cc.ecu.quiet = False
+  elif fault == 'mode':
+    cc.blinker_kick_mode = 0
+    step(cc, 1)
+    cc.blinker_kick_mode = 1
+  elif fault == 'expiry':
+    cc.frame += carcontroller.APRK_NO_REPLY_CACHE_NANOS // TICK
+  elif fault == 'clock':
+    cc.frame = 0
+  sent = step(cc, 2, 4, request='second')
+  assert not spas2(cc, sent)
+  assert uds(sent)[:2] == [(EXT, 0), (EXT, 1)]
+  assert cc.aprk_no_reply_at == 0
+
+
+@pytest.mark.parametrize('guard', ['owner', 'setting', 'park', 'opposite'])
+def test_cached_piggyback_keeps_immediate_output_guards(guard):
+  cc = cached_piggyback()
+  assert spas2(cc, step(cc, 2, 3, request='second'))
+  cc.kick_output_ready = guard != 'owner'
+  cc.blinker_control = guard != 'setting'
+  assert not spas2(cc, step(cc, 1, 3, request='second', gear=P if guard == 'park' else D, right=guard == 'opposite'))
+
+
+def test_controller_clears_idle_probe_cache_when_output_is_disabled(monkeypatch):
+  from opendbc.car.hyundai.tests.test_steering_handover_controller import setup_controller, step as control_step
+
+  controller, cs, cc, _ = setup_controller(monkeypatch)
+  controller.aprk_no_reply_at = 100_000_000
+  controller.frame = 50
+  _, sent = control_step(controller, cs, cc)
+  assert not controller.blinker_control
+  assert controller.aprk_no_reply_at == 0
+  assert all(message[0] not in (0x165, 0x16A, carcontroller.APRK_ADDR) for message in sent)
 
 
 def test_ack_only_mode_does_not_retry_a_continuing_request():
