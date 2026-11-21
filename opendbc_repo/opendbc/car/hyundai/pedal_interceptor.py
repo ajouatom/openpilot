@@ -4,7 +4,7 @@ import numpy as np
 from opendbc.car.pedal_interceptor import PEDAL_INTERCEPTOR_DBC, PedalInterceptorParams
 
 
-RAY_PEDAL_COMMAND_CAP = 0.70
+RAY_PEDAL_COMMAND_CAP = 0.80
 RAY_PEDAL_CAP_SPEED_BP = [0.0, 12.0, 20.0, 25.0]
 RAY_PEDAL_CAP_V = [0.55, 0.55, 0.65, RAY_PEDAL_COMMAND_CAP]
 RAY_PEDAL_OFFSET_SPEED_BP = [0.0, 2.0, 4.0, 8.0, 12.0, 16.0, 20.0, 25.0]
@@ -36,8 +36,15 @@ def get_ray_pedal_target(accel: float, v_ego: float, set_speed: float) -> float:
   return target
 
 
+def ray_pedal_command_value(amount: float) -> float:
+  # The fitted DBC reads 3.25% at raw neutral. Below the intersection (24.07%
+  # demand), use the original raw slope to approach neutral continuously.
+  return max(amount, 0.0325 + 0.865 * amount)
+
+
 RAY_PEDAL_INTERCEPTOR_PARAMS = PedalInterceptorParams(
   target=get_ray_pedal_target,
+  command_value=ray_pedal_command_value,
   dbc_name=PEDAL_INTERCEPTOR_DBC,
   driver_thresholds=(272, 513), rate_up=RAY_PEDAL_RATE_UP, rate_down=RAY_PEDAL_RATE_DOWN,
   safety_profile=16384,  # HyundaiSafetyFlags.PEDAL_INTERCEPTOR_RAY

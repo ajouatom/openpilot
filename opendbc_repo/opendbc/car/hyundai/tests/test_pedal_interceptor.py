@@ -86,25 +86,39 @@ def test_non_cc_only_vehicle_cannot_activate_even_with_an_explicit_profile(monke
   assert Bus.party not in CarState.__new__(CarState).get_can_parsers(enabled)
 
 
-def test_dbc_expands_only_command_increment_and_keeps_input_scaling():
+def test_ray_command_calibration_and_sensor_scaling():
   packer = CANPacker(PEDAL_INTERCEPTOR_DBC)
   for message, names in (("GAS_COMMAND", ("GAS_COMMAND", "GAS_COMMAND2")),
                          ("GAS_SENSOR", ("INTERCEPTOR_GAS", "INTERCEPTOR_GAS2"))):
     signals = packer.dbc.name_to_msg[message].sigs
-    expected = [(0.336, -88.704), (0.166, -82.502)] if message == "GAS_COMMAND" else [(0.672, -177.408), (0.332, -165.004)]
+    expected = [(0.29064, -68.44146), (0.14359, -63.07673)] if message == "GAS_COMMAND" else [(0.672, -177.408), (0.332, -165.004)]
     assert [(signals[name].factor, signals[name].offset) for name in names] == expected
-  command = create_pedal_interceptor_command(packer, 0.1, 3)
-  assert command[1][:5] == bytes.fromhex("0154028b83")
-  maximum = create_pedal_interceptor_command(packer, 0.70, 4)
-  assert maximum[1][:4] == bytes.fromhex("031b0624")  # 795 / 1572
-  neutral = packer.make_can_msg("GAS_COMMAND", 0, {"GAS_COMMAND": 0, "GAS_COMMAND2": 0, "ENABLE": 1})
+  neutral = packer.make_can_msg("GAS_COMMAND", 0, {"GAS_COMMAND": 8.2875, "GAS_COMMAND2": 8.2875, "ENABLE": 1})
   assert neutral[1][:4] == bytes.fromhex("010801f1")  # 264 / 497
-  assert create_pedal_interceptor_command(packer, 0.0, 4)[1][:5] == bytes.fromhex("0000000004")
 
 
-def test_ray_target_caps_and_rate_parameters_revert_to_reference():
-  assert [get_ray_pedal_target(5.0, speed, speed + 10.0) for speed in (0.0, 12.0, 20.0, 25.0)] == [0.55, 0.55, 0.65, 0.70]
+@pytest.mark.parametrize("amount,track1,track2", [
+  (0.0, 0, 0), (0.001, 0, 0), (0.00101, 265, 499), (0.02, 279, 528), (0.10, 340, 651),
+  (0.2407, 447, 867), (0.2408, 447, 867), (0.50, 674, 1327), (0.80, 937, 1860),
+])
+def test_ray_encoded_tracks_at_release_crossover_and_cap(amount, track1, track2):
+  packer = CANPacker(PEDAL_INTERCEPTOR_DBC)
+  _, data, _ = create_pedal_interceptor_command(packer, amount, 4, RAY_PEDAL_INTERCEPTOR_PARAMS.command_value)
+  assert data[:4] == track1.to_bytes(2, "big") + track2.to_bytes(2, "big")
+  assert data[4] == (0x84 if amount > 0.001 else 0x04)
+
+
+def test_ray_target_speed_interpolation_and_sustained_maximum():
+  speeds = (0.0, 12.0, 20.0, 22.5, 25.0, 35.0)
+  assert [get_ray_pedal_target(5.0, speed, speed + 10.0) for speed in speeds] == pytest.approx([0.55, 0.55, 0.65, 0.725, 0.80, 0.80])
   assert (RAY_PEDAL_INTERCEPTOR_PARAMS.rate_up, RAY_PEDAL_INTERCEPTOR_PARAMS.rate_down) == (0.02, 0.06)
+  pedal = PedalInterceptor(CANPacker(PEDAL_INTERCEPTOR_DBC), RAY_PEDAL_INTERCEPTOR_PARAMS)
+  for frame in range(0, 164, 4):
+    _, data, _ = pedal.update(frame, True, 2.5, 25.0, 35.0)
+    if frame == 0:
+      assert data[:4] == bytes.fromhex("01170210")  # First 2% step from neutral.
+  assert pedal.gas_last == 0.80 and data[:4] == bytes.fromhex("03a90744")
+  assert pedal.update(164, False, 2.5, 25.0, 35.0)[1][:5] == bytes.fromhex("0000000009")
 
 
 @pytest.mark.parametrize("bus,address", [(0, 0x420), (0, 0x421), (2, 0x420), (2, 0x421)])
@@ -174,8 +188,8 @@ def test_protocol_rejects_bad_crc_and_stalled_counter():
 def test_shared_protocol_accepts_explicit_non_ray_calibration(tmp_path):
   source = Path(__file__).resolve().parents[3] / "dbc/pedal_interceptor.dbc"
   dbc = tmp_path / "pedal_interceptor.dbc"
-  dbc.write_text(source.read_text().replace("(0.336,-88.704)", "(1,0)").replace("(0.166,-82.502)", "(2,-10)"))
-  profile = replace(RAY_PEDAL_INTERCEPTOR_PARAMS, target=lambda *args: 0.2,
+  dbc.write_text(source.read_text().replace("(0.29064,-68.44146)", "(1,0)").replace("(0.14359,-63.07673)", "(2,-10)"))
+  profile = replace(RAY_PEDAL_INTERCEPTOR_PARAMS, target=lambda *args: 0.2, command_value=float,
                     dbc_name=str(dbc),
                     driver_thresholds=(20, 30), rate_up=0.2, rate_down=0.1)
   command = PedalInterceptor(CANPacker(profile.dbc_name), profile).update(60, True, 0.0, 0.0, 10.0)

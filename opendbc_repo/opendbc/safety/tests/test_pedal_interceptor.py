@@ -1,6 +1,7 @@
 import pytest
 
 from opendbc.can import CANPacker
+from opendbc.car.hyundai.pedal_interceptor import RAY_PEDAL_INTERCEPTOR_PARAMS
 from opendbc.car.pedal_interceptor import PEDAL_INTERCEPTOR_DBC, create_pedal_interceptor_command
 from opendbc.car.structs import CarParams
 from opendbc.safety.tests.libsafety import libsafety_py
@@ -24,7 +25,8 @@ def packet(message):
 
 
 def command(amount=0.1, counter=0):
-  return create_pedal_interceptor_command(CANPacker(PEDAL_INTERCEPTOR_DBC), amount, counter)
+  return create_pedal_interceptor_command(CANPacker(PEDAL_INTERCEPTOR_DBC), amount, counter,
+                                          RAY_PEDAL_INTERCEPTOR_PARAMS.command_value)
 
 
 def sensor(state=0, track1=264, track2=497, counter=1):
@@ -40,22 +42,25 @@ def ready(safety):
   safety.set_controls_allowed(True)
 
 
-@pytest.mark.parametrize("amount", [0.00101, 0.08, 0.20, 0.55, 0.65, 0.70])
+@pytest.mark.parametrize("amount", [0.00101, 0.08, 0.20, 0.2407, 0.2408, 0.55, 0.65, 0.70, 0.75, 0.80])
 def test_expanded_commands_remain_inside_ray_profile(safety, amount):
   ready(safety)
   assert safety.safety_tx_hook(packet(command(amount)))
 
 
 def expanded_raw_command(track1, track2):
-  return CANPacker(PEDAL_INTERCEPTOR_DBC).make_can_msg("GAS_COMMAND", 0, {
-    "GAS_COMMAND": track1 * 0.336 - 88.704, "GAS_COMMAND2": track2 * 0.166 - 82.502,
+  packer = CANPacker(PEDAL_INTERCEPTOR_DBC)
+  signals = packer.dbc.name_to_msg["GAS_COMMAND"].sigs
+  first, second = signals["GAS_COMMAND"], signals["GAS_COMMAND2"]
+  return packer.make_can_msg("GAS_COMMAND", 0, {
+    "GAS_COMMAND": track1 * first.factor + first.offset, "GAS_COMMAND2": track2 * second.factor + second.offset,
     "ENABLE": 1, "COUNTER_PEDAL": 0,
   })
 
 
-@pytest.mark.parametrize("track1,track2,allowed", [(264, 497, True), (795, 1572, True),
+@pytest.mark.parametrize("track1,track2,allowed", [(264, 497, True), (937, 1860, True),
                                                   (263, 497, False), (264, 496, False),
-                                                  (796, 1572, False), (795, 1573, False),
+                                                  (938, 1860, False), (937, 1861, False),
                                                   (600, 1210, False)])
 def test_ray_expanded_limits_and_original_track_correlation(safety, track1, track2, allowed):
   ready(safety)
@@ -64,7 +69,7 @@ def test_ray_expanded_limits_and_original_track_correlation(safety, track1, trac
 
 def test_above_target_cap_is_still_rejected(safety):
   ready(safety)
-  assert not safety.safety_tx_hook(packet(command(0.701)))
+  assert not safety.safety_tx_hook(packet(command(0.801)))
 
 
 @pytest.mark.parametrize("bits", [0x04, 0x08, 0x0C])
