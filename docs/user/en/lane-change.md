@@ -49,6 +49,8 @@ When same-direction manual-turn conditions are met during a manual lane indicati
 
 Lane-position jumps at junctions do not reset manual turns established through driver torque, increasing steering angle and measured rotation. An owned indication survives small negative speed-estimator noise around zero while standstill is confirmed in Drive.
 
+If a turn was confirmed while rearm blocked indication and the wheel reached its peak, continuing same-direction driver torque and yaw can bridge up to 0.3s and 5 degrees of unwind from that peak. Existing rearm waits remain; renewed angle growth after admission uses ordinary detection. Released or opposite torque and a road-curve classification clear this peak memory.
+
 ## Model indication (trial)
 
 `ModelDesireIndicator` and `ModelPathIndicator` are separate default-off options for protocol-matched USB2CAN, BLE or Panda/SPAS outputs and `AutoBlinkerControl=1` or `2`. Initiation requires active lateral control. Their lamp feedback is not reused as a new automatic steering request. At 30 km/h or above, the two nearest model forecasts can also trigger an indication when both predict the same lane change with at least 65% probability and both measured lane boundaries show the vehicle approaching that side. A forecast alone does not light the indicator or request steering. After forecast-based initiation, widening lane lines at a fork do not end the hold while the model and measured motion still indicate the same direction. Fading or opposite intent ends the fork hold; cruise CANCEL releases it immediately.

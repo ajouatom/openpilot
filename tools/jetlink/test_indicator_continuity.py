@@ -131,6 +131,12 @@ def successive(fault=None):
     md.frameId=i
     cs.leftBlinker=now<10.5
     cs.steeringAngleDeg=-min(300., i*6.)
+    if fault in ('peak', 'unwound', 'released'):
+      cs.steeringAngleDeg = -min(300., i*8.)
+      if fault == 'unwound' and now >= 12.:
+        cs.steeringAngleDeg = -280.
+      if fault == 'released' and now >= 12.:
+        cs.steeringPressed = False
     if fault == 'late_growth':
       cs.steeringAngleDeg = -(min(160., i*8.) + max(0, min(i-40, 20))*.5 + max(0, i-60)*6.)
     if fault == 'low_speed':
@@ -149,6 +155,16 @@ def test_successive_opposite_turn_keeps_new_growth_without_bypassing_dark_or_rea
   starts=successive()
   assert starts and 12. <= starts[0][0] <=12.11
   assert {s[1:] for s in starts} == {(2, 'manual_turn')}
+
+
+def test_confirmed_reversal_survives_brief_steering_peak_at_rearm():
+  starts = successive('peak')
+  assert starts and 12. <= starts[0][0] <= 12.11
+
+
+@pytest.mark.parametrize('fault', ['unwound', 'released'])
+def test_confirmed_reversal_is_not_replayed_after_unwind_or_release(fault):
+  assert not successive(fault)
 
 
 @pytest.mark.parametrize('fault', ['lever', 'invalid', 'busy', 'disabled', 'pose'])

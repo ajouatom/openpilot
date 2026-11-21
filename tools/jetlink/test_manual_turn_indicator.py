@@ -7,7 +7,34 @@ from blink_observation import allowed
 from test_indicator_reconstruction import scene
 from openpilot.selfdrive.controls.lib.desire_lib.boundary_indicator import BoundaryIndicator
 from openpilot.selfdrive.controls.lib.desire_lib.indicator_observer import ModelIndicator, following_road_curve
-from openpilot.selfdrive.controls.lib.desire_lib.manual_turn_indicator import ManualTurnMovement
+from openpilot.selfdrive.controls.lib.desire_lib.manual_turn_indicator import ManualTurnIndicator, ManualTurnMovement
+
+
+@pytest.mark.parametrize('fault', [None, 'curve', 'expired', 'unwind', 'released', 'opposite', 'post_ready_peak'])
+def test_rearm_peak_memory_is_bounded_to_a_confirmed_blocked_turn(fault):
+  cs, _ = scene()
+  cs.vEgo, cs.steeringPressed, cs.steeringTorque = 5., True, -400.
+  detector = ManualTurnIndicator()
+  emitted, pending = [], False
+  for i in range(60):
+    cs.steeringAngleDeg = -min(300., i*8.)
+    if fault == 'post_ready_peak':
+      cs.steeringAngleDeg = -(min(110., i*8.) + max(0, min(i-20, 23)))
+    if i >= 38:
+      if fault == 'unwind':
+        cs.steeringAngleDeg = -290.
+      elif fault == 'released':
+        cs.steeringPressed = False
+      elif fault == 'opposite':
+        cs.steeringTorque = 400.
+    result = detector.update(10.+i*.05, cs, i, .2, allowed=True,
+      following_curve=fault == 'curve' and i >= 38,
+      emit_allowed=i >= (46 if fault == 'expired' else 40), require_growth=True)
+    pending |= detector.pending_growth
+    if result:
+      emitted.append(i)
+  assert pending  # The fault must invalidate a previously confirmed turn.
+  assert bool(emitted) == (fault is None)
 
 
 def drive(direction=1, fault=None):

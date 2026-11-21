@@ -48,6 +48,8 @@ class ManualTurnIndicator:
     self.candidate = None
     self.reason = 'idle'
     self.recent_angles = deque()
+    self.pending_growth = False
+    self.pending_peak = self.pending_at = 0.
 
   def reset(self, reason):
     self.previous = None
@@ -59,6 +61,7 @@ class ManualTurnIndicator:
     self.candidate = None
     self.reason = reason
     self.recent_angles.clear()
+    self.pending_growth = False
 
   def update(self, now, cs, frame, yaw_rate, *, allowed, following_curve=False, emit_allowed=True, require_growth=False):
     self.candidate = None
@@ -81,6 +84,7 @@ class ManualTurnIndicator:
       self.confirmed_since = None
       self.pressed_since = now
       self.intent_confirmed = False
+      self.pending_growth = False
     if direction:
       self.last_pressed = now
       self.pressed_since = now if self.pressed_since is None else self.pressed_since
@@ -91,12 +95,20 @@ class ManualTurnIndicator:
       self.reset('driver')
       return None
     sign = 1 if self.intent == 1 else -1
+    if self.pending_growth:
+      if (direction != self.intent or self.pending_peak - cs.steeringAngleDeg * sign > 5 or now-self.pending_at > .3 or
+          emit_allowed and (cs.steeringAngleDeg-previous[2])*sign > 0):
+        self.pending_growth = False
+      elif cs.steeringAngleDeg * sign > self.pending_peak:
+        self.pending_peak, self.pending_at = cs.steeringAngleDeg * sign, now
     self.recent_angles.append((now, cs.steeringAngleDeg))
     while self.recent_angles and now-self.recent_angles[0][0] > .25:
       self.recent_angles.popleft()
     if not emit_allowed:
       # Bridge only the last quarter-second of the rearm boundary. Reusing a
       # whole completed steering sweep can indicate a later alignment motion.
+      if direction != self.intent:
+        self.pending_growth = False
       self.initial_angle = sign * max(self.initial_angle * sign,
                                      min(angle * sign for _, angle in self.recent_angles))
     # A driver may relax the wheel, then resume the same turn after takeover.
@@ -107,15 +119,24 @@ class ManualTurnIndicator:
     signed_yaw = -yaw_rate * sign
     self.rotation += signed_yaw * dt
     if following_curve:
+      self.pending_growth = False
       self.confirmed_since = None
       self.reason = 'road_curve'
       return None
     self.candidate = (self.intent, 'manual_turn')
     self.reason = 'confirming'
+    peak = self.pending_growth and (cs.steeringAngleDeg-previous[2])*sign <= 0
     turn = (self.intent_confirmed and cs.steeringAngleDeg * sign >= 42 and
-            (cs.steeringAngleDeg - self.initial_angle) * sign >= 22 and
+            ((cs.steeringAngleDeg - self.initial_angle) * sign >= 22 or peak) and
             signed_yaw >= math.radians(3) and self.rotation >= math.radians(1.5) and
-            (not require_growth or direction == self.intent and (cs.steeringAngleDeg-previous[2])*sign > 0))
+            (not require_growth or direction == self.intent and
+             ((cs.steeringAngleDeg-previous[2])*sign > 0 or peak)))
+    if not emit_allowed and require_growth and turn:
+      # Bridge a confirmed peak that occurs while emission is blocked. Once
+      # admitted, renewed growth uses the ordinary detector, not this memory.
+      if not self.pending_growth:
+        self.pending_peak, self.pending_at = cs.steeringAngleDeg * sign, now
+        self.pending_growth = True
     self.confirmed_since = (now if self.confirmed_since is None else self.confirmed_since) if turn else None
     if emit_allowed and self.confirmed_since is not None and now - self.confirmed_since >= .10:
       movement = ManualTurnMovement(now, self.intent)
