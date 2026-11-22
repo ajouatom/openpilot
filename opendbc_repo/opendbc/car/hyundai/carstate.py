@@ -1150,7 +1150,8 @@ class CarState(CarStateBase):
 
     # Mode 1 accepts all future profiles. Mode 2 route-gates bumps, and mode 3
     # route-gates cameras and bumps. A route-gated profile must belong to the
-    # currently calculated path reported by 0x4B9.
+    # currently calculated path reported by the segment message
+    # (0x4B9; on the GV80, whose segment arrives as 0x4B5, by that message).
     route_required = (self.vehicleNaviCanControl == 3 or
                       (self.vehicleNaviCanControl == 2 and event_type == "bump"))
     if not route_required:
@@ -1297,8 +1298,20 @@ class CarState(CarStateBase):
         guidance_active = bool(int(self.navi_segment_4b5.get("BYTE_5", 0)) & VEHICLE_NAVI_SEGMENT_4B5_ACTIVE_MASK)
         if guidance_active:
           self.vehicleNaviSegmentTimestamp = timestamp_4b5
+          previous_route_state = self.vehicleNaviRouteState
+          previous_path_index = self.vehicleNaviRoutePathIndex
           self.vehicleNaviRouteState = 1
+          # 경로 번호도 0x4B5 자기 필드(bits 13|6)에서 채운다. 위 0x4B9 블록과 같은
+          # 해석기를 쓴다. 이 값을 채우지 않으면 모드 2/3의 경로 게이팅 조건
+          # (profile path_index == 현재 경로 번호)이 GV80에서는 영원히 성립하지 않아
+          # 방지턱(모드 2)·카메라(모드 3) 감속이 통째로 죽는다. 실측 근거: 보유 로그
+          # 전수(2026-11-21 고속도로, 11-22 시내·안내 ON/OFF 실험, 4,340프레임)에서
+          # 0x4B5 PATH는 항상 8이었고, 0x4B8 프로파일의 PATH_INDEX 상수 8과 일치한다.
+          self.vehicleNaviRoutePathIndex = self._decode_vehicle_navi_segment(self.navi_segment_4b5)["path_index"]
           self.vehicleNaviSegment4b5Active = True
+          if (self.vehicleNaviCanControl >= 2 and previous_route_state == 1 and
+              previous_path_index != self.vehicleNaviRoutePathIndex):
+            self._clear_vehicle_navi_route_filtered_events()
         else:
           if self.vehicleNaviSegment4b5Active:
             self.vehicleNaviRouteResetTimestamp = timestamp_4b5
@@ -1320,7 +1333,13 @@ class CarState(CarStateBase):
         self._clear_vehicle_navi_school_zone()
 
     route_age = getattr(cp, "_last_update_nanos", max(profile_timestamp, self.vehicleNaviSegmentTimestamp)) - self.vehicleNaviSegmentTimestamp
+    # GV80의 경로 상태 만료는 위 0x4B5 블록이 안내 비트 전이와 600초 스트림 백스톱으로
+    # 관리한다. 0x4B5는 이벤트 기반 송신이라 안내 중에도 수 분 무송신이 정상이다
+    # (2026-11-21 실측 최장 415초). 0x4B9의 주기 수신을 전제한 아래 2초 규칙을 그대로
+    # 적용하면 모드 2/3에서 경로 상태가 상시 떨어져 게이팅이 동작하지 않는다.
+    route_owned_by_4b5 = self.canfd_gv80_navi and self.vehicleNaviSegment4b5Active
     if (self.vehicleNaviCanControl >= 2 and self.vehicleNaviRouteState == 1 and
+        not route_owned_by_4b5 and
         (route_age < 0 or route_age > VEHICLE_NAVI_ROUTE_TIMEOUT_NS)):
       self.vehicleNaviRouteState = 0
       self.vehicleNaviRoutePathIndex = None
