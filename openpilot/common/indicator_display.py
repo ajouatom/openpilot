@@ -7,7 +7,7 @@ import time
 PATH = Path('/dev/shm/carrot-indicator-display.json')
 MAX_BYTES = 1024
 MAX_AGE = .6
-ORIGINS = {'turn': 'TBT 턴', 'lane': 'ATC 차선변경', 'tbt': '250m 우측',
+ORIGINS = {'turn': 'TBT 턴', 'lane': 'ATC 차선변경', 'tbt': 'TBT 우측',
            'manual': '운전자 차선접근', 'manual_turn': '운전자 수동 턴', 'model_path': '모델 경로',
            'model_desire': '모델 차선변경', 'model_turn': '모델 턴', 'bluetooth': 'BT 리모컨'}
 REASONS = {'confirming': '조건 확인 중', 'approach': '턴 지점 접근', 'turning': '턴 진행 중',
@@ -20,6 +20,8 @@ REASONS = {'confirming': '조건 확인 중', 'approach': '턴 지점 접근', '
            'route_or_distance': '경로·거리 조건 종료', 'route': '경로 조건 종료',
            'timeout': '유지 시간 종료', 'cancelled': '요청 종료', 'ended': '요청 종료',
            'disabled': '기능 꺼짐', 'start': '시작 조건 종료', 'atc': '다른 ATC 동작',
+           'start_timeout': '차선변경 시작 대기 초과',
+           'isolation': '이전 표시 깜박이 종료 대기',
            'turn_started': '턴 시작', 'maneuver': '차선변경 조건 종료',
            'interrupted': '차선변경 중단', 'route_jump': '경로 거리 변경',
            'invalid': '입력 무효', 'active': '유지 중', 'waiting': '시작 대기',

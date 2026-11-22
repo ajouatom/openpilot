@@ -542,7 +542,7 @@ USB-CAN requests the initial blink; the existing vehicle indicator-hold function
 
 A hold-start request without confirmed lamp activation expires after four seconds, allowing the next button press to start a new request.
 
-`AutoTurnControlRightLaneChange` under ATC details adds to modes 1 and 2 and triggers the physical right indicator before a TBT right turn or right fork, at 10km/h or above and within the configured distance, until turning starts. It requires the supported USB2CAN indicator setup, a right lane, fresh OEM BSD and right-front gaps of at least 5 m both now and after three seconds; existing manual/Bluetooth lane-change behavior is unchanged. See [lane changes](lane-change.md).
+`AutoTurnControlRightLaneChange` under ATC details adds to modes 1 and 2 and triggers the physical right indicator before a TBT right turn or right fork, at 10km/h or above and within the configured distance, until turning starts. It requires the supported USB2CAN indicator setup, a right lane, fresh OEM BSD and right-front gaps of at least 5 m both now and after three seconds; existing manual/Bluetooth lane-change behavior is unchanged. The maximum setting is 2000m, with a 500m cap on local roads or when road information is unknown. See [lane changes](lane-change.md).
 
 `ManualTurnIndicator` requests an indicator when driver steering and vehicle rotation agree. The wheel must reach 42 degrees and move at least 22 degrees from the start of steering. Detection resumes two seconds after the previous indication last renewed its hold, once both lamps have also been off for one continuous second. The setting defaults to off and can detect parking turns. [Manual turn conditions](lane-change.md)
 
