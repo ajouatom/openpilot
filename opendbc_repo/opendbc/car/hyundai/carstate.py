@@ -51,6 +51,13 @@ CANFD_NAVI_PROFILE_MSG = "CANFD_NAVI_PROFILE_093"
 CANFD_NAVI_SEGMENT_MSG = "CANFD_NAVI_SEGMENT_099"
 CANFD_NAVI_STATUS_MSG = "CANFD_NAVI_STATUS_380"
 LEGACY_NAVI_PROFILE_4B8_MSG = "NEW_MSG_4B8"  # Alternate 8-byte PROLONG address, selected by receipt rather than vehicle model.
+# GV80 순정내비는 경로 상태(세그먼트)를 0x4B9가 아니라 0x4B5로 보낸다. BYTE_5의 bit 3이
+# 안내 활성 표시다 (안내 중 1, 안내를 끄면 0, 안내 종료 시 프레임 자체가 끊기기도 함).
+LEGACY_NAVI_SEGMENT_4B5_MSG = "NEW_MSG_4B5"
+VEHICLE_NAVI_SEGMENT_4B5_ACTIVE_MASK = 0x08  # BYTE_5 bit 3
+# 0x4B5는 안내 중에도 수 분씩 끊기는 일이 있어(2026-11-21 고속도로 주행 실측: 최장 415초
+# 무송신) 스트림 중단 판정은 600초로 길게 잡는다. 안내 종료의 주 신호는 활성 bit 전이다.
+VEHICLE_NAVI_SEGMENT_4B5_TIMEOUT_NS = 600_000_000_000
 CANFD_NAVI_CAMERA_ACTIVE_BIT = 0x40
 CANFD_NAVI_STATUS_TIMEOUT_NS = 1_000_000_000
 STANDSTILL_THRESHOLD = 12 * 0.03125 * CV.KPH_TO_MS
@@ -209,6 +216,7 @@ class CarState(CarStateBase):
     self.ccnc_0x162 = None
     self.canfd_wrapped_navi = CP.carFingerprint == CAR.KIA_PV5
     self.canfd_ev4_navi = CP.carFingerprint == CAR.KIA_EV4
+    self.canfd_gv80_navi = CP.carFingerprint == CAR.GENESIS_GV80
     self.hda_info_msg = CANFD_HDA_INFO_MSG if (self.canfd_wrapped_navi or self.canfd_ev4_navi) else "HDA_INFO_4A3"
     self.navi_segment_msg = CANFD_NAVI_SEGMENT_MSG if self.canfd_ev4_navi else "NEW_MSG_4B9"
     self.navi_profile_msg = CANFD_NAVI_PROFILE_MSG if (self.canfd_wrapped_navi or self.canfd_ev4_navi) else "NEW_MSG_4BE"
@@ -216,6 +224,7 @@ class CarState(CarStateBase):
     self.hda_info_4a3 = None
     self.navi_position_4b4 = None
     self.navi_segment_4b9 = None
+    self.navi_segment_4b5 = None
     self.navi_profile_4be = None
     self.navi_profile_4b8 = None
     self.navi_status_380 = None
@@ -295,6 +304,8 @@ class CarState(CarStateBase):
     self.section_average = SectionAverage()
     self._read_speedcam_params()
     self.vehicleNaviSegmentTimestamp = 0
+    self.vehicleNaviSegment4b5Timestamp = 0
+    self.vehicleNaviSegment4b5Active = False
     self.vehicleNaviProfileTimestamp = 0
     self.vehicleNaviProfile4b8Timestamp = 0
     self.vehicleNaviAvailable = False
@@ -537,6 +548,8 @@ class CarState(CarStateBase):
             add_and_cache(self.cp, "NEW_MSG_4B4", "navi_position_4b4")
             add_and_cache(self.cp, self.navi_segment_msg, "navi_segment_4b9")
             add_and_cache(self.cp, self.navi_profile_msg, "navi_profile_4be")
+            if self.canfd_gv80_navi:
+              add_and_cache(self.cp, LEGACY_NAVI_SEGMENT_4B5_MSG, "navi_segment_4b5")
           add_and_cache(self.cp, LEGACY_NAVI_PROFILE_4B8_MSG, "navi_profile_4b8")
           add_and_cache(self.cp, "STEER_TOUCH_2AF", "steer_touch_2af")
         elif self.controls_ready_count == 124:
@@ -1273,6 +1286,39 @@ class CarState(CarStateBase):
                (previous_route_state == 1 and previous_path_index != segment["path_index"]))):
           self._clear_vehicle_navi_route_filtered_events()
 
+    if self.canfd_gv80_navi:
+      # GV80은 세그먼트가 0x4B9로 오지 않아(콤마 자체 더미뿐) 위 경로 리셋이 걸리지 않고,
+      # 안내를 꺼도 옛 카메라·방지턱 큐가 남아 엉뚱한 도로에서 발동했다 (2026-11-22 실측,
+      # 유령 40km/h 카메라 2건). 실제 세그먼트인 0x4B5의 안내 활성 비트 전이와 스트림
+      # 중단으로, calculated_route == 2가 왔을 때와 같은 리셋 절차를 구동한다.
+      timestamp_4b5 = self._vehicle_navi_message_timestamp(cp, LEGACY_NAVI_SEGMENT_4B5_MSG)
+      if self.navi_segment_4b5 is not None and timestamp_4b5 > self.vehicleNaviSegment4b5Timestamp:
+        self.vehicleNaviSegment4b5Timestamp = timestamp_4b5
+        guidance_active = bool(int(self.navi_segment_4b5.get("BYTE_5", 0)) & VEHICLE_NAVI_SEGMENT_4B5_ACTIVE_MASK)
+        if guidance_active:
+          self.vehicleNaviSegmentTimestamp = timestamp_4b5
+          self.vehicleNaviRouteState = 1
+          self.vehicleNaviSegment4b5Active = True
+        else:
+          if self.vehicleNaviSegment4b5Active:
+            self.vehicleNaviRouteResetTimestamp = timestamp_4b5
+            self.vehicleNaviRouteState = 2
+            self.vehicleNaviRoutePathIndex = None
+            self._clear_vehicle_navi_events()
+            self._clear_vehicle_navi_speed_zone()
+            self._clear_vehicle_navi_school_zone()
+          self.vehicleNaviSegment4b5Active = False
+      elif (self.vehicleNaviSegment4b5Active and
+            getattr(cp, "_last_update_nanos", 0) - self.vehicleNaviSegment4b5Timestamp > VEHICLE_NAVI_SEGMENT_4B5_TIMEOUT_NS):
+        # 안내가 끝나면 0x4B5 자체가 끊기는 경우: 스트림 중단도 경로 종료로 본다.
+        self.vehicleNaviRouteResetTimestamp = getattr(cp, "_last_update_nanos", 0)
+        self.vehicleNaviRouteState = 2
+        self.vehicleNaviRoutePathIndex = None
+        self.vehicleNaviSegment4b5Active = False
+        self._clear_vehicle_navi_events()
+        self._clear_vehicle_navi_speed_zone()
+        self._clear_vehicle_navi_school_zone()
+
     route_age = getattr(cp, "_last_update_nanos", max(profile_timestamp, self.vehicleNaviSegmentTimestamp)) - self.vehicleNaviSegmentTimestamp
     if (self.vehicleNaviCanControl >= 2 and self.vehicleNaviRouteState == 1 and
         (route_age < 0 or route_age > VEHICLE_NAVI_ROUTE_TIMEOUT_NS)):
@@ -1778,6 +1824,9 @@ class CarState(CarStateBase):
       msgs = [("NEW_MSG_4B4", math.nan), ("NEW_MSG_4B9", math.nan), ("NEW_MSG_4BE", math.nan)]
       alt_msgs = []
     msgs.append((LEGACY_NAVI_PROFILE_4B8_MSG, math.nan))
+    if CP.carFingerprint == CAR.GENESIS_GV80:
+      # GV80만 0x4B5 세그먼트를 추가로 등록한다 (타 차종의 파서 구성은 그대로).
+      msgs.append((LEGACY_NAVI_SEGMENT_4B5_MSG, math.nan))
     if not (CP.flags & HyundaiFlags.CANFD_ALT_BUTTONS):
       # TODO: this can be removed once we add dynamic support to vl_all
       msgs += [
