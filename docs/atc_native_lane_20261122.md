@@ -81,3 +81,11 @@ distance limits and existing indicator/voice paths. Wiki generator tests: 25 pas
 user guides and localized setting explanations are synchronized. Linux native CI
 runs after publication. No vehicle software/settings writes or actuation were
 performed.
+
+Published-code validation on `bd6e537450`: Linux signal integration, Jetson
+integration, user-doc validation and Wiki publication pass. Linux signal jobs
+report 2403/131/931/32/406 passing checks, with 40 skips and 365 subtests across
+those jobs; these counts overlap the local runs. The web settings test initially
+retained the old maximum of 500m. Updating that expected catalog limit to 2000m
+passes all 31 web-control checks locally. No production change is needed for
+that test correction; the final full build/web workflow runs on its follow-up.

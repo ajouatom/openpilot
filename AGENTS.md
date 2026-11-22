@@ -13,6 +13,8 @@
   safety deselected,25Wiki checks pass. Native CI follows publication. No device
   writes. See docs/atc_native_lane_20261122.md; private evidence in task
   work/log1209 (full rlog/qcamera SHA-matched to read-only vehicle originals).
+  Published bd6e537 passes Linux signal, Jetson, docs and Wiki CI. Correct the
+  web catalog test's obsolete500m expectation;31web checks pass locally.
 
 - 2026-11-21: Latest I5PE drives1206/1207 add24 full rlogs+qcamera,48 SHA-matched
   files, read-only retrieval on3d43de5ca6. All28 requests have SPAS and raw lamp
