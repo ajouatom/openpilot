@@ -5,6 +5,7 @@ from openpilot.cereal import log
 from openpilot.common.constants import CV
 from openpilot.common.realtime import DT_MDL
 from openpilot.common.params import Params
+from openpilot.common.tbt_signal import lane_request
 from openpilot.selfdrive.carrot.bluetooth.model import CommandReader, RUNTIME, read_json
 from openpilot.selfdrive.carrot.bluetooth.physical import HOLD_PATH
 from openpilot.selfdrive.controls.lib.desire_lib.boundary_indicator import BoundaryIndicator
@@ -52,6 +53,7 @@ class DesireHelper:
     # Only a car whose carcontroller may kick the lamp (CanfdBlinkerKick: HyundaiSafetyFlags.CANFD_BLINKER_KICK, set by
     # modeld from CarParams) takes lamp ownership for it; every other car keeps the previous lamp interpretation.
     self.kick_supported = kick_supported
+    self.tbt_lane_signal = False
     self.manual_indicator_minimum = 0.
     self.frame = 0
 
@@ -152,6 +154,7 @@ class DesireHelper:
       journal = read_json(RUNTIME/'boundary-indicator.json', {})
       stamp, direction = journal.get('time'), journal.get('mask', journal.get('direction'))
       now = time.monotonic()
+      self.tbt_lane_signal = bool(self.kick_supported and kick and mode == 2 and lane_request(journal, now))
       if (type(stamp) in (int, float) and math.isfinite(stamp) and self.indicator_journal_time < stamp <= now and
           now-stamp < 20 and type(direction) is int and direction in (1, 2, 3)):
         self.boundary_indicator.own(now, direction)
@@ -216,6 +219,14 @@ class DesireHelper:
       self._manual_signal_grace = 0.0
       self._driver_signal_counts = (getattr(carstate, 'leftBlinkerStalkCount', 0),
                                     getattr(carstate, 'rightBlinkerStalkCount', 0))
+    # An admitted native TBT signal is intentional lane-change input, unlike
+    # manual/model/low-speed indication. Require the real lamp and a neutral,
+    # valid driver lever; ordinary lane/BSD/torque/FSM admission still follows.
+    if (self.tbt_lane_signal and valid and lamps == BLINKER_RIGHT and st == BLINKER_NONE and
+        self._manual_signal_direction == BLINKER_NONE and carstate.vEgo >= LANE_CHANGE_SPEED_MIN and
+        not carstate.steeringPressed and not getattr(carstate, 'blinkerLever', 0) and
+        getattr(carstate, 'turnSignalDriverValid', False) and getattr(carstate, 'turnSignalDriverDirection', 0) == 0):
+      st = BLINKER_RIGHT
     changed = st != self.driver_blinker_state
     self.driver_blinker_state = st
 

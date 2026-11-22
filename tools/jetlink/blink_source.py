@@ -8,6 +8,7 @@ import time
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from openpilot.common.atc_params import right_lane_change_distance
+from openpilot.selfdrive.carrot.signal_road_policy import signal_detection_suspended as confirmed_highway
 from blink_protocol import LIMIT, encode, finite, fresh
 from blink_policy import Policy, AutomaticSignals
 from blink_voice import VoiceLaneSignal
@@ -184,7 +185,9 @@ def main(fd, spas=False, ble=False, kick=False):
       automatic.update(now, mode, False, 0., 'none', '', 'none', use_travel=True)
     # The ATC add-on lights the real right indicator. Its CAN feedback goes through the
     # unchanged driver-blinker lane-change path; no LANECHANGE command is sent.
-    tbt_distance = right_lane_change_distance(params)
+    # The shared road policy requires an explicit, fresh motorway/expressway
+    # category. Missing road class or lane count alone never extends the window.
+    tbt_distance = right_lane_change_distance(params, highway=confirmed_highway(sm, now))
     tbt_enabled = (not spas and mode == 2 and params.get_int('AutoTurnControl') in (1, 2) and
                    tbt_distance > 0)
     front_clear = (tbt_enabled and front_radar_available and 'radarState' in sm.services and sm.valid['radarState'] and
@@ -315,6 +318,11 @@ def main(fd, spas=False, ble=False, kick=False):
                         'b1_hold':ble and not native_hold,
                         'turn_phase':automatic.reason, 'turn_position':bool(automatic.journey.active and automatic.journey.active['target'] is not None),
                         'tbt_phase':tbt.reason, 'observation_phase':observed_source,
+                        # Only this admitted high-speed TBT request may use its
+                        # native lamp as ordinary lane-change input. Voice and
+                        # observation holds remain isolated even with source=lane.
+                        'tbt_lane_request': (hold['id'] if kick and hold and not voice_hold and
+                          tbt_auto == ('lane', 'right') and hold['source'] == 'lane' and hold['direction'] == 'right' else None),
                         'indicator_origin':hold['source'] if hold else None}))
       submitted = True
     except BlockingIOError:
