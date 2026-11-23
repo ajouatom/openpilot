@@ -490,7 +490,7 @@ int PandaSpiHandle::spi_transfer_retry(uint8_t endpoint, uint8_t *tx_data, uint1
     recovery_max_us = std::max(recovery_max_us, spi_attempt_timing.recovery_us);
 
     if (ret < 0) {
-      timed_out = (timeout != 0) && (timeout_count > 5);
+      timed_out = (timeout != 0) && (((millis_since_boot() - start_time) > timeout) || (timeout_count > 5));
       timeout_count += ret == SpiError::ACK_TIMEOUT;
 
       // give other threads a chance to run
