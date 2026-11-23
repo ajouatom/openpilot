@@ -1626,3 +1626,30 @@ def test_fixed_camera_always_decelerates():
   ret = SimpleNamespace(vEgo=16.0, speedLimit=60.0, gasPressed=False, vehicleNaviSectionActive=False)
   assert state._apply_speedcam_policy(ret, True, True, 60.0, True)
   assert not state.speedcam_accel_swallow                 # + keeps raising the set speed
+
+
+def test_gv80_horizon_trim_keeps_nearest_boundaries():
+  # 호라이즌이 32개를 넘어도 가까운 등급 경계가 남아 있어야 한다. 먼 미래만
+  # 남기면 간선도로(등급 5) 진입 경계가 사라져 현재 등급을 6으로 오판한다.
+  state = _car_state()
+  state._gv80_update_road_horizon(0.0, 6)                  # 출발 지점: 생활도로
+  for i in range(1, 41):                                   # 100m 간격 전방 구간들
+    state._gv80_update_road_horizon(i * 100.0, 5 if i < 40 else 6)
+  assert len(state.vehicleNaviRoadHorizon) <= 32
+  state.totalDistance = 150.0                              # 100m 경계를 지난 지점
+  assert state._gv80_current_road_class() == 5
+
+
+def test_gv80_horizon_small_offset_segment_keeps_current_cover():
+  # 오프셋이 15m 이하인 새 구간이 와도, 그 구간이 시작되기 전까지는 현재
+  # 위치를 커버하는 항목이 남아 현재 등급이 불명(None)이 되면 안 된다.
+  state = _car_state()
+  state.totalDistance = 990.0
+  state._gv80_update_road_horizon(990.0, 6)
+  state.totalDistance = 1000.0
+  state._gv80_update_road_horizon(1002.0, 5)               # 2m 앞에서 시작하는 새 구간
+  assert state._gv80_current_road_class() == 6
+  assert state._gv80_bump_output_allowed()
+  state.totalDistance = 1003.0                             # 새 구간에 진입한 뒤
+  assert state._gv80_current_road_class() == 5
+  assert not state._gv80_bump_output_allowed()

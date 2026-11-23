@@ -1050,19 +1050,28 @@ class CarState(CarStateBase):
 
   def _gv80_update_road_horizon(self, start_distance, road_class):
     # GV80 호라이즌(전방 구간별 도로등급)에 한 구간을 반영한다. 새 구간 시작점보다
-    # 뒤(15m 여유)에 있는 옛 항목은 새 항목이 대체하므로 버리고, 현재 위치를
-    # 커버하는 가장 최근 항목만 뒤에 남긴다.
+    # 뒤(15m 여유)에 있는 옛 항목은 새 항목이 대체하므로 버리되, 현재 위치를
+    # 커버하는 가장 최근 항목은 새 구간이 시작되기 전까지 현재 등급의 근거라
+    # 버리지 않는다. 새 구간은 항상 현재 위치보다 앞에서 시작하므로, 커버
+    # 항목을 지우면 그 사이 구간에서 현재 등급이 불명(None)이 된다.
     if road_class <= 0:
       return
+    cover = None
+    for entry in self.vehicleNaviRoadHorizon:
+      if entry[0] <= self.totalDistance:
+        cover = entry
     horizon = [entry for entry in self.vehicleNaviRoadHorizon if entry[0] < start_distance - 15.0]
+    if cover is not None and cover not in horizon:
+      horizon.append(cover)
     horizon.append((start_distance, road_class))
     horizon.sort(key=lambda entry: entry[0])
     behind = [i for i, entry in enumerate(horizon) if entry[0] <= self.totalDistance]
     if len(behind) > 1:
       horizon = horizon[behind[-1]:]
     if len(horizon) > 32:
-      # 맨 앞(현재 위치를 커버하는) 항목은 반드시 남긴다.
-      horizon = horizon[:1] + horizon[-31:]
+      # 앞쪽(현재 위치와 가까운 미래)부터 남긴다. 먼 미래를 남기고 가까운
+      # 등급 경계를 버리면, 그 경계를 지날 때 현재 등급을 잘못 읽는다.
+      horizon = horizon[:32]
     self.vehicleNaviRoadHorizon = horizon
 
   def _gv80_current_road_class(self):
