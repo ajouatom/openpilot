@@ -732,11 +732,7 @@ static bool hyundai_canfd_tx_hook(const CANPacket_t *to_send_const) {
   // Exception (GV80 echo): the car's own frame carries constant fields the BCM may validate, so those exact
   // values are allowed through. Nothing else may be non-zero. 11-20 (GV80 auto-parking logs): byte 3 is 0x26 while its
   // parking system is armed, and the parking ECU's own lamp frames carry byte 18 = 0x40 with BLINKER_CONTROL 3/4.
-  // CanfdBlinkerMenuTest 3/4 (GV80 test, 11-20): its lamp frames' parking-active body b4 41, b5 19, b6 04, b7 01, b15 13,
-  // only all together - the GV80 echo of a stock auto-parking frame (b4 41, b15 13, b5..7 left 0) stays refused as before.
   if ((addr == 0x165) || (addr == 0x16A)) {
-    bool park_body = (addr == 0x16A) && (GET_BYTE(to_send, 4) == 0x41U) && (GET_BYTE(to_send, 5) == 0x19U) &&
-                     (GET_BYTE(to_send, 6) == 0x04U) && (GET_BYTE(to_send, 7) == 0x01U) && (GET_BYTE(to_send, 15) == 0x13U);
     for (uint8_t i = 3U; i < GET_LEN(to_send); i++) {
       uint8_t b = GET_BYTE(to_send, i);
       bool blinker = (addr == 0x16A) && (i == 16U) && ((b & 0x1FU) == 0U);
@@ -744,13 +740,10 @@ static bool hyundai_canfd_tx_hook(const CANPacket_t *to_send_const) {
       if (addr == 0x16A) {
         if ((i == 3U) || (i == 4U)) {
           stock_field = (b == 0x01U) || ((i == 3U) && (b == 0x26U));   // both cars: 01 01; GV80 b3 26 when armed
-          stock_field = stock_field || ((i == 4U) && park_body);      // GV80 parking-active b4 (whole body only)
-        } else if ((i >= 5U) && (i <= 7U)) {
-          stock_field = park_body;   // GV80 parking-active b5..7 (whole body only)
         } else if ((i >= 10U) && (i <= 13U)) {
           stock_field = (b == 0x80U);   // GV80: 80 80 80 80
         } else if ((i == 14U) || (i == 15U)) {
-          stock_field = (b == 0x03U) || ((i == 15U) && park_body);   // Ioniq 5 b14, both cars b15; GV80 parking-active b15
+          stock_field = (b == 0x03U);   // Ioniq 5 b14, both cars b15
         } else if (i == 18U) {
           stock_field = (b == 0x40U);   // GV80: with BLINKER_CONTROL 3/4 in the parking ECU's lamp frames
         } else if (i == 20U) {

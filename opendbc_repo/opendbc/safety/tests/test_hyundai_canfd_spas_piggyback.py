@@ -147,26 +147,6 @@ def test_gv80_parking_ecu_lamp_fields_are_allowed():
   assert not d.s.safety_tx_hook(raw(3, 0x01, 0x41)) and not d.s.safety_tx_hook(raw(4, 0x27, 0x40))
 
 
-def test_gv80_parking_active_body_is_allowed():
-  # CanfdBlinkerMenuTest 3/4 (GV80 test, 11-20): the stock lamp frames' parking-active body b3 26 b4 41 b5 19 b6 04 b7 01
-  # b15 13 (+ b18 40) passes only as a whole; a part of it (e.g. the GV80 echo of a stock auto-parking frame: b4 41, b15
-  # 13, b5..7 0) or a neighbour value is refused
-  d = Device()
-  body = {3: 0x26, 4: 0x41, 5: 0x19, 6: 0x04, 7: 0x01, 15: 0x13, 18: 0x40}
-  def raw(counter, changes):
-    data = bytearray(frame(SPAS2, counter, "left", 0).dat)
-    for i, v in changes.items():
-      data[i] = v
-    data[:2] = checksum(SPAS2, data).to_bytes(2, 'little')
-    return libsafety_py.make_CANPacket(SPAS2, 0, bytes(data))
-  assert d.s.safety_tx_hook(raw(1, body))
-  for n, (i, v) in enumerate(body.items()):
-    assert d.s.safety_tx_hook(raw(10 + n, {i: v})) == (i in (3, 18))  # alone: only the older single-byte rules pass
-    assert not d.s.safety_tx_hook(raw(30 + n, {**body, i: v + 1}))
-  assert not d.s.safety_tx_hook(raw(50, {3: 0x26, 4: 0x41, 15: 0x13, 18: 0x40}))  # stock auto-parking echo, b5..7 0
-  assert not d.s.safety_tx_hook(raw(51, {4: 0x26})) and not d.s.safety_tx_hook(raw(52, {14: 0x13}))
-
-
 def test_hda1_allows_the_parking_ecu_and_spas_ids():
   # 11-17: HDA1 (camera SCC + long, no HDA2) takes 0x7B1 and SPAS1/SPAS2 like HDA2; before only the piggyback copy left
   d = Device(4 | 8)
