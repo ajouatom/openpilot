@@ -8,6 +8,7 @@ from functools import cached_property, lru_cache
 from pathlib import Path
 
 from openpilot.cereal import log
+from openpilot.common.reboot import reboot_device
 from openpilot.common.utils import sudo_read, sudo_write
 from openpilot.common.gpio import gpio_set, gpio_init, get_irqs_for_action
 from openpilot.system.hardware.base import HardwareBase, LPABase, ThermalConfig, ThermalZone
@@ -144,7 +145,6 @@ class Tici(HardwareBase):
     return get_device_type()
 
   def reboot(self, reason=None):
-    from openpilot.common.reboot import reboot_device
     reboot_device()
 
   def uninstall(self):

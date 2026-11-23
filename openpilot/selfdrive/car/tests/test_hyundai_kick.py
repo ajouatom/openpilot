@@ -167,7 +167,8 @@ def test_common_detector_settings_match_external_output(mode, selected, legacy_m
   path = Path(__file__).parents[2] / 'controls/lib/desire_helper.py'
   method = next(node for node in ast.walk(ast.parse(path.read_text(encoding='utf-8')))
                 if isinstance(node, ast.FunctionDef) and node.name == '_update_params_periodic')
-  scope = {'RUNTIME':Path('.'), 'read_json':lambda *args:{}, 'time':NS(monotonic=lambda:10.), 'CV':NS(KPH_TO_MS=1/3.6)}
+  scope = {'RUNTIME':Path('.'), 'read_json':lambda *args:{}, 'time':NS(monotonic=lambda:10.), 'CV':NS(KPH_TO_MS=1/3.6),
+           'lane_request':kick.lane_request}
   exec(compile(ast.Module(body=[method], type_ignores=[]), str(path), 'exec'), scope)
   for native in (False, True):
     bools = dict.fromkeys(('ManualLaneChangeIndicator', 'ManualTurnIndicator', 'ModelDesireIndicator', 'ModelPathIndicator'), selected)
@@ -243,6 +244,64 @@ def test_journal_failure_blocks_lamp(output, monkeypatch):
   data = bytearray(32)
   data[16] = 3 << 5
   assert gate.isolate([(0x16A, data, 0)], NS(meta=NS(indicatorIsolationMask=1)), 10.) == []
+
+
+@pytest.mark.parametrize('handover', [False, True])
+def test_admitted_tbt_keeps_mask_with_short_permission_and_cancels_tail(source_output, monkeypatch, tmp_path, handover):
+  from openpilot.common.tbt_signal import lane_request
+  gate, _, record, _, cs = source_output
+  monkeypatch.setattr(kick, 'RUNTIME', tmp_path)
+  gate.owner.held = True
+  hold_record(record, 10., direction='right')
+  record['tbt_lane_request'] = 'hold-1'
+  assert gate.request(cs, 10., True, True) == 4
+  frames = submitted(4)
+  model = NS(meta=NS(indicatorIsolationMask=0))
+  assert gate.isolate(frames, model, 10.01) == []  # still waits for model acknowledgement
+  path = tmp_path/'boundary-indicator.json'
+  journal = kick.read_json(path, {})
+  assert journal['mask'] == 2 and lane_request(journal, 10.02) == 'hold-1'
+  model.meta.indicatorIsolationMask = 2
+  assert gate.isolate(frames, model, 10.05) == frames
+  hold_record(record, 10.15, direction='right', started=10.)
+  assert gate.request(cs, 10.15, True, True) == 4
+  assert gate.isolate(frames, model, 10.15) == frames
+  assert lane_request(kick.read_json(path, {}), 10.16) == 'hold-1'
+  record.update(stamp=10.2, tbt_lane_request=None)
+  if not handover: record['hold'] = None
+  assert gate.request(cs, 10.2, True, True) == (4 if handover else 0)
+  journal = kick.read_json(path, {})
+  assert journal['mask'] == 2 and lane_request(journal, 10.2) is None
+
+
+@pytest.mark.parametrize('fault', ['missing', 'wrong_id', 'observation', 'old', 'other_mask', 'no_owner', 'left'])
+def test_tbt_permission_cannot_promote_other_lamps(source_output, monkeypatch, tmp_path, fault):
+  from openpilot.common.tbt_signal import lane_request
+  gate, _, record, _, cs = source_output
+  monkeypatch.setattr(kick, 'RUNTIME', tmp_path)
+  gate.owner.held = fault != 'no_owner'
+  side = 3 if fault == 'left' else 4
+  hold_record(record, 10., direction='left' if fault == 'left' else 'right')
+  if fault != 'missing': record['tbt_lane_request'] = 'other' if fault == 'wrong_id' else 'hold-1'
+  if fault == 'observation': record['hold']['source'] = 'observation'
+  gate.request(cs, 10., True, True)
+  if fault == 'old': record['stamp'] = 9.
+  model = NS(meta=NS(indicatorIsolationMask=2 if fault == 'other_mask' else 0))
+  gate.isolate(submitted(side), model, 10.01)
+  assert lane_request(kick.read_json(tmp_path/'boundary-indicator.json', {}), 10.02) is None
+
+
+@pytest.mark.parametrize('fault', ['expired', 'future', 'zero', 'missing_id', 'wrong_direction', 'wrong_mask'])
+def test_native_tbt_permission_is_bounded(fault):
+  from openpilot.common.tbt_signal import lane_request
+  journal = dict(time=10., direction=2, mask=2, tbt_lane_request='request')
+  if fault == 'expired': journal['time'] = 9.79
+  if fault == 'future': journal['time'] = 10.1
+  if fault == 'zero': journal['time'] = 0.
+  if fault == 'missing_id': journal.pop('tbt_lane_request')
+  if fault == 'wrong_direction': journal['direction'] = 1
+  if fault == 'wrong_mask': journal['mask'] = 1
+  assert lane_request(journal, 10.) is None
 
 
 def lever_frame(direction, stamp=10., bus=0):
@@ -383,6 +442,7 @@ def test_verified_driver_is_recognized_while_native_lamp_mask_is_active(output, 
   observer = BoundaryIndicator()
   observer.own(10., direction)
   helper = NS(boundary_indicator=observer, kick_supported=True, tesla_auto_signals=False,
+              tbt_lane_signal=False,
               _driver_signal_counts=None, _manual_signal_direction=0, _manual_signal_grace=0.,
               driver_blinker_state=0, laneChangeNeedTorque=0, stalk_counts=None)
   gate, _ = output

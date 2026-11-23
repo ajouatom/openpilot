@@ -35,18 +35,20 @@ class CarInterface(CarInterfaceBase):
 
     params = Params()
     camera_scc = params.get_int("HyundaiCameraSCC")
+    hda2 = params.get_int("CanfdHDA2") > 0
     if camera_scc > 0:
       ret.flags |= HyundaiFlags.CAMERA_SCC.value
       print("$$$CAMERA_SCC toggled...")
+    elif hda2 and ret.flags & HyundaiFlags.CANFD:
+      # A stock HDA2 harness reads SCC on ECAN. A platform's HDA1 camera
+      # default must not override the explicitly selected harness topology.
+      ret.flags &= ~HyundaiFlags.CAMERA_SCC.value
 
     ret.brand = "hyundai"
 
     if candidate == CAR.KIA_SORENTO:
       ret.extFlags |= HyundaiExtFlags.RADAR_GROUP4.value
 
-    cam_can = CanBus(None, fingerprint).CAM if camera_scc == 0 else 1
-    hda2 = False #0x50 in fingerprint[cam_can] or 0x110 in fingerprint[cam_can]
-    hda2 = hda2 or params.get_int("CanfdHDA2") > 0
     CAN = CanBus(None, fingerprint, hda2)
 
     # Prefer the current camera wiring, while supporting recorded src=1 wiring.

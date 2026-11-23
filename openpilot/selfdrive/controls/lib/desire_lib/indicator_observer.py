@@ -268,6 +268,7 @@ class ModelIndicator:
     self.tap_echo = TapEcho()
     self.manual_turn = ManualTurnIndicator()
     self.follow_turn = None
+    self.follow_lane_turn = False
     self.follow_observer = ManualTurnIndicator()
 
   def update(self, now, cs, md, *, valid, lateral_active, desire_enabled, path_enabled, busy, isolation, manual_edge=0, command_curvature=None,
@@ -318,10 +319,20 @@ class ModelIndicator:
         if (not common or busy or not allowed or opposite_lamp or
             not moving and not minimum):
           self.reason = a.reason if common and allowed and not busy and not opposite_lamp else 'cancelled'
-          # Only an independently recognized manual turn can seed its successor.
-          # A lane crossing/avoidance or an input/driver-lever cancellation cannot.
+          if (a.source == 'manual' and self.reason in ('returned', 'relabel', 'geometry') and
+              0 < now-self.request_time <= 2.):
+            isolation.short_attempt_end = (now, a.direction)
+          # Opposite-turn memory requires a recognized manual turn. The separate
+          # same-side continuation below never follows a driver/input cancellation.
           self.follow_turn = ((now, 3-a.direction)
                               if a.source == 'manual_turn' and self.reason == 'driver_opposite' else None)
+          # A short, abandoned boundary observation must not consume the next
+          # independently confirmed same-side turn. Never revive its old lease.
+          self.follow_lane_turn = (a.source == 'manual' and self.reason in ('returned', 'relabel') and
+                                   0 < now-self.request_time <= 2. and cs.steeringPressed and
+                                   cs.steeringTorque * (1 if a.direction == 1 else -1) > 0)
+          if self.follow_lane_turn:
+            self.follow_turn = (now, a.direction)
           self.follow_observer.reset('previous_turn')
           self.active = None
         else:
@@ -339,7 +350,8 @@ class ModelIndicator:
         self.reason = 'manual'
         return
       # A new driver turn may be observed before other automatic sources rearm.
-      # Lamp masking and the uninterrupted dark interval still apply.
+      # Ordinary/opposite rearm requires darkness. A short same-side boundary
+      # attempt may hand over to independently confirmed turn observation.
       manual_turn_after = isolation.block_until - QUIET_SEC + MANUAL_TURN_QUIET_SEC
       turn_ready = (not cs.leftBlinker and not cs.rightBlinker and now >= manual_turn_after and
                     isolation.dark_since is not None and now-isolation.dark_since >= 1.)
@@ -360,7 +372,8 @@ class ModelIndicator:
       follow = self.follow_observer.update(now, cs, md.frameId, yaw_rate,
         allowed=self.follow_turn is not None,
         following_curve=manual_turn_enabled and following_road_curve(md, cs.vEgo, yaw_rate),
-        emit_allowed=turn_ready, require_growth=True)
+        emit_allowed=(turn_ready or self.follow_lane_turn and self.follow_turn is not None and
+                      not (cs.rightBlinker if self.follow_turn[1] == 1 else cs.leftBlinker)), require_growth=True)
       turn = turn or follow
       if turn is not None:
         self.follow_turn = None

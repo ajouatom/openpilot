@@ -1,9 +1,15 @@
-def right_lane_change_distance(params):
+RIGHT_LANE_CHANGE_MAX_M = 2000
+RIGHT_LANE_CHANGE_LOCAL_MAX_M = 500
+
+
+def right_lane_change_distance(params, *, highway=False):
   """Read metres, including an enabled value restored from the former toggle."""
   distance = params.get_int("AutoTurnControlRightLaneChange")
   if distance == 1:
     return 250
-  return distance if 0 <= distance <= 500 else 0
+  if not 0 <= distance <= RIGHT_LANE_CHANGE_MAX_M:
+    return 0
+  return distance if highway else min(distance, RIGHT_LANE_CHANGE_LOCAL_MAX_M)
 
 
 def migrate_atc_params(params):

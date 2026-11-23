@@ -43,12 +43,14 @@ class Ecu:
 
 
 def make_cc(control=True, test=0, spas=0, ecu=None, mode=1, model=True, spas2_only=0):
+  # kick_output_ready as on this branch's cars (CANFD_BLINKER_KICK = 0): carrot-wip's probe cache stays cleared
   cc = SimpleNamespace(blinker_control=control, blinker_test=test, blinker_kick_mode=mode, spas2_only=spas2_only, aprk_spas2_only=0, spas2_sent=-100, aprk_state=0, aprk_frame=0, aprk_nanos=0, aprk_acked=False,
                          lane_crossing=Crossing(), blinker_side=0, blinker_pulse_end=0, frame=0, yellow_until=[0, 0],
                          blinker_kick_model=model, lane_change_prev="off", model_pulse=False, blinker_pulse_start=0, model_hold={}, model_flashes=0, cgw_kick=False, cgw_trial=0, cgw_last_tx=-carcontroller.CGW_REARM_FRAMES,
                          remote_blinker=0, remote_pulse=False, hazard_test=False, hazard_shot_sent=False, hazard_shot_frame=0,
                          CAN=SimpleNamespace(ECAN=0, ACAN=1), packer=CANPacker('hyundai_canfd_generated'), params=SimpleNamespace(STEER_THRESHOLD=250),
-                         spas_steer_test=spas, spas_angle=0., aprk_buses=(), ecu=ecu or Ecu())
+                         spas_steer_test=spas, spas_angle=0., aprk_buses=(), kick_output_ready=False, aprk_no_reply_at=0,
+                         ecu=ecu or Ecu())
   cc.kick_pulse = lambda CS: CarController.kick_pulse(cc, CS)
   cc.restart_pulse = lambda: CarController.restart_pulse(cc)
   return cc

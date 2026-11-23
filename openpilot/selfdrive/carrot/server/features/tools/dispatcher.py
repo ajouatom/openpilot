@@ -24,6 +24,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from aiohttp import web
 
 from openpilot.common.async_process import prepare_repo, run_locked_thread
+from openpilot.common.egpu_diagnostics import append_report
 from openpilot.common.reboot import spawn_reboot
 from openpilot.common.rebuild_request import request_full_rebuild
 from openpilot.common.repo_update import RepoBusyError, child_lock_kwargs, repo_lock
@@ -63,7 +64,6 @@ def capture_tmux_log_sync() -> Tuple[int, str]:
   os.makedirs(os.path.dirname(TMUX_LOG_PATH), exist_ok=True)
   with open(TMUX_LOG_PATH, "w", encoding="utf-8") as f:
     f.write(proc.stdout or "")
-  from openpilot.common.egpu_diagnostics import append_report
   append_report(TMUX_LOG_PATH)
   return 0, ""
 

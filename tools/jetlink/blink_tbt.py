@@ -1,5 +1,6 @@
 """TBT-only physical right indicator request; never emits a steering/lane command."""
 import math
+from openpilot.common.atc_params import RIGHT_LANE_CHANGE_MAX_M
 from openpilot.selfdrive.controls.lib.desire_lib.constants import LANE_CHANGE_SPEED_MIN
 
 CONFIRM_SEC = 1.0
@@ -75,7 +76,7 @@ class TbtBlinker:
     # Gaps reset confirmation and cancel an owned indication, never replay it.
     gap = self.last_time is not None and not 0 <= now-self.last_time <= .35
     self.last_time = now
-    if not enabled or not math.isfinite(distance_limit) or not 0 < distance_limit <= 500:
+    if not enabled or not math.isfinite(distance_limit) or not 0 < distance_limit <= RIGHT_LANE_CHANGE_MAX_M:
       self.phase, self.ready_since, self.last_distance = 'idle', None, None
       self.reason = 'disabled'
       return None
@@ -116,7 +117,11 @@ class TbtBlinker:
         return None
       elif self.phase == 'changing':
         return self.cancel('interrupted')
-      elif (now-self.started >= START_TIMEOUT_SEC and not self.display_only) or not front_clear or not candidate(cs, model, nav, distance_limit):
+      elif now-self.started >= START_TIMEOUT_SEC and not self.display_only:
+        return self.cancel('start_timeout')
+      elif not front_clear:
+        return self.cancel('front')
+      elif not candidate(cs, model, nav, distance_limit):
         return self.cancel('start')
       self.reason = self.phase
       return ('tbt_display' if self.display_only else 'lane', 'right')
@@ -126,6 +131,10 @@ class TbtBlinker:
     # the lamp while that same right-turn preparation waits; admission still uses
     # every ordinary lane/rear/driver gate above. Never join an active change.
     preparing_right = (state == 'preLaneChange' and direction == 'right' and nav.atcType in ('atc right', 'fork right'))
+    # Do not turn another indication's isolated lamp/tail into steering intent.
+    if cs.vEgo >= LANE_CHANGE_SPEED_MIN and getattr(model.meta, 'indicatorIsolationMask', 0):
+      self.ready_since, self.reason = None, 'isolation'
+      return None
     if ((state != 'off' and not preparing_right) or cs.leftBlinker or cs.rightBlinker or busy or
         not front_clear or not candidate(cs, model, nav, distance_limit)):
       self.ready_since = None

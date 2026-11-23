@@ -128,7 +128,7 @@ test("ATC add-on lives in the original mode selector's details", async () => {
   assert.equal(child.default, 0);
   assert.equal(child.control, "slider");
   assert.equal(child.min, 0);
-  assert.equal(child.max, 500);
+  assert.equal(child.max, 2000);
   assert.equal(child.unit, 50);
   assert.deepEqual(model.getItemEntriesForGroup("ATC").map((e) => e.item.name), [parent.name]);
   assert.deepEqual(model.getDetailEntries("ATC", parent.name).map((e) => e.item.name), [parent.name, child.name]);

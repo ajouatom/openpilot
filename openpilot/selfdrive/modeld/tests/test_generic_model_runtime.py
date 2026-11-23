@@ -45,6 +45,16 @@ def test_reject_incompatible_generic_artifact(artifact, change):
     model_metadata(artifact)
 
 
+def test_internal_device_contract_is_explicit_and_does_not_relax_amd_default(artifact):
+  for specs in (artifact['input_specs'], artifact['output_specs']):
+    for spec in specs.values():
+      spec[2] = 'QCOM'
+  with pytest.raises(ValueError, match='device/state'):
+    model_metadata(artifact)
+  _, _, pairs, _ = model_metadata(artifact, device='QCOM')
+  assert len(pairs) == 3
+
+
 def test_generic_dispatch_uploads_warps_and_feeds_back_state(monkeypatch):
   from openpilot.selfdrive.modeld import generic_model_runtime
   wall_clock = iter([0, .01, .03, .06, .10, .10, .12, .13, .17, .23])

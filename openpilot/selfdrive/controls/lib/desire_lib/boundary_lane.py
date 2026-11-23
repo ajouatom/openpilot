@@ -1,8 +1,13 @@
-"""Directional boundary exclusions for manual indication only, never steering."""
+"""Directional model exclusions and independent manual lamp admission."""
 import math
 
 # Minimum speed for the Ioniq 5 PE driver-initiated, lamp-only indications.
 MANUAL_INDICATOR_MIN_SPEED = 5 / 3.6
+
+
+def manual_boundary(cs, md, direction, now):
+  """Manual lamp observation does not classify centre lines or road edges."""
+  return direction in (1, 2)
 
 
 def adjacent_lane(cs, md, direction, now):

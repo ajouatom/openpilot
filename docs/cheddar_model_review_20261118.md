@@ -2,7 +2,9 @@
 
 ## Decision
 
-Apply the constant-Gather compilation fix, but hold the internal-model replacement. The GPU preparation failure is now reproduced and corrected on the installed tinygrad. Cheddar also runs with its exact upstream tinygrad/compiler pair. The current production entry point still needs stateful integration, and the tested upstream image-transfer/warp/policy path has less deadline margin than CD210. The model file, selection catalog and isolated external runtime pins remain unchanged.
+On November 20 the owner requested a return to CD210 after disliking Cheddar's driving behavior. Restore the exact previous CD210 ONNX and its vendored tinygrad compiler/ModelState path together, including the fixed model name in Carrot Web. External eGPU/Jetson choices and runtime pins stay unchanged. The isolated Cheddar implementation remains available for explicit experiments but is no longer the internal default. Normal update and restart rebuild the internal artifact; this repository change does not establish installation on a particular vehicle.
+
+The November 19 promotion and validation below are historical. Matching the official CPU configuration removed the observed synthetic deadline overruns, and worker/reset checks passed; these checks did not establish preferred driving behavior. Returning to CD210 also restores its existing optional signal-observer path. No new observer setting is enabled by this change.
 
 ## Artifacts
 
@@ -89,3 +91,81 @@ Model integration still needs explicit state-buffer, reset, standby warmup and r
 ## Evidence
 
 Initial private artifacts are under `.analysis/scratch/2026-11-18-cheddar-review`; follow-up programs, first-error records, generated shader sources, reference comparisons and full timing samples are under `.analysis/scratch/2026-11-18-cheddar-runtime`. Tests used temporary models/scripts rather than installed model artifacts. Diagnostic imports also populated the existing content-addressed compiler cache; no Params, vehicle control or installed source/model files were changed.
+
+## November 19: matching the official scheduling and integrating execution
+
+Repeat on the same offroad device with all CPU cores online, the inference thread pinned to core 7 with `SCHED_FIFO` priority 54, CPU governors set to performance and the normal 1,689,600 kHz cap, and the GPU interrupt assigned to core 7. Snapshot and restore the previous power/IRQ settings around each isolated command. A separate supervisor checks offroad state every 200 ms and terminates the entire test process group if it changes. The integrated worker reports affinity `[7]` and priority `54` in its startup handshake.
+
+These settings match the relevant upstream modeld/CPU configuration. They do not reproduce simultaneous camera capture, driver monitoring, other onroad processes, vehicle motion or a sustained thermal workload. All rows use synthetic full-resolution NV12 input, image warp, recurrent inference and synchronous readback, with 40 settling frames and 500 timed calls. The integrated row also includes IPC, validation and the production output parser. CD210 uses its existing resident image-buffer path; Cheddar uses the official full-image upload path.
+
+| Execution path | Mean | p95 | Maximum | Above 50 ms |
+| --- | --- | --- | --- | --- |
+| Installed CD210 | 21.62 ms | 21.96 ms | 22.19 ms | 0 / 500 |
+| Cheddar, official runtime/transfer path | 31.12 ms | 31.33 ms | 31.63 ms | 0 / 500 |
+| Cheddar, integrated worker and parser | 32.59 ms | 32.80 ms | 32.91 ms | 0 / 500 |
+
+The integrated worker loads and warms in 2.98 seconds in this cached-artifact test. After warmup/reset, the first output matches a fresh reset exactly. Two 150-frame sequences with changing images, action inputs, desire edges and catch-up calls also match exactly after reset. Power restoration is read back after the timing tests; online cores return to 0–3.
+
+The new compiler uses the unmodified `ec91b74` source archive, verified by SHA-256, and the upstream generic ONNX compiler. The worker selects that runtime before importing tinygrad, so it can coexist with the legacy runtime in modeld and driver monitoring. GPU state stays resident: next-state outputs alias the three input-state buffers. Host uploads and prediction readback are compiled once. Reset clears the same GPU allocations and waits for acknowledgement before clearing the parent's desire-edge history. Synthetic standby warmup clears history afterward; external-model fallback uses the same reset interface. The self-contained ONNX graph produces a complete policy on catch-up calls as well.
+
+Combining policy and warp object graphs in one pickle memo produced an HCQ parameter-index failure during the first integration attempt. Serialize each warp independently, as upstream's separate files do, then include its bytes in the chunkable bundle. The saved/reloaded integrated QCOM run passes after this correction. Native CPU tests also cover an empty buffer arena and require materializing a synthetic next-state value before writing an alias; arbitrary graphs are not assumed to be alias-safe.
+
+Linux CI compiles the actual Cheddar ONNX with the official Linux `CPU:LLVM` backend, compares 40 recurrent frames with aliased versus separate state destinations exactly, and exercises the production worker at 1928×1208 and 1344×760, including warmup, changed input, catch-up and reset. The alternative C renderer triggered a clang 18 frontend crash; it is not the production Linux backend. Related desktop checks cover failure containment, reset acknowledgements, model selection, external fallback and the existing action conversion.
+
+The new code does not alter Carrot's action conversion, stopping policy or smoothing. Cheddar supplies the existing direct-action branch instead of CD210's plan-derived action branch; the model replacement itself can therefore change driving behavior. Road behavior, concurrent onroad deadline margin and thermal endurance remain unmeasured. The full release build and broader CI run after publication.
+
+Private follow-up evidence is under `.analysis/scratch/2026-11-19-cheddar-integration`. The device disconnected during a subsequent fresh production-compiler run; its completion and scratch cleanup require reconnection. Successful timing/reset results above were observed before that disconnection. No installed vehicle source/model, Params or control commands were changed.
+
+## November 19 evening: installed-device validation and cleanup
+
+The owner restored device access and explicitly requested installation. With
+`IsOnroad=0` and no tracked device edits, fast-forwarded the installed checkout
+from `a9811adce075a81f6a719e611f28ae444193f750` to
+`93c5c6afafa5016f9c94347da6982c967d9dd39b`, then used the normal reboot path.
+The production SCons compiler completed a fresh QCOM Cheddar bundle and the
+full device build. The installed ONNX SHA-256 matches `350a47ea...d1d82`.
+The production worker passes warmup, changed-input, catch-up and exact reset
+checks at both 1928x1208 and 1344x760. No scratch bundle was substituted for the
+installed build. The earlier interrupted scratch compiler had not produced a
+completed artifact.
+
+After the owner enabled vehicle READY, the real cameras were 1344x760. Modeld
+and its Cheddar worker ran on core 7, FIFO54. An initial 70-second live window
+contained 1,398 consecutive valid model frames, mean 34.30 ms, maximum
+44.97 ms, none above 50 ms, with valid camera odometry and livePose. All samples
+were P, zero speed, lateral and longitudinal controls inactive. Because Jetson
+became ready during the overall startup observation, the subsequent test
+explicitly tracked backend status rather than treating this first window as
+an isolated backend benchmark.
+
+A bounded test suspended only the Jetlink daemon for 45 seconds, continuously
+requiring fresh P/zero/inactive state. It retained the exact process identity,
+restored the daemon in `finally`, and used an independent 50-second resume
+watchdog. No model selection or control Params were changed.
+
+| Observed stable backend | Frames | Mean | Maximum | Above 50 ms |
+| --- | ---: | ---: | ---: | ---: |
+| Cheddar internal fallback, seconds 3–44 | 820 | 34.32 ms | 45.21 ms | 0 |
+| N16 after external recovery | 1,406 | 41.43 ms | 50.03 ms | 1 |
+
+All samples in these stable windows had valid model, camera odometry and pose.
+The deliberate link interruption itself cost 207.41 ms before fallback,
+followed by a three-frame ID gap and one invalid camera-odometry observation.
+Pose remained valid and no selfdrive alert appeared in the sampled test. This
+is successful fault recovery, not seamless zero-gap switching. N16 resumed
+about ten seconds after the daemon was restored. The device was left with its
+existing N16 selection active and Cheddar available as the internal fallback.
+These are parked live-camera checks, not a road trial or thermal-endurance test.
+
+Earlier raw timing arrays, prediction captures, scripts and logs were recovered.
+The retained scratch bundle and warp were copied to private evidence with
+matching device/local SHA-256. After confirming no process used the exact
+scratch directory, removed its 5,319 files and verified the directory absent.
+The live worker's shared mmap file and installed model/runtime were retained.
+Evidence is under `.analysis/scratch/2026-11-19-cheddar-install`.
+
+The published code's final full build and actual SCons-artifact execution
+([tests 44456161179](https://github.com/ajouatom/openpilot/actions/runs/44456161179)),
+[model compatibility](https://github.com/ajouatom/openpilot/actions/runs/44456161337),
+[Jetson integration](https://github.com/ajouatom/openpilot/actions/runs/44456161249)
+and documentation-policy checks all passed before this installation.

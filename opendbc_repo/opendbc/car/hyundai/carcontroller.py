@@ -85,6 +85,7 @@ SPAS2_BURST_OFF = int(0.1 / DT_CTRL)
 APRK_IDLE, APRK_ASK, APRK_WAIT_QUIET, APRK_ACTIVE, APRK_FAILED = range(5)
 APRK_REPLY_FRAMES = int(0.4 / DT_CTRL)
 APRK_QUIET_NANOS = 100_000_000
+APRK_NO_REPLY_CACHE_NANOS = 60_000_000_000
 # CanfdHazardTest 3/4 (Tucson HDA1, user 11-19), SPAS2 path only (a car whose camera sends 0x1ea ignores them): is
 # BLINKER_CONTROL 1 a push-to-toggle switch or a held request? 11-18 logs (02_logs/measurements.md s66, 00000419 seg1)
 # point to held: the lamp went off 20-30 ms after our last frame in 4/4 windows, a 0.1 s pause in the fast flash turned it
@@ -365,6 +366,9 @@ class CarController(CarControllerBase):
     self.stalk_press_side = 0   # 1/2 while the lever is being held/tapped
     self.stalk_press_frame = 0
     self.aprk_state, self.aprk_frame, self.aprk_nanos, self.aprk_acked = APRK_IDLE, 0, 0, False
+    # carrot-wip bf11c138 probe cache: inert here, aprk_blinkers clears it every call while kick_output_ready stays
+    # False (CANFD_BLINKER_KICK = 0 on this branch, so card never configures KickOutput)
+    self.aprk_no_reply_at = 0
     self.lane_crossing, self.blinker_side, self.blinker_pulse_end = LaneCrossing(), 0, 0
     self.lane_change_prev, self.model_pulse = "off", False  # last modelV2 laneChangeState; pulse from the model trigger
     self.blinker_pulse_start, self.model_hold = 0, {}  # pulse start frame (Palisade flash phase); _blink_hold_change state
@@ -657,6 +661,13 @@ class CarController(CarControllerBase):
     want = self.blinker_test in (1, 2) or kick or remote or spas or hazard or alternate or raw is not None
     spas2_only = 0 if spas else self.spas2_only  # SpasSteerTest: its request is SPAS1 itself
     now, stock, ack = getattr(CS, "can_nanos", 0), getattr(CS, "aprk_stock_nanos", 0), getattr(CS, "aprk_ack_nanos", 0)
+    # Repeated unanswered probes add 400 ms to every lamp. Remember only a
+    # recent failed probe while the verified stock stream and output owner stay
+    # healthy. Mode 0, a late reply or loss of continuity requires a new probe.
+    if (self.blinker_kick_mode == 0 or not self.blinker_control or not self.kick_output_ready or
+        not 0 <= now-stock < APRK_QUIET_NANOS or ack > self.aprk_no_reply_at or
+        not 0 <= now-self.aprk_no_reply_at < APRK_NO_REPLY_CACHE_NANOS):
+      self.aprk_no_reply_at = 0
 
     def give_back():
       restore = [CanData(APRK_ADDR, APRK_DEFAULT_SESSION, bus) for bus in self.aprk_buses]
@@ -678,11 +689,20 @@ class CarController(CarControllerBase):
       self.aprk_state, self.aprk_frame, self.aprk_nanos, self.aprk_acked = APRK_ACTIVE, start, now, False
       self.aprk_spas2_only = spas2_only
     elif self.aprk_state == APRK_IDLE:
-      self.aprk_buses, self.aprk_spas2_only = (self.CAN.ECAN, self.CAN.ACAN), spas2_only
-      ret += [CanData(APRK_ADDR, APRK_EXT_SESSION, bus) for bus in self.aprk_buses]
-      self.aprk_state, self.aprk_frame, self.aprk_nanos = APRK_ASK, self.frame, now
+      if self.aprk_no_reply_at and not spas:
+        # Use the existing panda stock-following path without another UDS
+        # session. Fresh policy admission and all cancellation guards remain.
+        # This branch: never for SpasSteerTest (it does not steer next to the ECU's own SPAS1, see APRK_ASK),
+        # and the session records its spas2_only like every other start.
+        self.aprk_state, self.aprk_frame, self.aprk_nanos, self.aprk_acked = APRK_ACTIVE, self.frame, now, False
+        self.aprk_spas2_only = spas2_only
+      else:
+        self.aprk_buses, self.aprk_spas2_only = (self.CAN.ECAN, self.CAN.ACAN), spas2_only
+        ret += [CanData(APRK_ADDR, APRK_EXT_SESSION, bus) for bus in self.aprk_buses]
+        self.aprk_state, self.aprk_frame, self.aprk_nanos = APRK_ASK, self.frame, now
     elif self.aprk_state == APRK_ASK:
       if ack >= self.aprk_nanos and ack > 0:
+        self.aprk_no_reply_at = 0
         ret += [CanData(APRK_ADDR, APRK_COM_DISABLE, bus) for bus in self.aprk_buses]
         self.aprk_state, self.aprk_frame = APRK_WAIT_QUIET, self.frame
       elif self.frame - self.aprk_frame >= APRK_REPLY_FRAMES:
@@ -695,6 +715,8 @@ class CarController(CarControllerBase):
         self.aprk_state, self.aprk_frame, self.aprk_nanos, self.aprk_acked = APRK_ACTIVE, self.frame, now, False
         if pulse and self.blinker_test not in (1, 2):
           self.restart_pulse()
+        if 0 <= now-stock < APRK_QUIET_NANOS:
+          self.aprk_no_reply_at = now
     elif self.aprk_state == APRK_WAIT_QUIET:
       if self.frame - self.aprk_frame >= APRK_QUIET_NANOS // 10_000_000 and now - stock >= APRK_QUIET_NANOS:
         self.aprk_state, self.aprk_frame, self.aprk_nanos, self.aprk_acked = APRK_ACTIVE, self.frame, now, True
@@ -1112,9 +1134,10 @@ class CarController(CarControllerBase):
         can_sends.extend(hyundaicanfd.create_spas_messages(self.packer, self.CAN, self.frame, CC.leftBlinker, CC.rightBlinker,
                                                            getattr(CS, "spas2", None)))
       # carrot-wip's own SPAS path (CanfdBlinkerControl -> CANFD_SPAS_BLINKERS, card.py) owns APRK/SPAS when it is on
+      # A switched-off kick still restores its session and invalidates idle probe memory.
       elif not self.CP.flags & HyundaiFlags.CANFD_SPAS_BLINKERS and (self.blinker_control or self.blinker_test or self.aprk_state or
                                                                     self.spas_steer_test or self.remote_blinker or self.remote_pulse or
-                                                                    self.hazard_test):
+                                                                    self.hazard_test or self.aprk_no_reply_at):
         can_sends.extend(self.aprk_blinkers(CC, CS))
 
       if self.camera_scc_params in [2, 3]:

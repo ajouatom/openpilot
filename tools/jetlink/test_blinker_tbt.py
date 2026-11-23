@@ -152,16 +152,21 @@ def test_no_fixed_sixty_metre_cutoff_but_actual_turn_stops_trigger():
   assert arm(t, s, 11.15) is None
 
 
-def test_real_lamp_feedback_uses_unchanged_desire_path(monkeypatch):
+@pytest.mark.parametrize('native,fault', [(False, None), (True, None)] +
+  [(True, f) for f in ('bsd', 'inactive', 'driver_invalid', 'steering', 'slow', 'disabled', 'stale')])
+def test_real_lamp_feedback_uses_unchanged_desire_path(monkeypatch, native, fault):
   import sys
   # Exercise the real maneuver policy without requiring device Params bindings.
   monkeypatch.setitem(sys.modules, 'openpilot.common.params', NS(Params=lambda: NS()))
   monkeypatch.setitem(sys.modules, 'openpilot.system.hardware', NS(PC=True, TICI=False))
   from openpilot.selfdrive.controls.lib import desire_helper as module
   from openpilot.cereal import log
-  monkeypatch.setattr(module, 'Params', lambda: NS())
-  h = module.DesireHelper()
-  h._update_params_periodic = lambda: None
+  values = {'AutoBlinkerControl': 2, 'CanfdBlinkerKick': native}
+  monkeypatch.setattr(module, 'Params', lambda: NS(get_int=lambda k: values.get(k, 0), get_bool=lambda k: bool(values.get(k, 0))))
+  journal = dict(time=10., direction=2, mask=2, tbt_lane_request='admitted-tbt') if native else {}
+  monkeypatch.setattr(module, 'read_json', lambda *args: journal)
+  monkeypatch.setattr(module.time, 'monotonic', lambda: 10.05)
+  h = module.DesireHelper(kick_supported=native)
   h._check_desire_state = lambda *args: None
   h._process_sides = lambda *args: None
   h.bluetooth_commands = NS(read=lambda **kw: None)
@@ -170,27 +175,53 @@ def test_real_lamp_feedback_uses_unchanged_desire_path(monkeypatch):
   side.lane_exist_count.counter = 20
   side.dist_to_edge_far = 3.5
   s = scene()
+  s['cs'].turnSignalDriverValid = True
+  s['cs'].turnSignalDriverDirection = 0
+  s['cs'].blinkerLever = 0
   # New rear fields have no authority over ordinary manual/remote admission.
   s['cs'].tbtRightRearBlocked = True
-  h.update(s['cs'], s['model'], True, .1, s['nav'], NS())
+  if fault == 'bsd':
+    h.laneChangeBsd = 1
+    s['cs'].rightBlindspot = True
+    side.bsd_hold_counter = 40
+    side.compute_lane_change_available(lane_line_info_lt_20=True, ignore_bsd=False)
+  if fault == 'driver_invalid': s['cs'].turnSignalDriverValid = False
+  if fault == 'steering': s['cs'].steeringPressed = True
+  if fault == 'slow': s['cs'].vEgo = 20 / 3.6
+  if fault == 'disabled': values['AutoBlinkerControl'] = 0
+  if fault == 'stale': journal['time'] = 9.
+  h.update(s['cs'], s['model'], fault != 'inactive', .1, s['nav'], NS(), indicator_valid=True)
   assert h.lane_change_state == log.LaneChangeState.off
   s['cs'].rightBlinker = True  # actual lamp feedback, not a lane command
-  h.update(s['cs'], s['model'], True, .1, s['nav'], NS())
+  if fault:
+    for _ in range(5):
+      h.update(s['cs'], s['model'], fault != 'inactive', .1, s['nav'], NS(), indicator_valid=True)
+      assert h.desire != log.Desire.laneChangeRight
+    assert h.boundary_indicator.blocked == 2
+    return
+  h.update(s['cs'], s['model'], True, .1, s['nav'], NS(), indicator_valid=True)
   assert h.lane_change_state == log.LaneChangeState.preLaneChange
-  h.update(s['cs'], s['model'], True, .1, s['nav'], NS())
+  h.update(s['cs'], s['model'], True, .1, s['nav'], NS(), indicator_valid=True)
   assert h.desire == log.Desire.laneChangeRight
+  if native:
+    assert h.boundary_indicator.blocked == 2  # permission never deletes tail isolation
+    # Revocation removes only automatic lamp intent, even while the lamp remains lit.
+    journal.pop('tbt_lane_request')
+    h._update_params_periodic()
+    assert h._update_driver_blinker(s['cs'])[2] is False
 
 
 @pytest.mark.parametrize('front', ['clear', 'close', 'closing', 'stale', 'invalid', 'fault', 'unavailable'])
 @pytest.mark.parametrize('ordinary', ['none', 'turn', 'lane'])
 @pytest.mark.parametrize('atc,addon,torque,blocked,expected', [
   (1, True, 0, False, True), (2, True, 0, False, True),
-  (1, 350, 0, False, True), (1, 500, 0, False, True), (1, 501, 0, False, False),
+  (1, 350, 0, False, True), (1, 500, 0, False, True), (1, 2001, 0, False, False),
   (1, False, 0, False, False), (2, False, 0, False, False),
   (0, True, 0, False, False), (3, True, 0, False, False), (4, True, 0, False, False),
   (1, True, 1, False, False), (2, True, 0, True, False),
 ])
-def test_actual_source_loop_only_emits_physical_indicator(monkeypatch, atc, addon, torque, blocked, expected, ordinary, front):
+def test_actual_source_loop_only_emits_physical_indicator(monkeypatch, atc, addon, torque, blocked, expected, ordinary, front,
+                                                        road=None, distance=230., native=False, speed=20., mask=0):
   import json
   import sys
   from contextlib import nullcontext
@@ -199,12 +230,18 @@ def test_actual_source_loop_only_emits_physical_indicator(monkeypatch, atc, addo
   from openpilot.selfdrive.carrot.bluetooth import model as bluetooth
   s, sm, sent, clock = scene(), Vehicle(), [], [10.]
   sm['carState'] = s['cs']
+  sm['carState'].vEgo = speed
   sm['carState'].steeringAngleDeg = 0.
   sm['carState'].tbtRightRearBlocked = blocked
   sm['modelV2'], sm['carrotMan'] = s['model'], s['nav']
+  s['nav'].xDistToTurn = distance
+  if road is not None:
+    sm['carrotNavi'] = road
+  sm.seen = dict.fromkeys(sm, True)
   sm['modelV2'].meta.desire = 'none'
   sm['modelV2'].meta.autoTurnSignal = 'none'
   sm['modelV2'].meta.autoTurnSignalLaneChange = False
+  sm['modelV2'].meta.indicatorIsolationMask = mask
   sm['selfdriveState'].atcTurnStartMonoTime = 0
   sm['selfdriveState'].atcTurnDirection = 'none'
   sm['radarState'] = radar_scene()
@@ -237,6 +274,11 @@ def test_actual_source_loop_only_emits_physical_indicator(monkeypatch, atc, addo
   monkeypatch.setitem(sys.modules, 'openpilot.cereal', NS(messaging=NS(SubMaster=lambda _: sm),
     car=NS(CarParams=NS(from_bytes=lambda _: nullcontext(NS(carFingerprint='PROTOCOL_MATCHED_CAR',
       brand='hyundai', passive=False, openpilotLongitudinalControl=True, extFlags=1 << 19, radarUnavailable=front == 'unavailable'))))))
+  # The native worker requires the existing configured safety capability.
+  if native:
+    sys.modules['openpilot.cereal'].car.CarParams.from_bytes = lambda _: nullcontext(NS(
+      carFingerprint='PROTOCOL_MATCHED_CAR', brand='hyundai', passive=False, openpilotLongitudinalControl=True,
+      extFlags=1 << 19, radarUnavailable=False, safetyConfigs=[NS(safetyParam=32768)]))
   sock = NS(setblocking=lambda _: None, recv=lambda _: b'', send=lambda raw: sent.append(json.loads(raw)))
   monkeypatch.setattr(source.socket, 'socket', lambda **kw: sock)
   monkeypatch.setattr(source.select, 'select', lambda *args: ([sock] if len(sent) == 36 else [], [], []))
@@ -244,18 +286,31 @@ def test_actual_source_loop_only_emits_physical_indicator(monkeypatch, atc, addo
   monkeypatch.setattr(source.time, 'sleep', lambda _: None)
   monkeypatch.setattr(bluetooth, 'read_json', lambda *args: {})
   monkeypatch.setattr(bluetooth, 'config', dict)
-  monkeypatch.setattr(bluetooth, 'atomic_json', lambda *args: None)
-  source.main(0)
+  def journal_ack(path, value):
+    if path.name == 'boundary-indicator.json':
+      sm['modelV2'].meta.indicatorIsolationMask = value['mask']
+      sm['modelV2'].meta.indicatorJournalMonoTime = int(value['time'] * 1e9)
+  monkeypatch.setattr(bluetooth, 'atomic_json', journal_ack)
+  source.main(0, kick=native)
   holds = [row['hold'] for row in sent[:24] if row['hold']]
   assert bool(holds) == expected
   assert all(not row['events'] for row in sent)
   assert all(h['source'] == 'lane' and h['direction'] == 'right' for h in holds)
+  for row in sent[:24]:
+    assert row['tbt_lane_request'] == (row['hold']['id'] if row['hold'] and native and speed >= 30/3.6 else None)
   assert s['nav'].carrotCmd == '' and s['nav'].carrotCmdIndex == 0
 
   if ordinary != 'none':
     # The add-on may already own a right indicator; existing ATC must replace it.
     later = [row['hold'] for row in sent[24:]]
     assert all(h and h['source'] == ordinary and h['direction'] == 'left' for h in later)
+    assert all(row['tbt_lane_request'] is None for row in sent[24:])
+
+
+@pytest.mark.parametrize('speed,mask,expected', [(20.,0,True),(20.,2,False),(6.,0,True)])
+def test_native_source_distinguishes_steering_and_display(monkeypatch, speed, mask, expected):
+  test_actual_source_loop_only_emits_physical_indicator(monkeypatch, 1, 400, 0, False,
+    expected, 'none', 'clear', native=True, speed=speed, mask=mask)
 
 
 @pytest.mark.parametrize("turn,atc", [(2, "atc right"), (4, "fork right")])
@@ -390,7 +445,7 @@ def test_front_gap_must_stay_clear_during_confirmation_and_waiting():
 
 @pytest.mark.parametrize('limit,distance,expected', [(0,100,False),(250,250,True),(250,251,False),
   (300,300,True),(300,301,False),(350,325,True),(400,399,True),(400,401,False),(500,499,True),
-  (501,100,False),(-1,100,False),(float('nan'),100,False)])
+  (2000,2000,True),(2000,2000.1,False),(2001,100,False),(-1,100,False),(float('nan'),100,False)])
 def test_configured_distance_window(limit, distance, expected):
   inputs = scene()
   inputs['distance_limit'] = limit
@@ -407,3 +462,69 @@ def test_live_distance_disable_and_reduction_end_existing_request():
     assert arm(controller, inputs)
     inputs['distance_limit'] = limit
     assert controller.update(11.1, **inputs) is None
+
+
+def highway_road(category=0):
+  return NS(schemaVersion=1, connected=True, sessionId='test',
+            navigationStatus=NS(meta=NS(present=True, receivedMonoTimeNanos=10_000_000_000), offRoute=False, guidanceActive=True),
+            guidanceCurrent=NS(meta=NS(present=False)),
+            laneCurrent=NS(meta=NS(present=True, receivedMonoTimeNanos=10_000_000_000),
+                           roadCategory=category, roadCategoryValid=True))
+
+
+@pytest.mark.parametrize('category', [0, 1, 2, 8, -1, 12])
+@pytest.mark.parametrize('distance', [500., 501., 2000., 2000.1])
+def test_source_uses_road_class_for_actual_distance(monkeypatch, category, distance):
+  test_actual_source_loop_only_emits_physical_indicator(monkeypatch, 1, 2000, 0, False,
+    distance <= (2000 if category in (0, 1) else 500), 'none', 'clear', highway_road(category), distance)
+
+
+@pytest.mark.parametrize('bad', ['missing', 'version', 'disconnected', 'session', 'offroute', 'absent',
+                               'category', 'stale', 'future', 'zero'])
+def test_source_does_not_extend_distance_on_unknown_road(monkeypatch, bad):
+  road = highway_road()
+  if bad == 'missing': road = None
+  elif bad == 'version': road.schemaVersion = 0
+  elif bad == 'disconnected': road.connected = False
+  elif bad == 'session': road.sessionId = ''
+  elif bad == 'offroute': road.navigationStatus.offRoute = True
+  elif bad == 'absent': road.laneCurrent.meta.present = False
+  elif bad == 'category': road.laneCurrent.roadCategoryValid = False
+  elif bad == 'stale': road.laneCurrent.meta.receivedMonoTimeNanos = 1
+  elif bad == 'future': road.laneCurrent.meta.receivedMonoTimeNanos = 20_000_000_000
+  elif bad == 'zero': road.laneCurrent.meta.receivedMonoTimeNanos = 0
+  test_actual_source_loop_only_emits_physical_indicator(monkeypatch, 1, 2000, 0, False,
+                                                       False, 'none', 'clear', road, 1000.)
+
+
+@pytest.mark.parametrize('fault', ['front', 'bsd', 'driver', 'stale', 'turn'])
+def test_start_wait_never_delays_cancellation(fault):
+  t, s = TbtBlinker(), scene()
+  assert arm(t, s)
+  if fault == 'front': s['front_clear'] = False
+  if fault == 'bsd': s['cs'].tbtRightRearBlocked = True
+  if fault == 'driver': s['cs'].steeringPressed = True
+  if fault == 'stale': s['valid'] = False
+  if fault == 'turn': s['model'].meta.desire = 'turnRight'
+  assert t.update(11.1, **s) is None
+  assert t.phase == 'cancelled'
+
+
+@pytest.mark.parametrize('mask', [1, 2, 3])
+def test_existing_lamp_only_isolation_prevents_new_tbt_lane_request(mask):
+  t, s = TbtBlinker(), scene()
+  s['model'].meta.indicatorIsolationMask = mask
+  assert arm(t, s) is None
+  assert t.reason == 'isolation'
+  s['model'].meta.indicatorIsolationMask = 0
+  assert arm(t, s, 11.1) == ('lane', 'right')
+
+
+def test_highway_information_loss_retracts_out_of_local_range_request():
+  t, s = TbtBlinker(), scene()
+  s.update(distance_limit=2000)
+  s['nav'].xDistToTurn = 1500.
+  assert arm(t, s)
+  s['distance_limit'] = 500
+  assert t.update(11.1, **s) is None
+  assert t.reason == 'route'

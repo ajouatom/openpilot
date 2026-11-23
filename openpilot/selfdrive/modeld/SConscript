@@ -113,13 +113,14 @@ for usbgpu, pkl_path, driving_onnx_deps, driving_onnx, cmd_flags in model_builds
         f'--camera-resolutions {camera_res_args} '
         f'--onnx {driving_onnx} '
         f'--output {target_pkl_path} --frame-skip {frame_skip}')
+  compiler_deps = tinygrad_files + compile_modeld_script
   onnx_sizes_sum = sum(os.path.getsize(f) for f in driving_onnx_deps)
   chunk_targets = get_chunk_targets(target_pkl_path, estimate_pickle_max_size(onnx_sizes_sum))
   def do_chunk(target, source, env, pkl=target_pkl_path, chunks=chunk_targets):
     chunk_file(pkl, chunks)
   node = lenv.Command(
     chunk_targets,
-    tinygrad_files + compile_modeld_script + driving_onnx_deps + [Value(chunk_targets), chunker_file],
+    compiler_deps + driving_onnx_deps + [Value(chunk_targets), chunker_file],
     [cmd, Action(do_chunk, "  [CHUNK] $TARGET")],
   )
   if usbgpu:

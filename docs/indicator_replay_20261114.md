@@ -363,3 +363,119 @@ Recorded output feedback cannot prove how a newly emitted lamp would affect a
 closed-loop drive. No vehicle installation, CAN actuation or physical cure is
 claimed. Private inputs, frozen sources, all comparison tables and visual evidence
 are indexed in `.analysis/archive/2026-11-18/indicator-continuity-fixes/INDEX.md`.
+
+## November 20: owner-requested manual admission and short-attempt rearm
+
+Remove the OEM left-marking/centre-line and right-road-edge-clearance gates from
+the manual boundary observer. Intent, speed, valid lane width, boundary movement,
+confidence, driver cancellation and lamp-to-steering isolation remain. Model
+desire/path admission and Tesla's explicitly supplied lane policy are unchanged.
+
+A manual boundary attempt ending within two seconds through return or lane
+reassignment may seed an independently confirmed same-side manual turn. It needs
+same-side steering at termination, a fresh growing turn, valid yaw and at least
+10 km/h within three seconds; driver/input cancellations cannot seed recovery.
+A fresh opposite boundary approach may rearm after one continuous dark second
+following a short abandoned attempt. Neither path revives the old request identity
+or shortens the 12-second automatic-steering feedback protection.
+
+The retained corpus remains 467 full segments, 60 routes and 523,934 aligned
+inputs. Against 34ce0aa171, request counts change 365→406 for immediate native
+submission, 364→405 with a simulated 410 ms first-send delay, and 366→407 for
+external output. Each comparison adds 42 requests, loses one model-turn request
+and changes 12 matched requests; 352 immediate-native observations retain exact
+start/source/end. Matching reserves exact observations, then same-source matches,
+then same-side matches within two seconds. Counts are not truth labels.
+
+The new boundary indication at 11f1/1+10.827..11.774 no longer suppresses the
+existing right turn at +13.976. In 1186/3, the subsequent manual turn reappears at
+18.736 (245 ms later than baseline) and retains its 22.187 end. The opposite
+manual request at 11d5/3+46.771 is also retained after a short new left indication.
+
+This does **not** establish zero additional misses or false indications:
+
+- The old 118a/9+57.114 model turn is blocked by the existing isolation after a
+  newly admitted manual indication. Recorded lever/lamp activity also exists;
+  no retained video establishes a physical miss. Driver/isolation guards were
+  not bypassed to force this counterfactual match.
+- Five matched holds end earlier. Three encounter recorded lever inputs under
+  the new request's tap-echo timing (11e1/7 twice and 11d8/0); two end on boundary
+  return (116f/3 and 11f5/7). The largest reductions are 26.516 and 9.151 seconds
+  in 11e1/7. Earlier requests shift the echo window while historical lever/lamp
+  feedback remains fixed, so physical hold changes cannot be inferred directly.
+- Added-request video is retained for 17 of 42 events. Sampled frames show a
+  right turn in 11f1/1, but parked-car avoidance in 11d6/0, 11e3/6 and 11f3/9
+  is also admitted. These are potential unwanted indications. The other sampled
+  scenes are not fully labeled; 25 additions lack matching retained video.
+
+Local isolated checks pass 1,196 tests with nine platform skips; Wiki tests pass
+25. Prior-source checks reproduce removed admission/rearm behavior (30 failures,
+including assertions about newly introduced state). Native/full CI is recorded
+against the published commit. No vehicle writes, CAN actuation or physical lamp
+validation were performed. Full before/after tables and private snapshots are in
+`.analysis/scratch/2026-11-20-manual-indicator-fix/INDEX.md`.
+
+## November 21: repeated probe delay and a missed consecutive turn
+
+Read-only retrieval added 24 complete rlogs and matching qcamera files from the
+two latest drives, 1206 and 1207. All 48 files match the source SHA-256 manifest.
+The vehicle ran 3d43de5ca6, whose indicator implementation matches the comparison
+baseline 5c970aa516. No device settings, software or actuators were changed.
+
+All 28 observed requests have outgoing SPAS and raw lamp response. Observation
+to first SPAS takes approximately 0.43–0.52 seconds; observation to first raw lamp
+is 0.503–0.651 seconds, mean 0.576. Each request repeats an unanswered APRK
+extended-session probe before the existing 400 ms mode-1 fallback. This is a
+controller wait, not evidence that USB transport lost these requests.
+
+Mode 1 now remembers a failed probe for 60 seconds from that probe, only while
+stock reception and output ownership remain continuous. New ECU replies, stale
+stock, lost ownership, settings changes, expiry or time reversal invalidate it.
+Reusing the result does not extend expiry or create a new diagnostic session.
+Mode 0 still requires acknowledgement. Panda synchronization, exclusive output
+ownership and driver cancellation remain unchanged. An exact before/after
+controller-method simulation using the 28 recorded request windows, continuously
+healthy stock and no ECU acknowledgement saves 400 ms on 16 requests, averaging
+228.6 ms across all 28. These are simulated transmission improvements, not newly
+measured physical lamp timings.
+
+A second counterfactual run uses the actual stock CAN frames/CRC progression,
+recorded driver validity and direction, model/control freshness and lamp state.
+It also transmits all 28 requests and improves the same 16, averaging 229.5 ms
+across 28 with recorded scheduling intervals. It assumes continuous process
+ownership and unchanged historical ECU responses; it is still not live validation.
+
+In 1207/9, opposite driver steering ends a left turn at 58.104. The following
+rightward steering reaches its peak during rearm; the previous detector forgets
+its confirmed growth before emission becomes available. Retain that blocked
+peak for at most 0.3 seconds and five degrees of unwind, requiring current
+same-direction torque and yaw. A new growing movement after admission, released
+or opposite torque, a road-curve classification or invalid input clears this
+memory. The existing two-second rearm and one continuous dark second remain.
+The right request now starts at 1207/10+0.206 and ends at +1.907 on opposite
+driver input. Sampled video supports a right turn; the recovered start is still
+late relative to steering onset.
+
+The complete retained corpus is now 491 full segments, 62 routes and 550,793
+aligned inputs. Immediate-native requests change 434→436, simulated 410 ms
+delayed-native 433→435, and external 435→437. Each adds the same two manual-turn
+requests, with no removed request and exact start/source/end for every matched
+request. The other addition, 118a/10+40.708, lacks retained video; its delayed
+native hold reaches the retained-log boundary. Thus these results do not prove
+zero false indications or physical lamp completion. Earlier broader candidates
+were rejected for suppressing later requests or delaying an existing start by
+748 ms; the final bounded-peak rule removes those regressions.
+
+Remaining misses have distinct causes: active automatic lane-change state in
+1206/5, narrow/low-confidence modeled lane geometry in 1207/1, and stale or
+missing model inputs in 1207/2. Some candidate steering movements are parked-car
+avoidance. No broad freshness, lane-width, automatic-steering isolation or
+turn-angle gate was removed to force those cases to light.
+
+Local isolated checks pass 1,238 with nine platform skips. Two independent
+before/after reproductions confirm the old peak miss and repeated 410 ms wait,
+with the latter reduced to 10 ms for a reusable result. A full-controller test
+also reproduces and fixes cache cleanup when output is disabled while idle;
+the cleanup emits no APRK or SPAS frames. Native/full CI is tied
+to the published commit. Private raw evidence and replay outputs are indexed in
+`.analysis/scratch/2026-11-21-indicator-fixes/INDEX.md`.

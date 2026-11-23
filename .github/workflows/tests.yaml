@@ -106,7 +106,7 @@ jobs:
           bash -n launch_chffrplus.sh
           python -m pytest -c /dev/null --rootdir=. --confcutdir=openpilot/common/tests openpilot/common/tests/test_repo_update.py
           python -m pytest -c /dev/null --rootdir=. --confcutdir=openpilot/selfdrive/carrot/server/tests openpilot/selfdrive/carrot/server/tests/test_auto_update.py openpilot/selfdrive/carrot/server/tests/test_git_config.py
-          python -m pytest -c /dev/null --rootdir=. --confcutdir=openpilot/system/tests openpilot/system/tests/test_launch_order.py
+          python -m pytest -c /dev/null --rootdir=. --confcutdir=openpilot/system/tests openpilot/system/tests/test_launch_order.py openpilot/system/tests/test_runtime_helper_imports.py
           python -m pytest -c /dev/null --rootdir=. --confcutdir=openpilot/system/updated/tests openpilot/system/updated/tests/test_process.py
 
   build_release:
@@ -119,6 +119,8 @@ jobs:
       - run: ./tools/op.sh setup
       - name: Build openpilot
         run: scons
+      - name: Execute the SCons-built internal model and camera warps
+        run: SEND_RAW_PRED=1 python tools/modeld/check_internal_model.py openpilot/selfdrive/modeld/models/driving_tinygrad.pkl
       - name: Check native offline cloud boundaries and C3 modem routing
         env:
           NATIVE_DEVICE_TESTS: '1'
@@ -170,10 +172,14 @@ jobs:
           opendbc_repo/opendbc/car/hyundai/tests/test_section_average.py
           opendbc_repo/opendbc/car/hyundai/tests/test_speed_camera.py
           opendbc_repo/opendbc/car/hyundai/tests/test_ev4_navi.py
+          opendbc_repo/opendbc/car/hyundai/tests/test_navi_profile_4b8.py
           opendbc_repo/opendbc/car/hyundai/tests/test_blink_hold.py
           opendbc_repo/opendbc/car/hyundai/tests/test_blinker_stalks.py
           opendbc_repo/opendbc/car/hyundai/tests/test_ccnc_cluster.py
           opendbc_repo/opendbc/car/hyundai/tests/test_carstate_buttons.py
+          opendbc_repo/opendbc/car/hyundai/tests/test_hda2_scc_topology.py
+          opendbc_repo/opendbc/car/hyundai/tests/test_steering_mode.py
+          opendbc_repo/opendbc/car/hyundai/tests/test_ev_mode.py
           openpilot/selfdrive/car/tests/test_camera_scc_steering_intent.py
           opendbc_repo/opendbc/car/toyota/tests/test_ars510_carrot.py
           opendbc_repo/opendbc/car/toyota/tests/test_ars510_display.py
