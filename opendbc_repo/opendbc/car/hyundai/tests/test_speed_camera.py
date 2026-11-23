@@ -84,10 +84,13 @@ def _car_state(distance_time_tenths=60):
   state.vehicleNaviZoneControlSupported = True
   state.canfd_wrapped_navi = False
   state.canfd_ev4_navi = False
-  state.canfd_gv80_navi = False
   state.navi_segment_4b5 = None
+  state.navi_position_4de = None
   state.vehicleNaviSegment4b5Timestamp = 0
   state.vehicleNaviSegment4b5Active = False
+  state.vehicleNaviPosition4deSeen = False
+  state.vehicleNaviSegment4b5Seen = False
+  state.vehicleNaviSegment4b9Seen = False
   state.vehicleNaviGv80HorizonTimestamp = 0
   state.vehicleNaviRoadHorizon = []
   state.vehicleNaviGv80SectionWarningSpeed = 0.0
@@ -1667,3 +1670,248 @@ def test_gv80_horizon_chain_of_small_offset_segments_keeps_current_cover():
     state._gv80_update_road_horizon(total_distance + offset, 6)
     assert state._gv80_current_road_class() == 6
     assert state._gv80_bump_output_allowed()
+
+
+def _make_real_canfd_navi(monkeypatch, fingerprint):
+  from unittest.mock import Mock
+  from opendbc.car.hyundai import carstate, hyundaicanfd
+
+  params = Mock()
+  params.get_int.side_effect = lambda key: 1 if key == "VehicleNaviCanControl" else 0
+  params.get_bool.side_effect = lambda key: key == "ControlsReady"
+  params.get.return_value = "{0: {}, 1: {}, 2: {}}"
+  monkeypatch.setattr(carstate, "Params", lambda: params)
+  monkeypatch.setattr(hyundaicanfd, "Params", lambda: params)
+  cp_cfg = structs.CarParams(carFingerprint=fingerprint, flags=int(HyundaiFlags.CANFD), safetyConfigs=[{}])
+  state = CarState(cp_cfg)
+  state.is_metric = True
+  state.vehicleNaviCanControl = 1
+  parsers = state.get_can_parsers(cp_cfg)
+  for parser in parsers.values():
+    parser.controls_ready = True
+  return state, parsers
+
+
+def test_vehicle_navi_4de_dbc_decodes_logged_frames():
+  parser = CANParser("hyundai_canfd_generated", [("NEW_MSG_4DE", math.nan)], 0)
+
+  # GV80 route 00000381 s17 (110km/h 구간단속 본구간)
+  parser.update([1_000_000_000, [(0x4DE, bytes.fromhex("0500b98a108ac895"), 0)]])
+  assert parser.vl["NEW_MSG_4DE"]["POS_OFFSET"] == 5
+  assert parser.vl["NEW_MSG_4DE"]["POS_PATH_INDEX"] == 8
+  assert parser.vl["NEW_MSG_4DE"]["POS_CYCLIC_COUNTER"] == 3
+  assert parser.vl["NEW_MSG_4DE"]["POS_RANGE_AVG_SPEED"] == 85
+
+  # route 0000000a s15 (구간단속 외 평시 주행)
+  parser.update([1_100_000_000, [(0x4DE, bytes.fromhex("0200014070730430"), 0)]])
+  assert parser.vl["NEW_MSG_4DE"]["POS_OFFSET"] == 2
+  assert parser.vl["NEW_MSG_4DE"]["POS_PATH_INDEX"] == 8
+  assert parser.vl["NEW_MSG_4DE"]["POS_CYCLIC_COUNTER"] == 0
+  assert parser.vl["NEW_MSG_4DE"]["POS_RANGE_AVG_SPEED"] == 0
+
+  # route 00000001 s00 (초기화 센티넬 프레임)
+  parser.update([1_200_000_000, [(0x4DE, bytes.fromhex("ff1fe0ffffffffff"), 0)]])
+  assert parser.vl["NEW_MSG_4DE"]["POS_OFFSET"] == 8191
+  assert parser.vl["NEW_MSG_4DE"]["POS_PATH_INDEX"] == 0
+  assert parser.vl["NEW_MSG_4DE"]["POS_CYCLIC_COUNTER"] == 0
+  assert parser.vl["NEW_MSG_4DE"]["POS_RANGE_AVG_SPEED"] == 511
+
+
+def test_vehicle_navi_4de_activates_and_ends_section_on_any_canfd_model(monkeypatch):
+  state, parsers = _make_real_canfd_navi(monkeypatch, CAR.HYUNDAI_IONIQ_5)
+  pt = parsers[Bus.pt]
+  bus = pt.bus
+
+  # 1) 초기 수신·등록
+  pt.update([1_000_000_000, [(0x4DE, bytes.fromhex("0500b98a108ac895"), bus)]])
+  state.monitor_fingerprint(parsers, True)
+  state.controls_ready_count = 122
+  pt.update([1_100_000_000, [(0x4DE, bytes.fromhex("0500b98a108ac895"), bus)]])
+  state.monitor_fingerprint(parsers, True)
+  assert state.navi_position_4de is pt.vl["NEW_MSG_4DE"]
+
+  ret = SimpleNamespace(speedLimit=110.0, speedBumpDistance=0.0, schoolZoneActive=False)
+  state._update_vehicle_navi_events(pt, ret, True)
+  assert ret.vehicleNaviSectionActive
+  assert ret.vehicleNaviSpeed == 110.0
+
+  # 2) 출구 통과 시 0x4A3 경고가 아직 켜져 있어도 0x4DE avg=0이면 즉시 종료
+  pt.update([1_200_000_000, [(0x4DE, bytes.fromhex("0200014070730430"), bus)]])
+  ret = SimpleNamespace(speedLimit=110.0, speedBumpDistance=0.0, schoolZoneActive=False)
+  state._update_vehicle_navi_events(pt, ret, True)
+  assert not state.vehicleNaviSpeedZoneActive
+  assert not ret.vehicleNaviSectionActive
+
+
+def test_vehicle_navi_4de_sentinel_frame_does_not_activate_section(monkeypatch):
+  state, parsers = _make_real_canfd_navi(monkeypatch, CAR.HYUNDAI_IONIQ_5)
+  pt = parsers[Bus.pt]
+  bus = pt.bus
+  state.controls_ready_count = 122
+  frames = [
+    (0x4DE, bytes.fromhex("ff1fe0ffffffffff"), bus),
+    (0x4B4, bytes.fromhex("0d0085cbb18948a5"), bus),
+  ]
+  pt.update([1_000_000_000, frames])
+  state.monitor_fingerprint(parsers, True)
+  pt.update([1_100_000_000, frames])
+
+  ret = SimpleNamespace(speedLimit=100.0, speedBumpDistance=0.0, schoolZoneActive=False)
+  state._update_vehicle_navi_events(pt, ret, True)
+  assert state.vehicleNaviPosition4deSeen
+  assert not state.vehicleNaviSpeedZoneActive
+  assert not ret.vehicleNaviSectionActive
+
+
+@pytest.mark.parametrize("size", (4, 12, 24))
+def test_vehicle_navi_4de_other_length_is_ignored(size):
+  state = _car_state()
+  state.vehicleNaviCanControl = True
+  state.navi_position_4de = {"POS_OFFSET": 5, "POS_PATH_INDEX": 8, "POS_RANGE_AVG_SPEED": 85}
+  state.navi_position_4b4 = {"POS_RANGE_AVG_SPEED": 92}
+  payload = bytes.fromhex("0500b98a108ac895").ljust(size, b"\x00")[:size]
+  cp = SimpleNamespace(
+    dat={0x4DE: payload, 0x4B4: bytes.fromhex("0d0085cbb18948a5")},
+    ts_nanos={
+      "NEW_MSG_4DE": {"POS_RANGE_AVG_SPEED": 1_000_000_000},
+      "NEW_MSG_4B4": {"POS_RANGE_AVG_SPEED": 1_000_000_000},
+    },
+    _last_update_nanos=1_050_000_000,
+  )
+  ret = SimpleNamespace(speedLimit=100.0, speedBumpDistance=0.0, schoolZoneActive=False)
+  state._update_vehicle_navi_events(cp, ret, True)
+  assert not state.vehicleNaviPosition4deSeen
+  assert ret.vehicleNaviSectionActive  # 타 차종 0x4B4 경로 불변
+
+
+def test_vehicle_navi_4de_priority_and_fallback():
+  state = _car_state()
+  state.vehicleNaviCanControl = True
+  state.navi_position_4de = {"POS_OFFSET": 5, "POS_PATH_INDEX": 8, "POS_RANGE_AVG_SPEED": 0}
+  cp = SimpleNamespace(
+    dat={0x4DE: bytes.fromhex("0200014070730430")},
+    ts_nanos={"NEW_MSG_4DE": {"POS_RANGE_AVG_SPEED": 1_000_000_000}},
+    _last_update_nanos=1_050_000_000,
+  )
+
+  # 1) 0x4DE avg=0이 살아 있는 동안은 1200m 이상 경고가 이어져도 폴백이 구간을 켜지 않는다.
+  for dist in (0.0, 600.0, 1200.0):
+    state.totalDistance = dist
+    ret = SimpleNamespace(speedLimit=100.0, speedBumpDistance=0.0, schoolZoneActive=False)
+    state._update_vehicle_navi_events(cp, ret, True)
+    assert not ret.vehicleNaviSectionActive
+
+  # 2) 0x4DE가 타임아웃(>1s)되면 예비 1000m 폴백이 동작한다.
+  cp._last_update_nanos = 2_500_000_000
+  state.totalDistance = 1300.0
+  ret = SimpleNamespace(speedLimit=100.0, speedBumpDistance=0.0, schoolZoneActive=False)
+  state._update_vehicle_navi_events(cp, ret, True)
+  assert not ret.vehicleNaviSectionActive  # 폴백 거리 측정 시작점 재설정
+
+  state.totalDistance = 2350.0
+  cp._last_update_nanos = 3_500_000_000
+  ret = SimpleNamespace(speedLimit=100.0, speedBumpDistance=0.0, schoolZoneActive=False)
+  state._update_vehicle_navi_events(cp, ret, True)
+  assert ret.vehicleNaviSectionActive
+  assert ret.vehicleNaviSpeed == 100.0
+
+  # 3) 다시 0x4DE avg=0이 수신되면 즉시 종료되고 폴백 타이머도 초기화된다.
+  cp.ts_nanos["NEW_MSG_4DE"]["POS_RANGE_AVG_SPEED"] = 4_000_000_000
+  cp._last_update_nanos = 4_050_000_000
+  ret = SimpleNamespace(speedLimit=100.0, speedBumpDistance=0.0, schoolZoneActive=False)
+  state._update_vehicle_navi_events(cp, ret, True)
+  assert not ret.vehicleNaviSectionActive
+  assert state.vehicleNaviGv80SectionWarningSpeed == 0.0
+
+  cp._last_update_nanos = 5_500_000_000
+  state.totalDistance = 2500.0
+  ret = SimpleNamespace(speedLimit=100.0, speedBumpDistance=0.0, schoolZoneActive=False)
+  state._update_vehicle_navi_events(cp, ret, True)
+  assert not ret.vehicleNaviSectionActive
+
+
+def test_vehicle_navi_fallback_warning_speed_resets_on_mode_off_and_mode3_clear():
+  state = _car_state()
+  state.vehicleNaviCanControl = 1
+  state.op_params.vehicle_navi = 1
+  state.vehicleNaviGv80SectionWarningSpeed = 100.0
+  state.vehicleNaviGv80SectionWarningStartDistance = 500.0
+
+  # CanControl 1->0 전환 시 초기화
+  state.op_params.vehicle_navi = 0
+  state.vehicleSpeedCameraParamsCounter = VEHICLE_SPEED_CAMERA_PARAM_UPDATE_FRAMES - 1
+  state._update_vehicle_speed_camera_params()
+  assert state.vehicleNaviCanControl == 0
+  assert state.vehicleNaviGv80SectionWarningSpeed == 0.0
+  assert state.vehicleNaviGv80SectionWarningStartDistance == 0.0
+
+  # 모드 3 리셋 시 초기화
+  state.vehicleNaviCanControl = 3
+  state.vehicleNaviGv80SectionWarningSpeed = 110.0
+  state.vehicleNaviGv80SectionWarningStartDistance = 900.0
+  state._clear_vehicle_navi_route_filtered_events()
+  assert state.vehicleNaviGv80SectionWarningSpeed == 0.0
+  assert state.vehicleNaviGv80SectionWarningStartDistance == 0.0
+
+
+def test_alt_legacy_navi_signal_gating_opens_without_gv80_fingerprint(monkeypatch):
+  # A) 비GV80 차종(IONIQ 5)에서도 0x4B5+0x4DE+0x4B8 신호가 오면 게이팅·호라이즌·리셋이 열린다.
+  state, parsers = _make_real_canfd_navi(monkeypatch, CAR.HYUNDAI_IONIQ_5)
+  pt = parsers[Bus.pt]
+  bus = pt.bus
+  state.controls_ready_count = 122
+
+  # 0x4B5: offset=0, path=8, act=1(0x08), frc=5(간선) -> byte4 = 0x08 | 5 = 0x0D
+  seg_frc5 = (8 << 13) | (0x0D << 32)
+  bump_frame = (0x4B8, bytes.fromhex("060000003d410804"), bus)     # 방지턱 317m, path 8
+  cam_frame = (0x4B8, bytes.fromhex("b10000002c010804"), bus)      # 무경고 단독 카메라 50km/h @ 300m, path 8
+  init_frames = [
+    (0x4DE, bytes.fromhex("0200014070730430"), bus),
+    (0x4B5, seg_frc5.to_bytes(8, "little"), bus),
+    bump_frame,
+  ]
+  pt.update([1_000_000_000, init_frames])
+  state.monitor_fingerprint(parsers, True)
+  pt.update([1_100_000_000, init_frames])
+  ret = SimpleNamespace(speedLimit=0.0, speedBumpDistance=0.0, schoolZoneActive=False)
+  assert not state._update_vehicle_navi_events(pt, ret, False)
+  assert ret.speedBumpDistance == 0.0  # 등급 5에서는 방지턱 차단
+
+  pt.update([1_150_000_000, [cam_frame]])
+  ret = SimpleNamespace(speedLimit=0.0, speedBumpDistance=0.0, schoolZoneActive=False)
+  assert not state._update_vehicle_navi_events(pt, ret, False)  # 무경고 카메라 차단
+  assert ret.speedBumpDistance == 0.0
+
+  # 등급 6(생활도로)으로 갱신되면 방지턱 출력 허용
+  seg_frc6 = (8 << 13) | (0x0E << 32)
+  pt.update([1_200_000_000, [(0x4B5, seg_frc6.to_bytes(8, "little"), bus)]])
+  ret = SimpleNamespace(speedLimit=0.0, speedBumpDistance=0.0, schoolZoneActive=False)
+  state._update_vehicle_navi_events(pt, ret, False)
+  assert ret.speedBumpDistance == 317.0
+
+  # 0x4B5 안내 OFF(1->0) 전이 시 큐 리셋
+  seg_off = (8 << 13) | (0x06 << 32)
+  pt.update([1_300_000_000, [(0x4B5, seg_off.to_bytes(8, "little"), bus)]])
+  ret = SimpleNamespace(speedLimit=0.0, speedBumpDistance=0.0, schoolZoneActive=False)
+  state._update_vehicle_navi_events(pt, ret, False)
+  assert state.vehicleNaviEvents == []
+  assert ret.speedBumpDistance == 0.0
+
+  # B) 표준 0x4B9 차종에서는 0x4B4 구간·단독 카메라·방지턱·종류7 래치 동작이 그대로 유지된다.
+  std_state, std_parsers = _make_real_canfd_navi(monkeypatch, CAR.HYUNDAI_IONIQ_5)
+  std_pt = std_parsers[Bus.pt]
+  std_bus = std_pt.bus
+  std_state.controls_ready_count = 122
+  seg_4b9 = (8 << 13) | (1 << 22) | (3 << 24)
+  std_frames = [
+    (0x4B9, seg_4b9.to_bytes(8, "little"), std_bus),
+    (0x4B4, bytes.fromhex("0d0085cbb18948a5"), std_bus),
+    (0x4B8, bytes.fromhex("060000003d410804"), std_bus),
+  ]
+  std_pt.update([1_000_000_000, std_frames])
+  std_state.monitor_fingerprint(std_parsers, True)
+  std_pt.update([1_100_000_000, std_frames])
+  std_ret = SimpleNamespace(speedLimit=100.0, speedBumpDistance=0.0, schoolZoneActive=False)
+  std_state._update_vehicle_navi_events(std_pt, std_ret, True)
+  assert std_ret.vehicleNaviSectionActive
+  assert std_ret.speedBumpDistance == 317.0
