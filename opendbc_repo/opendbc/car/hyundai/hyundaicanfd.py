@@ -966,6 +966,30 @@ def _dashed_lane_line(color, lane_line, car=None):
   return color
 
 
+def _pv5_stock_lane_lines(CP, CS, camera_bus, now_nanos):
+  """Display only: use the original, validated camera template for at most 250 ms."""
+  if (getattr(CP, "carFingerprint", None) != CAR.KIA_PV5 or getattr(CP, "notCar", False)
+      or not CS.out.canValid or now_nanos is None):
+    return None
+  parser = getattr(CS, "cp_cam", None)
+  if parser is None or parser.bus != camera_bus:
+    return None
+  state = parser.message_states.get(0x161)
+  if (state is None or not state.timestamps or state.ignore_checksum or state.ignore_counter
+      or len(parser.dat.get(0x161, b"")) != 32 or CS.adrv_0x161 is not parser.vl.get(0x161)):
+    return None
+  stamp = state.timestamps[-1]
+  # Do not use an older packet delivered after a newer one, or an ambiguous
+  # same-time batch. A rejected CRC never refreshes this last-good timestamp.
+  if (stamp <= 0 or not 0 <= now_nanos - stamp <= 250_000_000 or parser._last_update_nanos < stamp
+      or stamp != max(state.timestamps) or state.timestamps.count(stamp) != 1):
+    return None
+  # 0/1/2/4/6 are DBC display states; 8 is present in original PV5 captures.
+  # Do not infer road paint color or feed these display codes to lane control.
+  return tuple(value if value in (0, 1, 2, 4, 6, 8) else None
+               for value in (CS.adrv_0x161["LANELINE_LEFT"], CS.adrv_0x161["LANELINE_RIGHT"]))
+
+
 # CcncTrafficBackground: red light -> steady red 5, green light -> steady green 8 (Ioniq 5 PE, 10-20; not DBC values)
 TRAFFIC_BACKGROUND = {1: 5, 2: 8}
 
@@ -1236,7 +1260,7 @@ def create_alt2_adas_button_request(packer, CAN, frame, CC, CS, stopping, *, kee
 
 def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
                          disp_angle, left_lane_warning, right_lane_warning,
-                         enable_corner_radar, stopping, canfd_debug, paddle_mode, hud_lateral=None):
+                         enable_corner_radar, stopping, canfd_debug, paddle_mode, hud_lateral=None, now_nanos=None):
   ret = []
   interlock_active = longitudinal_interlock_active(CS)
   display_lead = _display_lead(getattr(CS, "radarState", None))
@@ -1442,6 +1466,7 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
         values["LANELINE_CURVATURE_DIRECTION"] = 1 if curvature < 0 and lat_active else 0
 
         trailer_lane_change_blocked = CS.trailer_connected
+        stock_lane_lines = _pv5_stock_lane_lines(CP, CS, CAN.CAM, now_nanos)
         # CcncClusterDisplay: an unseen line is drawn as nothing (14), a dashed camera line as dashed (8/10)
         lane_display = cluster_display and car not in LANE_UNSEEN_WIP_CARS
         if lane_display:
@@ -1464,6 +1489,10 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
           lane_color = 4 if lane_line_warn_left or CS.out.leftBlindspot else lane_color
           if hud_control.leftLaneDepart:
             values["LANELINE_LEFT"] = 4 if (frame // 50) % 2 == 0 else 1
+          elif stock_lane_lines is not None and stock_lane_lines[0] is not None and (lane_color == 2 or stock_lane_lines[0] == 4):
+            # Existing departure/BSD/boundary and availability colors win;
+            # stock orange also takes priority over the green availability cue.
+            values["LANELINE_LEFT"] = stock_lane_lines[0]
           elif lane_display:
             values["LANELINE_LEFT"] = _dashed_lane_line(lane_color, CS.out.leftLaneLine, car) if left_seen or lane_color == 4 else LANE_LINE_UNSEEN  # orange stays
           else:
@@ -1477,6 +1506,8 @@ def create_ccnc_messages(CP, packer, CAN, frame, CC, CS, hud_control,
           lane_color = 4 if lane_line_warn_right or CS.out.rightBlindspot else lane_color
           if hud_control.rightLaneDepart:
             values["LANELINE_RIGHT"] = 4 if (frame // 50) % 2 == 0 else 1
+          elif stock_lane_lines is not None and stock_lane_lines[1] is not None and (lane_color == 2 or stock_lane_lines[1] == 4):
+            values["LANELINE_RIGHT"] = stock_lane_lines[1]
           elif lane_display:
             values["LANELINE_RIGHT"] = _dashed_lane_line(lane_color, CS.out.rightLaneLine, car) if right_seen or lane_color == 4 else LANE_LINE_UNSEEN
           else:
