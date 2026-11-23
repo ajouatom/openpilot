@@ -1653,3 +1653,17 @@ def test_gv80_horizon_small_offset_segment_keeps_current_cover():
   state.totalDistance = 1003.0                             # 새 구간에 진입한 뒤
   assert state._gv80_current_road_class() == 5
   assert not state._gv80_bump_output_allowed()
+
+
+def test_gv80_horizon_chain_of_small_offset_segments_keeps_current_cover():
+  # 15m 이하 간격의 구간이 연속으로 들어와도 현재 등급이 중간에 불명(None)이
+  # 되면 안 된다. 실차에서는 이 연쇄 삭제로 실물 방지턱 접근 구간 전체가
+  # 블랙아웃된 사례가 있었다 (2026-11-23 route 00000008).
+  state = _car_state()
+  state.totalDistance = 1000.0
+  state._gv80_update_road_horizon(1000.0, 6)
+  for total_distance, offset in ((1005.0, 10.0), (1011.0, 16.0), (1022.0, 27.0)):
+    state.totalDistance = total_distance
+    state._gv80_update_road_horizon(total_distance + offset, 6)
+    assert state._gv80_current_road_class() == 6
+    assert state._gv80_bump_output_allowed()
