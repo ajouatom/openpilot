@@ -627,6 +627,11 @@ function launch {
 
   # hardware specific init
   if [ -f /AGNOS ]; then
+    # The updater UI imports TiciLPA through HARDWARE before the full runtime
+    # bootstrap. Its pure-Python serial dependency also works on the old OS.
+    if ! run_startup_command ensure_python_package serial pyserial 1; then
+      show_startup_failure "AGNOS startup dependency pyserial is unavailable"
+    fi
     if ! agnos_init; then
       flock -u 9
       while true; do sleep 1; done
