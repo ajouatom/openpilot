@@ -424,6 +424,12 @@ static HyundaiSpasPiggyback hyundai_spas_pb[2];  // 0x165, 0x16A
 static bool hyundai_spas_direct = false;  // CanfdBlinkerKickMode 2/3: host frames go straight out (collision-prone)
 #define HYUNDAI_SPAS_PB_STOCK_US 100000U  // stock stream counts as present this long after its last frame
 #define HYUNDAI_SPAS_PB_HOLD_US 50000U    // a held frame older than this is dropped, not sent
+// CanfdHazardTest (02_logs s79): piggybacked BLINKER_CONTROL 1/2 trail the stock counter (stock - 1). The session keeps
+// that through its value-0 frames (fast hazard: 1 for 0.2 s, 0 for 0.1 s) so our counter never jumps inside it; any
+// 3-7 frame, or 200 ms without a 1/2, is back to stock + 1 (Kick/menu sessions unchanged).
+static bool hyundai_spas2_trail = false;
+static uint32_t hyundai_spas2_trail_us = 0U;
+#define HYUNDAI_SPAS2_TRAIL_US 200000U
 
 static void canfd_copy_packet(CANPacket_t* dst, const CANPacket_t* src) {
   dst->fd = src->fd;
@@ -872,8 +878,25 @@ static bool hyundai_canfd_rx_tx_hook(const CANPacket_t *to_push, CANPacket_t *to
         // SPAS2 carries BLINKER_CONTROL: continue the stock counter (stock + 1, CRC redone) so the receiver takes our
         // frame as the next one and the following stock frame as a repeat. With the host's own counter the two
         // sequences lined up only every 5.12 s (Tucson 11-12: one 0.4 s flash every ~5.1 s). SPAS1 (EPS) is left as is.
+        // CanfdHazardTest (BLINKER_CONTROL 1 hazards / 2, only on cars without a camera 0x1ea; Tucson, 02_logs s79,
+        // 11-24): with stock + 1 the lamps flickered at 10 Hz (on 66 ms / off 33 ms, hazard mode b1 5->0 each time) while
+        // the parking ECU's own value-0 frames kept coming (it never answers 0x7B1). The stock hazard (2/1 blocks without
+        // a 0) is clean, and a stock 0 ends it 52-115 ms later, so the receiver seems to take the repeated-counter stock 0
+        // as a cancel. Test: stock - 1 for 1/2, so our frame trails the stock one and the next stock frame is 2 ahead of
+        // ours. Receiver window +-1: the stock 0 is dropped (clean lamps); forward-only: ours is dropped (no lamp);
+        // no counter check: same flicker. Kick/menu 3/4 (one-touch, clean with stock + 1) keep stock + 1.
         if (addr == 0x16A) {
-          canfd_apply_counter_and_update_checksum(to_send, (uint8_t)(GET_BYTE(to_push, 2) + 1U));
+          uint8_t blink = (GET_LEN(to_send) > 16U) ? (GET_BYTE(to_send, 16) >> 5U) : 0U;
+          if ((blink == 1U) || (blink == 2U)) {
+            hyundai_spas2_trail = true;
+            hyundai_spas2_trail_us = now;
+          } else if ((blink != 0U) || (get_ts_elapsed(now, hyundai_spas2_trail_us) >= HYUNDAI_SPAS2_TRAIL_US)) {
+            hyundai_spas2_trail = false;
+          } else {
+            // value 0 inside a hazard session: keep trailing
+          }
+          uint8_t step = hyundai_spas2_trail ? 255U : 1U;  // 255 = -1 mod 256
+          canfd_apply_counter_and_update_checksum(to_send, (uint8_t)(GET_BYTE(to_push, 2) + step));
         }
         send = true;
       }
@@ -996,6 +1019,8 @@ static safety_config hyundai_canfd_init(uint16_t param) {
   for (int i = 0; i < 2; i++) {
     hyundai_spas_pb[i] = (HyundaiSpasPiggyback){0};
   }
+  hyundai_spas2_trail = false;
+  hyundai_spas2_trail_us = 0U;
   hyundai_spas_direct = GET_FLAG(param, 1024U);
 
   hyundai_common_init(param);

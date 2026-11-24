@@ -117,13 +117,60 @@ def test_spas2_continues_the_stock_counter():
       assert d.stock(SPAS2, nxt) == bytes(frame(SPAS2, (nxt + 1) % 256, "left", 0).dat)  # wraps 255 -> 0, CRC redone
 
 
+def test_hazard_values_trail_the_stock_counter():
+  # Tucson 11-24 (02_logs s79): BLINKER_CONTROL 1/2 (CanfdHazardTest) go out as stock - 1, so the next stock value-0 frame
+  # is 2 ahead of ours instead of repeating our counter; every other value keeps stock + 1 (Kick/menu 3/4 unchanged)
+  def held(value, counter):
+    data = bytearray(frame(SPAS2, counter, None, 0).dat)
+    data[16] = value << 5
+    data[:2] = checksum(SPAS2, data).to_bytes(2, 'little')
+    return data
+  for value in range(8):
+    for stock_counter in (0, 1, 255):
+      d = Device()
+      d.stock(SPAS2, (stock_counter - 1) % 256)
+      d.advance(7_000)
+      d.s.safety_tx_buffered_for_fwd = False
+      assert d.s.safety_tx_hook(libsafety_py.make_CANPacket(SPAS2, 0, bytes(held(value, 10))))
+      assert d.s.safety_tx_buffered_for_fwd
+      d.advance(13_000)
+      want = (stock_counter + (255 if value in (1, 2) else 1)) % 256  # 0 -> 255, 255 -> 254 for 1/2
+      assert d.stock(SPAS2, stock_counter) == bytes(held(value, want)), (value, stock_counter)
+
+
+def test_hazard_session_keeps_trailing_through_its_value_0_frames():
+  # fast hazard (CanfdHazardTest 2 / remote) sends 1 for 0.2 s and 0 for 0.1 s: the 0s stay stock - 1 so the counter never
+  # jumps inside the session; 200 ms after the last 1/2, or on a 3-7 frame, it is stock + 1 again (review 11-24)
+  def held(value, counter):
+    data = bytearray(frame(SPAS2, counter, None, 0).dat)
+    data[16] = value << 5
+    data[:2] = checksum(SPAS2, data).to_bytes(2, 'little')
+    return data
+  def step(d, value, stock_counter):
+    d.advance(7_000)
+    d.s.safety_tx_hook(libsafety_py.make_CANPacket(SPAS2, 0, bytes(held(value, 10))))
+    d.advance(13_000)
+    return d.stock(SPAS2, stock_counter)
+  d = Device()
+  d.stock(SPAS2, 9)
+  assert step(d, 1, 10) == bytes(held(1, 9))
+  assert step(d, 0, 11) == bytes(held(0, 10))  # off phase of the fast hazard: still trailing
+  for c in range(12, 23):  # 220 ms of stock frames, nothing held
+    d.advance(20_000)
+    assert d.stock(SPAS2, c) is None
+  assert step(d, 0, 23) == bytes(held(0, 24))  # 260 ms after the last 1: back to + 1
+  assert step(d, 2, 24) == bytes(held(2, 23))
+  assert step(d, 3, 25) == bytes(held(3, 26))  # a Kick frame ends the trail at once
+  assert step(d, 0, 26) == bytes(held(0, 27))
+
+
 def test_any_blinker_control_value_is_a_lamp_command_other_bits_stay_refused():
   # BLINKER_CONTROL 1 ("hazards"): the remote hazard on cars without a camera 0x1ea (11-17). 11-19: all 8 values, so
   # CanfdHazardTest 10-17 can try 2 ("hazards button backlight") and 5-7 on the Tucson; the low 5 bits stay zero
   d = Device()
   d.stock(SPAS2, 1)
   assert d.tx(SPAS2, 10, "hazards") == (True, True)
-  assert d.stock(SPAS2, 2) == bytes(frame(SPAS2, 3, "hazards", 0).dat)
+  assert d.stock(SPAS2, 2) == bytes(frame(SPAS2, 1, "hazards", 0).dat)  # hazards trail the stock counter (s79, 11-24)
   def raw(counter, byte16):
     data = bytearray(frame(SPAS2, counter, None, 0).dat)
     data[16] = byte16
