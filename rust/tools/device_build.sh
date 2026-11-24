@@ -25,7 +25,11 @@ store=${OPENPILOT_BUILD_STORE:-/data/openpilot-build}
 mkdir -p "$store" || exit 1
 log=$store/build.log
 : > "$log"
-started=$SECONDS
+# Seconds since boot, not the wall clock: the clock jumps months forward
+# while a build runs on a comma that booted on its RTC's date, which made
+# "Build complete in 10261201s".
+uptime_s() { cut -d. -f1 /proc/uptime; }
+started=$(uptime_s)
 export LD_LIBRARY_PATH="$root/rust/bin/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 
 ui=
@@ -60,7 +64,7 @@ start_ui() {
   fi
 }
 status() {
-  echo "[$((SECONDS - started))s] $1" >> "$log"
+  echo "[$(($(uptime_s) - started))s] $1" >> "$log"
   [[ -n $ui ]] && echo "$1" >> "$status_file"
 }
 fail() {
@@ -112,6 +116,31 @@ for core in 4 5 6 7; do
 done
 set_cpu_limit max
 trap 'set_cpu_limit 1689600; stop_ui' EXIT
+
+# Cargo compiles a unit again when one of its sources is newer than its last
+# build. After an update the comma reboots on its RTC's date (late July on the
+# cars logged) and this runs before the launcher moves the clock to the commit
+# floor, so the checkout's files were months "in the future": units built
+# before the clock caught up stayed older than their sources, and the next
+# update compiled them again (Niro, 11/24: 145 crates for a change to one
+# file, a retry at 4 jobs, about 25 minutes; the PHEV, its clock right, 5).
+# Move the clock up to the newest of HEAD's commit time and the update's own
+# writes before compiling; never back.
+clock_floor() {
+  [[ -f /AGNOS ]] || return 0
+  local floor stamp file now
+  floor=$(git show -s --format=%ct HEAD 2>/dev/null) || return 0
+  for file in "$(git rev-parse --git-path index)" rust/Cargo.lock; do
+    [[ -e $file ]] || continue
+    stamp=$(stat -c %Y "$file") || continue
+    (( stamp > floor )) && floor=$stamp
+  done
+  now=$(date +%s)
+  (( now < floor )) || return 0
+  status "Clock $(date -u -d "@$now" +%FT%TZ) is behind the checkout; advancing to $(date -u -d "@$((floor + 1))" +%FT%TZ)"
+  sudo -n date -u -s "@$((floor + 1))" > /dev/null || status 'Could not advance the clock'
+}
+clock_floor
 
 unpack() {  # bundle destination
   local name=$1 destination=$2
@@ -275,6 +304,6 @@ rm -rf rust/.runtime-packages rust/.runtime-active rust/.runtime-bootstrap \
 echo "$head" > "$stamp"
 # One line the startup report carries (carrot_man appends this log's status
 # lines): an update that kept its build cache compiles only what changed.
-status "Build complete in $((SECONDS - started))s: $compiled crates compiled for ${head:0:9}"
+status "Build complete in $(($(uptime_s) - started))s: $compiled crates compiled for ${head:0:9}"
 # Only this version stays: older build outputs, checkouts and history go.
 bash rust/tools/device_cleanup.sh now "$root" "$store" || status 'Update cleanup failed'
