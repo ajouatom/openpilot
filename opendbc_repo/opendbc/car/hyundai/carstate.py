@@ -66,6 +66,12 @@ VEHICLE_NAVI_POSITION_INVALID_AVG_SPEED = 511
 # 0x4B5/0x4B8/0x4DE 계열 방지턱 게이팅(P12_OFF700) 및 0x4DE 미수신 시 구간단속 예비 판정 상수.
 VEHICLE_NAVI_GV80_BUMP_MAX_OFFSET = 700.0          # 이보다 먼 방지턱 예고는 등록하지 않음
 VEHICLE_NAVI_GV80_BUMP_RESET_KEEP_DISTANCE = 120.0  # 경로 리셋 때 이 거리 이내 방지턱은 보존
+VEHICLE_NAVI_GV80_FRC5_BUMP_MAX_MIN_OFFSET = 300.0  # FRC 5는 300m 이내 근거리 수신·재확인된 지점만 허용
+VEHICLE_NAVI_GV80_FRC5_BUMP_MAX_SPEED = 55.0 * CV.KPH_TO_MS  # FRC 5 비고속(55 km/h 이하) 주행에서만 허용
+VEHICLE_NAVI_GV80_RESET_TURN_STEER_DEG = 60.0       # 0x4B4 리셋 시 직전 3초 최대 |조향각| >= 60°일 때만 회전 리셋 판정
+VEHICLE_NAVI_GV80_RESET_STEER_WINDOW_FRAMES = round(3.0 / DT_CTRL)  # 3초 (100Hz 기준 300프레임)
+VEHICLE_NAVI_GV80_BUMP_PAIR_CHAIN_GAP = 60.0        # 회전 리셋 시 생존 방지턱 뒤 60m 이내 연속 쌍은 함께 보존
+VEHICLE_NAVI_GV80_BUMP_PAIR_MAX_KEEP = 180.0        # 연속 쌍 보존 절대 상한 거리
 VEHICLE_NAVI_GV80_SECTION_MIN_DISTANCE = 1000.0     # 0x4DE 없을 때 0x4A3 경고가 이 거리 이상 지속되면 구간단속
 CANFD_NAVI_CAMERA_ACTIVE_BIT = 0x40
 CANFD_NAVI_STATUS_TIMEOUT_NS = 1_000_000_000
@@ -320,6 +326,7 @@ class CarState(CarStateBase):
     self.vehicleNaviSegment4b9Seen = False
     self.vehicleNaviGv80HorizonTimestamp = 0
     self.vehicleNaviRoadHorizon = []  # (시작 거리, 도로등급) 목록: 0x4B4/0x4B5 호라이즌 현재 도로등급 추적용
+    self.vehicleNaviGv80SteerHistory = deque(maxlen=VEHICLE_NAVI_GV80_RESET_STEER_WINDOW_FRAMES)
     self.vehicleNaviGv80SectionWarningSpeed = 0.0
     self.vehicleNaviGv80SectionWarningStartDistance = 0.0
     self.vehicleNaviProfileTimestamp = 0
@@ -1110,6 +1117,47 @@ class CarState(CarStateBase):
       return True
     return self._gv80_current_road_class() == 6
 
+  def _gv80_bump_event_allowed(self, event, v_ego, on_controlled_access_road):
+    # 기본 허용(등급 6 또는 스쿨존) 외에, 보조간선/해안도로 등 등급 5(FRC 5)에서도
+    # 비고속·비자동차전용도로이며 300m 이내 근거리 수신·재확인된 실물 방지턱은 허용한다.
+    # 원거리(400m+) 단발 유령과 고속 간선 오감속은 차단한다 (2026-11-24 390세그먼트 실측).
+    if self._gv80_bump_output_allowed():
+      return True
+    if on_controlled_access_road or self._gv80_current_road_class() != 5:
+      return False
+    min_offset = event.get("min_offset", event["target"] - self.totalDistance)
+    return (v_ego <= VEHICLE_NAVI_GV80_FRC5_BUMP_MAX_SPEED and
+            min_offset <= VEHICLE_NAVI_GV80_FRC5_BUMP_MAX_MIN_OFFSET)
+
+  def _gv80_prune_bumps_on_reset(self, road_class_4b4):
+    # 0x4B4 path_index == 0 리셋 시 직진·완만 주행(직전 3초 최대 |조향각| < 60°)이고
+    # 큰 도로(FRC 1~4) 진입이 아니면 호라이즌 재동기화로 보고 방지턱 큐를 보존한다.
+    # 실제 교차로 회전·유턴 또는 큰 도로 진입 시에는 120m 이내 방지턱과 그 뒤 60m 이내로
+    # 연쇄 연결된 연속 쌍(최대 180m)만 보존하고 옛 경로의 먼 잔여물은 버린다.
+    steer_hist = getattr(self, "vehicleNaviGv80SteerHistory", None)
+    max_abs_steer = max(steer_hist, default=0.0) if steer_hist else 0.0
+    major_road_entry = 1 <= road_class_4b4 <= 4
+    if max_abs_steer < VEHICLE_NAVI_GV80_RESET_TURN_STEER_DEG and not major_road_entry:
+      return
+
+    keep_ids = set()
+    last_kept_target = None
+    for event in self.vehicleNaviEvents:
+      if event["type"] != "bump":
+        continue
+      dist = event["target"] - self.totalDistance
+      if dist <= VEHICLE_NAVI_GV80_BUMP_RESET_KEEP_DISTANCE:
+        keep_ids.add(id(event))
+        last_kept_target = event["target"]
+      elif (last_kept_target is not None and
+            event["target"] - last_kept_target <= VEHICLE_NAVI_GV80_BUMP_PAIR_CHAIN_GAP and
+            dist <= VEHICLE_NAVI_GV80_BUMP_PAIR_MAX_KEEP):
+        keep_ids.add(id(event))
+        last_kept_target = event["target"]
+
+    self.vehicleNaviEvents = [event for event in self.vehicleNaviEvents
+                              if event["type"] != "bump" or id(event) in keep_ids]
+
   def _update_gv80_navi_section(self, ret, speed_limit_cam):
     # 예비(폴백) 구간단속 판정: 진짜 구간 신호(0x4DE)가 없을 때만 동작한다.
     # 0x4B5/0x4DE 계열의 0x4B4 bits 21|9와 종류7은 구간 신호가 아니어서(오독·일반
@@ -1317,9 +1365,14 @@ class CarState(CarStateBase):
     for event in self.vehicleNaviEvents:
       if event["type"] == event_type and event["speed"] == speed and event["kind"] == kind and abs(event["target"] - target) < 20:
         event["target"] = target
+        if event_type == "bump":
+          event["min_offset"] = min(event.get("min_offset", offset), offset)
         return
 
-    self.vehicleNaviEvents.append({"type": event_type, "speed": speed, "kind": kind, "target": target})
+    new_event = {"type": event_type, "speed": speed, "kind": kind, "target": target}
+    if event_type == "bump":
+      new_event["min_offset"] = offset
+    self.vehicleNaviEvents.append(new_event)
     self.vehicleNaviEvents.sort(key=lambda event: event["target"])
     self.vehicleNaviEvents = self.vehicleNaviEvents[:VEHICLE_NAVI_MAX_EVENTS]
 
@@ -1329,6 +1382,10 @@ class CarState(CarStateBase):
     ret.vehicleNaviActive = False
     ret.vehicleNaviSectionActive = False
     ret.vehicleNaviSpeed = 0.0
+    if hasattr(ret, "steeringAngleDeg"):
+      if not hasattr(self, "vehicleNaviGv80SteerHistory"):
+        self.vehicleNaviGv80SteerHistory = deque(maxlen=VEHICLE_NAVI_GV80_RESET_STEER_WINDOW_FRAMES)
+      self.vehicleNaviGv80SteerHistory.append(abs(float(ret.steeringAngleDeg)))
     if self.canfd_wrapped_navi:
       self._update_pv5_navi_section(cp, cp_alt)
     profile_timestamp = self._vehicle_navi_message_timestamp(cp, self.navi_profile_msg)
@@ -1479,14 +1536,11 @@ class CarState(CarStateBase):
         path_index_4b4 = (raw_4b4 >> 13) & 0x3f
         road_class_4b4 = position_dat[3] & 0x7
         if path_index_4b4 == 0:
-          # 호라이즌 리셋(교차로 회전·경로 재설정): 호라이즌을 현재 지점으로
-          # 초기화하고, 아직 먼 방지턱 예고는 옛 경로의 잔여물이라 버린다.
-          # 가까운 방지턱은 실물일 수 있어 남긴다.
+          # 호라이즌 리셋(교차로 회전·경로 재설정·재동기화): 호라이즌은 현재 지점으로
+          # 초기화하고, 방지턱 큐 정리는 직전 3초 조향각과 진입 도로등급으로 판정한다.
           self.vehicleNaviRoadHorizon = ([(self.totalDistance, road_class_4b4)]
                                          if road_class_4b4 > 0 else [])
-          self.vehicleNaviEvents = [event for event in self.vehicleNaviEvents
-                                    if event["type"] != "bump" or
-                                    event["target"] - self.totalDistance <= VEHICLE_NAVI_GV80_BUMP_RESET_KEEP_DISTANCE]
+          self._gv80_prune_bumps_on_reset(road_class_4b4)
         elif path_index_4b4 == 8:
           self._gv80_update_road_horizon(self.totalDistance + (raw_4b4 & 0x1fff), road_class_4b4)
 
@@ -1584,12 +1638,11 @@ class CarState(CarStateBase):
     upcoming = [event for event in self.vehicleNaviEvents if event["target"] > self.totalDistance]
 
     bumps = [event for event in upcoming if event["type"] == "bump"]
-    if alt_navi_arch and bumps and not self._gv80_bump_output_allowed():
-      # 0x4B5/0x4B8/0x4DE 계열 방지턱 게이팅: 현재 도로가 생활·이면도로(등급 6)이거나
-      # 스쿨존일 때만 방지턱 감속을 낸다. 등급 불명(부팅 직후 등)인 동안도 내지 않는데,
-      # 0x4B4/0x4B5가 상시 송출돼 등급은 곧 채워지고 이 게이트는 매 프레임 다시
-      # 판정하므로, 접근 전에 등급이 확정되면 그때부터 정상 출력된다.
-      bumps = []
+    if alt_navi_arch and bumps:
+      # 0x4B5/0x4B8/0x4DE 계열 방지턱 게이팅: 생활·이면도로(등급 6)·스쿨존은 전 지점 허용,
+      # 등급 5(보조간선·해안도로)는 비고속·300m 이내 근거리 수신/재확인된 지점만 조건부 허용.
+      v_ego = float(getattr(ret, "vEgo", 0.0))
+      bumps = [event for event in bumps if self._gv80_bump_event_allowed(event, v_ego, on_controlled_access_road)]
     if bumps:
       ret.speedBumpDistance = bumps[0]["target"] - self.totalDistance
 

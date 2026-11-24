@@ -93,6 +93,7 @@ def _car_state(distance_time_tenths=60):
   state.vehicleNaviSegment4b9Seen = False
   state.vehicleNaviGv80HorizonTimestamp = 0
   state.vehicleNaviRoadHorizon = []
+  state.vehicleNaviGv80SteerHistory = deque(maxlen=300)
   state.vehicleNaviGv80SectionWarningSpeed = 0.0
   state.vehicleNaviGv80SectionWarningStartDistance = 0.0
   state.pv5_section_start_prev = False
@@ -1915,3 +1916,141 @@ def test_alt_legacy_navi_signal_gating_opens_without_gv80_fingerprint(monkeypatc
   std_state._update_vehicle_navi_events(std_pt, std_ret, True)
   assert std_ret.vehicleNaviSectionActive
   assert std_ret.speedBumpDistance == 317.0
+
+
+def _make_4b8_bump(offset, path=8):
+  raw = 6 | (int(offset) << 32) | (int(path) << 48) | (16 << 54)
+  return raw.to_bytes(8, "little")
+
+
+def _make_4b4_horizon(offset, path_index, road_class):
+  raw = (int(offset) & 0x1fff) | ((int(path_index) & 0x3f) << 13) | ((int(road_class) & 0x7) << 24)
+  return raw.to_bytes(8, "little")
+
+
+def test_gv80_frc5_bump_allows_near_or_reconfirmed_low_speed_only(monkeypatch):
+  state, parsers = _make_real_canfd_navi(monkeypatch, CAR.HYUNDAI_IONIQ_5)
+  pt = parsers[Bus.pt]
+  bus = pt.bus
+  state.controls_ready_count = 122
+
+  # FRC 5, 450m 원거리 단발 예고 -> 차단
+  seg_frc5 = ((8 << 13) | (0x0D << 32)).to_bytes(8, "little")
+  init_frames = [
+    (0x4DE, bytes.fromhex("0200014070730430"), bus),
+    (0x4B5, seg_frc5, bus),
+    (0x4B8, _make_4b8_bump(450), bus),
+  ]
+  pt.update([1_000_000_000, init_frames])
+  state.monitor_fingerprint(parsers, True)
+  pt.update([1_100_000_000, init_frames])
+  ret = SimpleNamespace(vEgo=30.0 / 3.6, steeringAngleDeg=0.0, speedLimit=0.0, speedBumpDistance=0.0, schoolZoneActive=False)
+  state._update_vehicle_navi_events(pt, ret, False)
+  assert ret.speedBumpDistance == 0.0
+
+  # 접근하며 200m로 재확인(min_offset=200m) -> 저속(30 km/h)에서는 출력 허용
+  state.totalDistance = 250.0
+  pt.update([1_200_000_000, [(0x4B8, _make_4b8_bump(200), bus)]])
+  ret = SimpleNamespace(vEgo=30.0 / 3.6, steeringAngleDeg=0.0, speedLimit=0.0, speedBumpDistance=0.0, schoolZoneActive=False)
+  state._update_vehicle_navi_events(pt, ret, False)
+  assert ret.speedBumpDistance == pytest.approx(200.0)
+
+  # 같은 FRC 5 지점이어도 고속(70 km/h > 55 km/h)에서는 차단
+  ret_fast = SimpleNamespace(vEgo=70.0 / 3.6, steeringAngleDeg=0.0, speedLimit=0.0, speedBumpDistance=0.0, schoolZoneActive=False)
+  state._update_vehicle_navi_events(pt, ret_fast, False)
+  assert ret_fast.speedBumpDistance == 0.0
+
+  # FRC 4(큰 도로)로 바뀌면 저속·근거리라도 영구 차단
+  seg_frc4 = ((8 << 13) | (0x0C << 32)).to_bytes(8, "little")
+  pt.update([1_300_000_000, [(0x4B5, seg_frc4, bus)]])
+  ret_frc4 = SimpleNamespace(vEgo=30.0 / 3.6, steeringAngleDeg=0.0, speedLimit=0.0, speedBumpDistance=0.0, schoolZoneActive=False)
+  state._update_vehicle_navi_events(pt, ret_frc4, False)
+  assert ret_frc4.speedBumpDistance == 0.0
+
+
+def test_gv80_reset_preserves_bumps_on_straight_drive_and_drops_on_major_road():
+  state = _car_state()
+  state.vehicleNaviCanControl = 1
+  state.vehicleNaviPosition4deSeen = True
+  state.vehicleNaviRoadHorizon = [(0.0, 5)]
+  state._add_vehicle_navi_event("bump", 0, 6, 168.0)
+  state._add_vehicle_navi_event("bump", 0, 6, 211.0)
+  state.vehicleNaviGv80SteerHistory.extend([2.0, 8.8, 0.5])
+
+  # 1) 직진 중(max |steer| = 8.8° < 60°) 0x4B4 pi=0 리셋(rc=5) -> 큐 보존
+  cp = SimpleNamespace(
+    dat={0x4B4: _make_4b4_horizon(0, 0, 5)},
+    ts_nanos={"NEW_MSG_4B4": {"POS_OFFSET": 1_000_000_000}},
+    _last_update_nanos=1_000_000_000,
+  )
+  ret = SimpleNamespace(vEgo=20.0 / 3.6, steeringAngleDeg=0.5, speedLimit=0.0, speedBumpDistance=0.0, schoolZoneActive=False)
+  state._update_vehicle_navi_events(cp, ret, False)
+  assert [e["target"] for e in state.vehicleNaviEvents] == [168.0, 211.0]
+  assert ret.speedBumpDistance == pytest.approx(168.0)
+
+  # 2) 직진이라도 큰 도로(FRC 4) 진입 리셋이면 120m 초과 삭제
+  cp_major = SimpleNamespace(
+    dat={0x4B4: _make_4b4_horizon(0, 0, 4)},
+    ts_nanos={"NEW_MSG_4B4": {"POS_OFFSET": 2_000_000_000}},
+    _last_update_nanos=2_000_000_000,
+  )
+  ret_major = SimpleNamespace(vEgo=20.0 / 3.6, steeringAngleDeg=0.5, speedLimit=0.0, speedBumpDistance=0.0, schoolZoneActive=False)
+  state._update_vehicle_navi_events(cp_major, ret_major, False)
+  assert state.vehicleNaviEvents == []
+  assert ret_major.speedBumpDistance == 0.0
+
+
+def test_gv80_reset_on_turn_keeps_chained_pair_and_drops_far():
+  state = _car_state()
+  state.vehicleNaviCanControl = 1
+  state.vehicleNaviPosition4deSeen = True
+  state.vehicleNaviRoadHorizon = [(0.0, 6)]
+  # 37m 간격 쌍(97m, 134m) + 180m 상한 초과(195m) + 먼 잔여물(300m)
+  for off in (97.0, 134.0, 195.0, 300.0):
+    state._add_vehicle_navi_event("bump", 0, 6, off)
+  state.vehicleNaviGv80SteerHistory.extend([10.0, 150.0, 80.0])
+
+  cp = SimpleNamespace(
+    dat={0x4B4: _make_4b4_horizon(0, 0, 6)},
+    ts_nanos={"NEW_MSG_4B4": {"POS_OFFSET": 1_000_000_000}},
+    _last_update_nanos=1_000_000_000,
+  )
+  ret = SimpleNamespace(vEgo=5.0 / 3.6, steeringAngleDeg=80.0, speedLimit=0.0, speedBumpDistance=0.0, schoolZoneActive=False)
+  state._update_vehicle_navi_events(cp, ret, False)
+  assert [e["target"] for e in state.vehicleNaviEvents] == [97.0, 134.0]
+  assert ret.speedBumpDistance == pytest.approx(97.0)
+
+  # 첫째 통과 후 둘째(134m)로 정상 릴레이
+  state.totalDistance = 98.0
+  ret2 = SimpleNamespace(vEgo=5.0 / 3.6, steeringAngleDeg=0.0, speedLimit=0.0, speedBumpDistance=0.0, schoolZoneActive=False)
+  state._update_vehicle_navi_events(cp, ret2, False)
+  assert ret2.speedBumpDistance == pytest.approx(36.0)
+
+
+@pytest.mark.parametrize("mode,bit35_on,expected_dist", [
+  (1, False, 200.0),
+  (2, False, 0.0),
+  (2, True, 200.0),
+  (3, False, 0.0),
+  (3, True, 200.0),
+])
+def test_gv80_frc5_bump_respects_all_can_control_modes(monkeypatch, mode, bit35_on, expected_dist):
+  state, parsers = _make_real_canfd_navi(monkeypatch, CAR.HYUNDAI_IONIQ_5)
+  state.vehicleNaviCanControl = mode
+  pt = parsers[Bus.pt]
+  bus = pt.bus
+  state.controls_ready_count = 122
+
+  byte4 = (0x08 | 5) if bit35_on else 5
+  seg_frc5 = ((8 << 13) | (byte4 << 32)).to_bytes(8, "little")
+  frames = [
+    (0x4DE, bytes.fromhex("0200014070730430"), bus),
+    (0x4B5, seg_frc5, bus),
+    (0x4B8, _make_4b8_bump(200, path=8), bus),
+  ]
+  pt.update([1_000_000_000, frames])
+  state.monitor_fingerprint(parsers, True)
+  pt.update([1_100_000_000, frames])
+  ret = SimpleNamespace(vEgo=25.0 / 3.6, steeringAngleDeg=0.0, speedLimit=0.0, speedBumpDistance=0.0, schoolZoneActive=False)
+  state._update_vehicle_navi_events(pt, ret, False)
+  assert ret.speedBumpDistance == pytest.approx(expected_dist)
