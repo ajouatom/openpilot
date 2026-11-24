@@ -34,6 +34,17 @@
 //! do its cap, by 0.10 m/s² per m/s² (0.30 at 1.5 m/s², at 100 %), and the
 //! path offset it accepts as real, from 0.6 m to 0.9 m by 1.5 m/s²: in
 //! segment 11 a tenth of the curve frames had the path 0.6 m or more inside.
+//!
+//! Sure lines. The offset limits are there for lane lines the model has wrong;
+//! they also stopped it where N16 cut hardest: PHEV 0000000f seg 64 (55 km/h,
+//! a 95 m radius, 2.5 m/s²) had the correction at 0.49 m/s² until the path
+//! went 1.0 m inside, the 0.9 m limit shut it off with both lines at 0.8-0.9
+//! probability, and the car crossed the centre line 1.5 s later. With both
+//! lines at 0.6 or more, a normal width and no jump of the lane centre (which
+//! a lane the model has just swapped for its neighbour shows), a curve
+//! accepts up to 2.0 m of path offset and 1.5 m of car offset; the cap grows
+//! with the road's lateral acceleration up to 3 m/s² (0.6 m/s² at 2.5 at
+//! 150 %). A jump of more than 0.7 m in the centre holds it off for 1 s.
 
 const DT: f64 = 0.01;
 const MIN_SPEED: f64 = 30. / 3.6;
@@ -58,12 +69,24 @@ const PATH_OFFSET_MAX: f64 = 0.6;
 /// The path offset accepted at a lateral acceleration of `CURVE_FULL` or more.
 const PATH_OFFSET_MAX_CURVE: f64 = 0.9;
 /// m/s² of cap added per m/s² of the road's lateral acceleration, at 100 %.
-const CURVE_CAP_GAIN: f64 = 0.10;
+const CURVE_CAP_GAIN: f64 = 0.15;
 /// The road's lateral acceleration past which the curve allowances stop growing.
-const CURVE_ACCEL_MAX: f64 = 2.;
+const CURVE_ACCEL_MAX: f64 = 3.;
 /// Where the path-offset allowance reaches `PATH_OFFSET_MAX_CURVE`.
 const CURVE_FULL: f64 = 1.5;
 const CURVATURE_MAX: f64 = 1. / 80.;
+/// Both lines at least this sure let a curve accept the larger offsets below.
+const CONFIDENT_PROB: f64 = 0.6;
+const PATH_OFFSET_MAX_CONFIDENT: f64 = 2.0;
+const CAR_OFFSET_MAX_CONFIDENT: f64 = 1.5;
+/// With sure lines: the model's curvature is the road's plus its pull toward
+/// its own line, so where N16 cuts a 95 m curve it asks for a 60 m one; the
+/// 80 m limit shut the correction off just as it pushed back.
+const CURVATURE_MAX_CONFIDENT: f64 = 1. / 50.;
+/// A move of the lane centre at the car point this large between two steps
+/// is the model swapping lanes, not the car moving: hold off `LANE_JUMP_HOLD_S`.
+const LANE_JUMP: f64 = 0.7;
+const LANE_JUMP_HOLD_S: f64 = 1.;
 /// The correction's time constant: it acts over seconds, the model's frames
 /// jitter within 0.1-0.2 s.
 const ACCEL_TAU_S: f64 = 0.5;
@@ -101,6 +124,10 @@ pub struct Sample<'a> {
 pub struct Centering {
     blend: f64,
     integral: f64,
+    /// The lane centre at the car point last step, to see a lane swap.
+    last_car: Option<f64>,
+    /// Seconds left of a hold after a lane swap.
+    hold: f64,
     /// Last lateral acceleration added (m/s²), for tests and diagnostics.
     pub accel: f64,
 }
@@ -108,7 +135,18 @@ pub struct Centering {
 impl Centering {
     /// The curvature to add to the model's this step.
     pub fn update(&mut self, sample: &Sample<'_>) -> f64 {
-        let offsets = (sample.strength > 0.).then(|| offsets(sample)).flatten();
+        let car = car_offset(sample);
+        if let (Some(now), Some(before)) = (car, self.last_car) {
+            if (now - before).abs() > LANE_JUMP {
+                self.hold = LANE_JUMP_HOLD_S;
+            }
+        }
+        self.last_car = car;
+        let held = self.hold > 0.;
+        self.hold = (self.hold - DT).max(0.);
+        let offsets = (sample.strength > 0. && !held)
+            .then(|| offsets(sample))
+            .flatten();
         match offsets {
             Some((car, path)) => {
                 self.blend = (self.blend + DT / RAMP_IN_S).min(1.);
@@ -156,33 +194,54 @@ fn lookahead(speed: f64) -> f64 {
 /// lookahead (both + when the centre is to the left), or None when the
 /// geometry or the conditions do not allow centring.
 fn offsets(sample: &Sample<'_>) -> Option<(f64, f64)> {
+    let sure = sample.left_prob >= CONFIDENT_PROB && sample.right_prob >= CONFIDENT_PROB;
+    let curvature_max = if sure {
+        CURVATURE_MAX_CONFIDENT
+    } else {
+        CURVATURE_MAX
+    };
     if !sample.allowed
         || sample.speed < MIN_SPEED
-        || sample.model_curvature.abs() > CURVATURE_MAX
+        || sample.model_curvature.abs() > curvature_max
         || sample.left_prob < LINE_PROB_MIN
         || sample.right_prob < LINE_PROB_MIN
     {
         return None;
     }
-    let centre = |x: f64| -> Option<(f64, f64)> {
-        let left = at(sample.lane_x, sample.left_y, x)?;
-        let right = at(sample.lane_x, sample.right_y, x)?;
-        Some(((left + right) / 2., right - left))
-    };
-    // The centre 5 m ahead, less the bend the car's own curvature puts there:
-    // on a curve the centre at 5 m is already κ·5²/2 to the inside (8 cm at a
-    // 150 m radius), which is not an offset of the car.
-    let (car, width) = centre(CAR_POINT)?;
-    let car = car - sample.model_curvature * CAR_POINT * CAR_POINT / 2.;
+    let (_, width) = centre(sample, CAR_POINT)?;
+    let car = car_offset(sample)?;
     let lookahead = lookahead(sample.speed);
-    let (far, _) = centre(lookahead)?;
+    let (far, _) = centre(sample, lookahead)?;
     let path = far - at(sample.path_x, sample.path_y, lookahead)?;
-    let path_max = PATH_OFFSET_MAX
-        + (PATH_OFFSET_MAX_CURVE - PATH_OFFSET_MAX) * (curve_accel(sample) / CURVE_FULL).min(1.);
-    ((WIDTH_MIN..=WIDTH_MAX).contains(&width)
-        && car.abs() <= CAR_OFFSET_MAX
-        && path.abs() <= path_max)
+    let curve = (curve_accel(sample) / CURVE_FULL).min(1.);
+    let (path_max, car_max) = if sure {
+        (
+            PATH_OFFSET_MAX + (PATH_OFFSET_MAX_CONFIDENT - PATH_OFFSET_MAX) * curve,
+            CAR_OFFSET_MAX + (CAR_OFFSET_MAX_CONFIDENT - CAR_OFFSET_MAX) * curve,
+        )
+    } else {
+        (
+            PATH_OFFSET_MAX + (PATH_OFFSET_MAX_CURVE - PATH_OFFSET_MAX) * curve,
+            CAR_OFFSET_MAX,
+        )
+    };
+    ((WIDTH_MIN..=WIDTH_MAX).contains(&width) && car.abs() <= car_max && path.abs() <= path_max)
         .then_some((car, path))
+}
+
+/// The lane centre and width at `x`.
+fn centre(sample: &Sample<'_>, x: f64) -> Option<(f64, f64)> {
+    let left = at(sample.lane_x, sample.left_y, x)?;
+    let right = at(sample.lane_x, sample.right_y, x)?;
+    Some(((left + right) / 2., right - left))
+}
+
+/// The centre 5 m ahead, less the bend the car's own curvature puts there: on
+/// a curve the centre at 5 m is already κ·5²/2 to the inside (8 cm at a 150 m
+/// radius), which is not an offset of the car.
+fn car_offset(sample: &Sample<'_>) -> Option<f64> {
+    let (car, _) = centre(sample, CAR_POINT)?;
+    Some(car - sample.model_curvature * CAR_POINT * CAR_POINT / 2.)
 }
 
 /// Linear interpolation of y at x along increasing xs; None outside the data.
@@ -424,9 +483,9 @@ mod tests {
             ),
             ("slow", sample(25. / 3.6, &lines)),
             (
-                "a curve tighter than 80 m",
+                "a curve tighter than 50 m",
                 Sample {
-                    model_curvature: 0.02,
+                    model_curvature: 0.03,
                     ..sample(50. / 3.6, &lines)
                 },
             ),
@@ -509,11 +568,35 @@ mod tests {
         lag: f64,
         seconds: f64,
     ) -> (f64, f64) {
+        simulate_curve_from(
+            strength,
+            curvature,
+            speed,
+            inside,
+            inside,
+            model_seconds,
+            lag,
+            seconds,
+        )
+    }
+
+    /// `simulate_curve` with the car starting `start` m to the inside.
+    #[allow(clippy::too_many_arguments)]
+    fn simulate_curve_from(
+        strength: f64,
+        curvature: f64,
+        speed: f64,
+        inside: f64,
+        start: f64,
+        model_seconds: f64,
+        lag: f64,
+        seconds: f64,
+    ) -> (f64, f64) {
         let preferred = inside * curvature.signum();
         let model_lookahead = speed * model_seconds;
         // y: the car's offset from the centre (+ left), psi: its heading
         // against the road's tangent, starting on the model's own line
-        let (mut y, mut psi, mut steer) = (preferred, 0., curvature);
+        let (mut y, mut psi, mut steer) = (start * curvature.signum(), 0., curvature);
         let mut c = Centering::default();
         let mut outside: f64 = 0.;
         for _ in 0..(seconds / super::DT) as usize {
@@ -566,6 +649,67 @@ mod tests {
     }
 
     #[test]
+    fn a_hard_cut_with_sure_lines_is_held_inside_the_lane() {
+        // PHEV 0000000f seg 64: 55 km/h, a 95 m radius, N16 heading for a line
+        // 1.6 m inside, the car starting on the centre. The lane is 3.5 m and
+        // the car about 1.8 m wide, so past 0.85 m a wheel is over the line.
+        let speed = 55. / 3.6;
+        for curvature in [1. / 95., -1. / 95.] {
+            let (off, _) = simulate_curve_from(0., curvature, speed, 1.6, 0., 1.5, 0.3, 30.);
+            assert!(off > 1.5, "uncorrected {off}");
+            let (on, outside) = simulate_curve_from(1.5, curvature, speed, 1.6, 0., 1.5, 0.3, 30.);
+            assert!(
+                on < 0.7,
+                "150 %: {on} m inside, a wheel over the line past 0.85"
+            );
+            assert!(outside < 0.05, "{outside}");
+        }
+    }
+
+    #[test]
+    fn unsure_lines_keep_the_tight_limits() {
+        // the same 1.2 m cut with lines at 0.55 is taken for lines gone wrong
+        let lines = curve(1. / 95., 1.2);
+        let s = Sample {
+            model_curvature: 1. / 95.,
+            left_prob: 0.55,
+            right_prob: 0.55,
+            ..sample(55. / 3.6, &lines)
+        };
+        let mut c = Centering::default();
+        assert_eq!(settle(&mut c, &s, 300), 0.);
+        let sure = Sample {
+            left_prob: 0.8,
+            right_prob: 0.8,
+            ..s
+        };
+        let mut c = Centering::default();
+        assert!(settle(&mut c, &sure, 300) != 0.);
+    }
+
+    #[test]
+    fn a_lane_the_model_swaps_for_its_neighbour_holds_the_correction_off() {
+        // seg 64 at 14 s: the lines jump between two frames (a lane over
+        // there; 0.8 m here, so the offset limits alone would still allow it)
+        let here = curve(1. / 150., 0.4);
+        let next = (here.0.map(|y| y - 0.8), here.1.map(|y| y - 0.8), here.2);
+        fn at(lines: &([f64; 33], [f64; 33], [f64; 33])) -> Sample<'_> {
+            Sample {
+                model_curvature: 1. / 150.,
+                ..sample(55. / 3.6, lines)
+            }
+        }
+        let mut c = Centering::default();
+        settle(&mut c, &at(&here), 300);
+        assert!(c.accel.abs() > 0.05);
+        // 0.5 s after the swap the correction is fading out, not chasing the new lane
+        let after = settle(&mut c, &at(&next), 50);
+        let mut fresh = Centering::default();
+        let chasing = settle(&mut fresh, &at(&next), 300);
+        assert!(after.abs() < chasing.abs() * 0.5, "{after} vs {chasing}");
+    }
+
+    #[test]
     fn a_slower_or_quicker_steering_lag_changes_little() {
         // lagd's estimate moves with the car and the road; the correction
         // looks 2 s ahead and integrates over seconds, so 0.2-0.6 s of lag
@@ -594,6 +738,15 @@ mod tests {
                     eprintln!("{kmh} km/h, {radius} m radius, lag {lag} s, {:>3.0} %: {on:+.2} m inside after 30 s, at most {outside:.2} m outside", strength * 100.);
                 }
             }
+        }
+        // PHEV 0000000f seg 64: 55 km/h, a 95 m radius, N16 1.6 m inside
+        for strength in [0., 1., 1.5, 2.] {
+            let (on, outside) =
+                simulate_curve_from(strength, 1. / 95., 55. / 3.6, 1.6, 0., 1.5, 0.3, 30.);
+            eprintln!(
+                "seg 64: {:>3.0} %: {on:+.2} m inside after 30 s, at most {outside:.2} m outside",
+                strength * 100.
+            );
         }
     }
 
