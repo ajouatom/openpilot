@@ -64,6 +64,11 @@ const CURVE_ACCEL_MAX: f64 = 2.;
 /// Where the path-offset allowance reaches `PATH_OFFSET_MAX_CURVE`.
 const CURVE_FULL: f64 = 1.5;
 const CURVATURE_MAX: f64 = 1. / 80.;
+/// The correction's time constant: it acts over seconds, the model's frames
+/// jitter within 0.1-0.2 s.
+const ACCEL_TAU_S: f64 = 0.5;
+/// m/s² per second the correction may change at 100 %; scales with the setting.
+const ACCEL_RATE_MAX: f64 = 0.4;
 
 /// The road's lateral acceleration as the model drives it, capped for the allowances.
 fn curve_accel(sample: &Sample<'_>) -> f64 {
@@ -116,7 +121,16 @@ impl Centering {
                 let lookahead = lookahead(sample.speed);
                 let pursuit = 2. * path * sample.speed.powi(2) / lookahead.powi(2);
                 let cap = (ACCEL_MAX + CURVE_CAP_GAIN * curve_accel(sample)) * scale;
-                self.accel = (scale * pursuit + self.integral).clamp(-cap, cap);
+                let target = (scale * pursuit + self.integral).clamp(-cap, cap);
+                // The lane centre and the path 25-30 m ahead move a little
+                // from one model frame to the next; taken as they come the
+                // correction shook at 2-3 Hz (PHEV 0000000f seg 14 at 150 %:
+                // 0.17, 0.26, 0.12, 0.20 m/s² 0.2 s apart), which drivers
+                // felt as a tapping wheel. Smoothed over 0.5 s and limited in
+                // how fast it may change, it follows the road, not the noise.
+                let filtered = self.accel + (target - self.accel) * DT / ACCEL_TAU_S;
+                let step = ACCEL_RATE_MAX * scale * DT;
+                self.accel += (filtered - self.accel).clamp(-step, step);
             }
             None => {
                 self.blend = (self.blend - DT / RAMP_OUT_S).max(0.);
@@ -284,6 +298,59 @@ mod tests {
                 c.accel
             );
         }
+    }
+
+    #[test]
+    fn a_path_that_jitters_from_frame_to_frame_moves_the_correction_slowly() {
+        // A curve the model cuts 0.4 m inside, its path 30 m ahead jumping
+        // ±0.12 m from one 20 Hz model frame to the next as on PHEV 0000000f
+        // seg 14; controls run at 100 Hz, so each frame holds 5 steps.
+        let speed = 46. / 3.6;
+        let curvature = 1. / 120.;
+        let strength = 1.5;
+        let mut c = Centering::default();
+        let mut seed: u32 = 12345;
+        let mut accels = vec![];
+        for frame in 0..400 {
+            seed = seed.wrapping_mul(1_103_515_245).wrapping_add(12345);
+            let jitter = (f64::from(seed >> 16) / 65535. - 0.5) * 0.24;
+            let lines = curve(curvature, 0.4 + jitter);
+            let s = Sample {
+                strength,
+                model_curvature: curvature,
+                ..sample(speed, &lines)
+            };
+            for _ in 0..5 {
+                c.update(&s);
+                if frame >= 200 {
+                    accels.push(c.accel);
+                }
+            }
+        }
+        let steps = accels.windows(2).map(|w| (w[1] - w[0]).abs() / super::DT);
+        let fastest = steps.fold(0., f64::max);
+        assert!(
+            fastest <= super::ACCEL_RATE_MAX * strength + 1e-9,
+            "{fastest} m/s² per s"
+        );
+        // and it still pulls outward as hard as the steady path asks, on average
+        let mean = accels.iter().sum::<f64>() / accels.len() as f64;
+        let mut steady = Centering::default();
+        let lines = curve(curvature, 0.4);
+        settle(
+            &mut steady,
+            &Sample {
+                strength,
+                model_curvature: curvature,
+                ..sample(speed, &lines)
+            },
+            2000,
+        );
+        assert!(
+            (mean - steady.accel).abs() < 0.03,
+            "{mean} vs {}",
+            steady.accel
+        );
     }
 
     #[test]
