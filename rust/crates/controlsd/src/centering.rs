@@ -16,12 +16,24 @@
 //!
 //! Both work in lateral acceleration (curvature × v²) so a setting feels the
 //! same at any speed; the sum is capped at 0.15 m/s² at 100 % (0.30 at the
-//! 200 % maximum). How much offset that removes depends on how hard the model
-//! pulls back to its own line, which only a drive shows: start at 100 and
-//! raise it if the car stays off centre. It ramps in over 1 s and
-//! out over 0.5 s, and only acts above 30 km/h with both ego lane lines seen
-//! (probability ≥ 0.5, 2.6..4.3 m apart), no lane change, turn or ATC, no
-//! driver steering and a road gentler than a 200 m radius.
+//! 200 % maximum) on a straight road. How much offset that removes depends on
+//! how hard the model pulls back to its own line, which only a drive shows:
+//! start at 100 and raise it if the car stays off centre. It ramps in over 1 s
+//! and out over 0.5 s, and only acts above 30 km/h with both ego lane lines
+//! seen (probability ≥ 0.5, 2.6..4.3 m apart), no lane change, turn or ATC, no
+//! driver steering and a road gentler than an 80 m radius.
+//!
+//! Curves. The driving models hold the inside of a firm curve: on drive
+//! 00000cdf (IONIQ 5, 11/23) N16 ran 0.32 m inside the lane centre above
+//! 1 m/s² of lateral acceleration, 0.37 m on segment 11 with its path still
+//! 0.28 m inside 30 m ahead, and exactly so on the same frames run on a CPU,
+//! so it is the model's own line, not the accelerator's; Cheddar held 0.33 m
+//! on 00000ce3. Until this change centring stopped at a 200 m radius, where
+//! those curves begin. Now it works up to an 80 m radius, and as the road's
+//! lateral acceleration grows (the model's curvature × v², up to 2 m/s²) so
+//! do its cap, by 0.10 m/s² per m/s² (0.30 at 1.5 m/s², at 100 %), and the
+//! path offset it accepts as real, from 0.6 m to 0.9 m by 1.5 m/s²: in
+//! segment 11 a tenth of the curve frames had the path 0.6 m or more inside.
 
 const DT: f64 = 0.01;
 const MIN_SPEED: f64 = 30. / 3.6;
@@ -43,7 +55,22 @@ const WIDTH_MIN: f64 = 2.6;
 const WIDTH_MAX: f64 = 4.3;
 const CAR_OFFSET_MAX: f64 = 0.8;
 const PATH_OFFSET_MAX: f64 = 0.6;
-const CURVATURE_MAX: f64 = 1. / 200.;
+/// The path offset accepted at a lateral acceleration of `CURVE_FULL` or more.
+const PATH_OFFSET_MAX_CURVE: f64 = 0.9;
+/// m/s² of cap added per m/s² of the road's lateral acceleration, at 100 %.
+const CURVE_CAP_GAIN: f64 = 0.10;
+/// The road's lateral acceleration past which the curve allowances stop growing.
+const CURVE_ACCEL_MAX: f64 = 2.;
+/// Where the path-offset allowance reaches `PATH_OFFSET_MAX_CURVE`.
+const CURVE_FULL: f64 = 1.5;
+const CURVATURE_MAX: f64 = 1. / 80.;
+
+/// The road's lateral acceleration as the model drives it, capped for the allowances.
+fn curve_accel(sample: &Sample<'_>) -> f64 {
+    (sample.model_curvature * sample.speed.powi(2))
+        .abs()
+        .min(CURVE_ACCEL_MAX)
+}
 
 /// What one control step needs from modelV2, carState and the lateral state.
 pub struct Sample<'a> {
@@ -88,7 +115,7 @@ impl Centering {
                     (self.integral + INTEGRAL_GAIN * scale * car * DT).clamp(-limit, limit);
                 let lookahead = lookahead(sample.speed);
                 let pursuit = 2. * path * sample.speed.powi(2) / lookahead.powi(2);
-                let cap = ACCEL_MAX * scale;
+                let cap = (ACCEL_MAX + CURVE_CAP_GAIN * curve_accel(sample)) * scale;
                 self.accel = (scale * pursuit + self.integral).clamp(-cap, cap);
             }
             None => {
@@ -128,13 +155,19 @@ fn offsets(sample: &Sample<'_>) -> Option<(f64, f64)> {
         let right = at(sample.lane_x, sample.right_y, x)?;
         Some(((left + right) / 2., right - left))
     };
+    // The centre 5 m ahead, less the bend the car's own curvature puts there:
+    // on a curve the centre at 5 m is already κ·5²/2 to the inside (8 cm at a
+    // 150 m radius), which is not an offset of the car.
     let (car, width) = centre(CAR_POINT)?;
+    let car = car - sample.model_curvature * CAR_POINT * CAR_POINT / 2.;
     let lookahead = lookahead(sample.speed);
     let (far, _) = centre(lookahead)?;
     let path = far - at(sample.path_x, sample.path_y, lookahead)?;
+    let path_max = PATH_OFFSET_MAX
+        + (PATH_OFFSET_MAX_CURVE - PATH_OFFSET_MAX) * (curve_accel(sample) / CURVE_FULL).min(1.);
     ((WIDTH_MIN..=WIDTH_MAX).contains(&width)
         && car.abs() <= CAR_OFFSET_MAX
-        && path.abs() <= PATH_OFFSET_MAX)
+        && path.abs() <= path_max)
         .then_some((car, path))
 }
 
@@ -155,7 +188,7 @@ fn at(xs: &[f64], ys: &[f64], x: f64) -> Option<f64> {
 
 #[cfg(test)]
 mod tests {
-    use super::{Centering, Sample, ACCEL_MAX};
+    use super::{Centering, Sample, ACCEL_MAX, CURVE_CAP_GAIN};
 
     const XS: [f64; 33] = {
         let mut xs = [0.; 33];
@@ -213,6 +246,70 @@ mod tests {
         assert!((0.09..0.12).contains(&-c.accel), "{}", c.accel);
     }
 
+    /// A curve of `curvature` (+ the same side as + y): lane centre and car on
+    /// it, the model's path `inside` m to the curve's inside all the way.
+    fn curve(curvature: f64, inside: f64) -> ([f64; 33], [f64; 33], [f64; 33]) {
+        let centre = |x: f64| curvature * x * x / 2.;
+        (
+            XS.map(|x| centre(x) - 1.75),
+            XS.map(|x| centre(x) + 1.75),
+            XS.map(|x| centre(x) + inside * curvature.signum() * (x / 10.).min(1.)),
+        )
+    }
+
+    #[test]
+    fn steers_out_of_a_curve_the_model_cuts_and_past_the_straight_cap() {
+        // 50 km/h on a 150 m radius (1.29 m/s²), the path 0.5 m inside, as
+        // N16's sharpest frames on 00000cdf segment 11.
+        let speed = 50. / 3.6;
+        for curvature in [1. / 150., -1. / 150.] {
+            let lines = curve(curvature, 0.5);
+            let s = Sample {
+                model_curvature: curvature,
+                ..sample(speed, &lines)
+            };
+            let mut c = Centering::default();
+            let correction = settle(&mut c, &s, 300);
+            // toward the outside: against the curve's own sign
+            assert!(correction * curvature < 0., "{curvature}: {correction}");
+            let road = curvature.abs() * speed * speed;
+            assert!(
+                c.accel.abs() > ACCEL_MAX,
+                "no more than the straight cap: {}",
+                c.accel
+            );
+            assert!(
+                c.accel.abs() <= ACCEL_MAX + CURVE_CAP_GAIN * road + 1e-12,
+                "{}",
+                c.accel
+            );
+        }
+    }
+
+    #[test]
+    fn a_curve_driven_on_its_centre_gets_next_to_nothing() {
+        // Only the lane grid's linear interpolation of the bend at 5 m is
+        // left (a few mm), well under a twentieth of the straight cap. Without
+        // taking the car's own bend off the 5 m point the integral would lean
+        // the car 8 cm into this curve.
+        let lines = curve(1. / 150., 0.);
+        let s = Sample {
+            model_curvature: 1. / 150.,
+            ..sample(50. / 3.6, &lines)
+        };
+        let mut c = Centering::default();
+        settle(&mut c, &s, 300);
+        assert!(c.accel.abs() < ACCEL_MAX / 20., "{}", c.accel);
+    }
+
+    #[test]
+    fn a_path_far_off_the_lane_on_a_straight_is_still_taken_for_bad_lines() {
+        // 0.8 m off is accepted in a firm curve, not on a straight road
+        let lines = straight(-0.8, 0.);
+        let mut c = Centering::default();
+        assert_eq!(settle(&mut c, &sample(70. / 3.6, &lines), 300), 0.);
+    }
+
     #[test]
     fn a_centred_path_and_car_get_nothing() {
         let lines = straight(0., 0.);
@@ -260,10 +357,10 @@ mod tests {
             ),
             ("slow", sample(25. / 3.6, &lines)),
             (
-                "curve",
+                "a curve tighter than 80 m",
                 Sample {
-                    model_curvature: 0.006,
-                    ..sample(70. / 3.6, &lines)
+                    model_curvature: 0.02,
+                    ..sample(50. / 3.6, &lines)
                 },
             ),
             (
@@ -328,6 +425,109 @@ mod tests {
             overshoot = overshoot.max(-y);
         }
         (y, overshoot)
+    }
+
+    /// A model that cuts a curve: on a road of `curvature` (+ left) it steers
+    /// by pure pursuit, `model_seconds` ahead, toward its own line `inside` m
+    /// to the curve's inside, with a first-order steering lag of `lag` s (what
+    /// lagd measures, 0.30-0.34 s on the cars logged). Returns the car's
+    /// offset from the lane centre toward the inside after `seconds`, and the
+    /// furthest it went toward the outside.
+    fn simulate_curve(
+        strength: f64,
+        curvature: f64,
+        speed: f64,
+        inside: f64,
+        model_seconds: f64,
+        lag: f64,
+        seconds: f64,
+    ) -> (f64, f64) {
+        let preferred = inside * curvature.signum();
+        let model_lookahead = speed * model_seconds;
+        // y: the car's offset from the centre (+ left), psi: its heading
+        // against the road's tangent, starting on the model's own line
+        let (mut y, mut psi, mut steer) = (preferred, 0., curvature);
+        let mut c = Centering::default();
+        let mut outside: f64 = 0.;
+        for _ in 0..(seconds / super::DT) as usize {
+            // the lane centre and the model's path in the car's frame
+            let centre = |x: f64| -y - psi * x + curvature * x * x / 2.;
+            let left = XS.map(|x| centre(x) - 1.75);
+            let right = XS.map(|x| centre(x) + 1.75);
+            let path = XS.map(|x| centre(x) + y + (preferred - y) * (x / model_lookahead).min(1.));
+            let model = curvature
+                + 2. * ((preferred - y) - psi * model_lookahead) / model_lookahead.powi(2);
+            let sample = Sample {
+                strength,
+                allowed: true,
+                speed,
+                model_curvature: model,
+                lane_x: &XS,
+                left_y: &left,
+                right_y: &right,
+                left_prob: 0.9,
+                right_prob: 0.9,
+                path_x: &XS,
+                path_y: &path,
+            };
+            let target = model + c.update(&sample);
+            steer += (target - steer) * super::DT / lag;
+            psi += speed * (steer - curvature) * super::DT;
+            y += speed * psi * super::DT;
+            outside = outside.max(-y * curvature.signum());
+        }
+        (y * curvature.signum(), outside)
+    }
+
+    #[test]
+    fn a_model_that_cuts_a_firm_curve_is_drawn_toward_the_centre() {
+        // 00000cdf segment 11: 50 km/h, a 150 m radius (1.29 m/s²), N16
+        // 0.35 m inside. 30 s of the same curve, both directions.
+        let speed = 50. / 3.6;
+        for curvature in [1. / 150., -1. / 150.] {
+            let (off, _) = simulate_curve(0., curvature, speed, 0.35, 1.5, 0.3, 30.);
+            assert!((off - 0.35).abs() < 0.02, "uncorrected {off}");
+            let (on, outside) = simulate_curve(1., curvature, speed, 0.35, 1.5, 0.3, 30.);
+            let (raised, outside_raised) =
+                simulate_curve(2., curvature, speed, 0.35, 1.5, 0.3, 30.);
+            assert!(on < 0.6 * off, "100 %: still {on} m inside");
+            assert!(raised < on, "200 %: {raised} m vs {on} m");
+            // 100 % stays inside the centre; 200 % may lean a few cm past it
+            assert!(outside < 0.05, "100 % swung out {outside} m");
+            assert!(outside_raised < 0.12, "200 % swung out {outside_raised} m");
+        }
+    }
+
+    #[test]
+    fn a_slower_or_quicker_steering_lag_changes_little() {
+        // lagd's estimate moves with the car and the road; the correction
+        // looks 2 s ahead and integrates over seconds, so 0.2-0.6 s of lag
+        // must not undo it or swing the car out of the curve
+        let speed = 50. / 3.6;
+        for lag in [0.2, 0.3, 0.45, 0.6] {
+            let (on, outside) = simulate_curve(1., 1. / 150., speed, 0.35, 1.5, lag, 30.);
+            assert!(
+                on < 0.15 && outside < 0.05,
+                "lag {lag}: {on} m inside, {outside} m out"
+            );
+        }
+    }
+
+    /// The same curve at each setting, for the drivers' guide:
+    /// `cargo test -p openpilot-controlsd curve_settings -- --nocapture --ignored`.
+    #[test]
+    #[ignore]
+    fn curve_settings() {
+        for (kmh, radius) in [(50., 150.), (60., 200.), (40., 100.)] {
+            let speed = kmh / 3.6;
+            for lag in [0.3, 0.45, 0.6] {
+                for strength in [0., 1., 1.5, 2.] {
+                    let (on, outside) =
+                        simulate_curve(strength, 1. / radius, speed, 0.35, 1.5, lag, 30.);
+                    eprintln!("{kmh} km/h, {radius} m radius, lag {lag} s, {:>3.0} %: {on:+.2} m inside after 30 s, at most {outside:.2} m outside", strength * 100.);
+                }
+            }
+        }
     }
 
     #[test]
