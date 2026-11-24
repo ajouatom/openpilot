@@ -1,5 +1,16 @@
 # Repository memory
 
+- 2026-11-25: AGNOS updater imports application -> HARDWARE -> TiciLPA ->
+  serial before the full runtime bootstrap. Missing pyserial therefore blocks
+  the update UI. Prepare the bundled pure-Python pyserial before agnos_init;
+  retain full native bootstrap after OS initialization. Required-package failure
+  enters existing startup recovery. Real isolated-venv/Bash call-site tests
+  reproduce two baseline failures and verify offline repair, installed reuse and
+  failed-install recovery. Related local run54pass; one pre-existing offline
+  inventory test fails because bundled idna3.11 is absent from current uv.lock
+  (3.19). Add installer tests to native startup CI. No live device installation
+  or physical OS update test.
+
 - 2026-11-23: Preserve fresh original camera 0x161 lane display states only on
   real PV5. Keep departure/BSD/boundary, green availability and trailer policy;
   stock orange beats availability. Accept DBC 0/1/2/4/6 plus observed8, with

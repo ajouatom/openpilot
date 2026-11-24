@@ -118,6 +118,7 @@ def test_recovery_and_agnos_precede_params_build() -> None:
   pythonpath = launch.index('export PYTHONPATH=')
   ssh_access = launch.index("/data/params/d/SshEnabled")
   recovery = launch.index("  start_carrot_recovery", ssh_access)
+  updater_dependency = launch.index("run_startup_command ensure_python_package serial pyserial 1")
   agnos_update = launch.index("    if ! agnos_init; then")
   clock_floor = launch.index('python3 "$DIR/openpilot/common/build_time.py"')
   dependencies = launch.index("  if ! run_startup_command bootstrap_runtime_dependencies; then")
@@ -126,7 +127,7 @@ def test_recovery_and_agnos_precede_params_build() -> None:
   build = launch.index("    if ! run_startup_command ./build.py; then")
   manager = launch.index("  if ! run_startup_command start_manager; then")
 
-  assert pythonpath < ssh_access < recovery < agnos_update < clock_floor < dependencies < params_build < web < build < manager
+  assert pythonpath < ssh_access < recovery < updater_dependency < agnos_update < clock_floor < dependencies < params_build < web < build < manager
 
 
 def test_usbpd_kernel_is_supplied_only_by_the_agnos_manifest() -> None:

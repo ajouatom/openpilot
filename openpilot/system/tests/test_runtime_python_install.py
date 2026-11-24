@@ -1,6 +1,7 @@
 import os
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -127,3 +128,54 @@ def test_failed_repair_blocks_only_required_packages(tmp_path, required, failure
   assert result.returncode == int(required), result.stderr
   assert "pyserial installed." not in result.stdout
   assert ("not starting openpilot" if required else "continuing without it") in result.stdout
+
+
+@pytest.mark.parametrize("package_state", ["missing", "installed", "unavailable"])
+def test_agnos_startup_repairs_serial_before_updater_import(tmp_path, package_state):
+  source = (Path(BASEDIR) / "launch_chffrplus.sh").read_text(encoding="utf-8")
+  functions = source[source.index("function install_runtime_python_package {"):source.index("function bootstrap_runtime_dependencies {")]
+  launch = source[source.index("function launch {"):]
+  startup = launch[launch.index("  # hardware specific init"):launch.index("  # AGNOS must be current")]
+  functions = functions.replace("/TICI", "./mock_tici").replace("/AGNOS", "./mock_agnos")
+  startup = startup.replace("/AGNOS", "./mock_agnos")
+  (tmp_path / "mock_agnos").touch()
+  project = tmp_path / "project with spaces"
+  wheels = project / "third_party/wheels"
+  wheels.mkdir(parents=True)
+  pydeps = project / "pydeps"
+  pydeps.mkdir()
+  wheel = Path(BASEDIR) / "third_party/wheels/pyserial-3.5-py2.py3-none-any.whl"
+  if package_state != "unavailable":
+    shutil.copy2(wheel, wheels / wheel.name)
+  venv = tmp_path / "venv"
+  subprocess.run([sys.executable, "-m", "venv", str(venv)], check=True, capture_output=True, timeout=60)
+  python = venv / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
+  env = {**os.environ, "BOOTSTRAP_PYTHON": python.as_posix(), "BOOTSTRAP_ROOT": project.as_posix(),
+         "PYTHONPATH": str(pydeps), "PYTHONNOUSERSITE": "1", "PIP_CONFIG_FILE": os.devnull}
+  assert subprocess.run([str(python), "-c", "import serial"], env=env, capture_output=True).returncode != 0
+  if package_state == "installed":
+    subprocess.run([str(python), "-m", "pip", "install", "--no-index", "--no-deps", "--target", str(pydeps), str(wheel)],
+                   env=env, check=True, capture_output=True, timeout=30)
+  script = tmp_path / "startup.sh"
+  script.write_text(r'''
+DIR="$BOOTSTRAP_ROOT"
+PYDEPS="$DIR/pydeps"
+python3() { "$BOOTSTRAP_PYTHON" "$@"; }
+run_startup_command() { "$@"; }
+agnos_init() { python3 -c 'import serial; assert serial.VERSION == "3.5"; print("UPDATER_IMPORT_OK")'; }
+show_startup_failure() { echo "RECOVERY: $*"; exit 72; }
+flock() { exit 73; }
+''' + functions + startup.replace('python3 "$DIR/openpilot/common/build_time.py"', 'true'), encoding="utf-8")
+  result = subprocess.run([_bash(), script.name], cwd=tmp_path, env=env, text=True, capture_output=True, timeout=60)
+  if package_state == "unavailable":
+    assert result.returncode == 72, result.stdout + result.stderr
+    assert "UPDATER_IMPORT_OK" not in result.stdout
+    assert "RECOVERY: AGNOS startup dependency pyserial is unavailable" in result.stdout
+    assert "online package index" not in result.stdout
+  else:
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "UPDATER_IMPORT_OK" in result.stdout
+    if package_state == "installed":
+      assert "installing from local wheel" not in result.stdout
+    else:
+      assert result.stdout.index("pyserial installed.") < result.stdout.index("UPDATER_IMPORT_OK")
