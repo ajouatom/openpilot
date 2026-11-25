@@ -752,6 +752,7 @@ def test_vehicle_navi_live_distance_setting_updates_current_warning():
 def test_vehicle_navi_section_log_frames_hold_cap_until_camera_status_ends():
   state = _car_state()
   state.vehicleNaviCanControl = True
+  state.speedcamSectionAvgControl = True
   state.navi_profile_4be = {
     "PROLONG_VALUE": 0x157,
     "PROLONG_OFFSET": 0,
@@ -787,6 +788,7 @@ def test_vehicle_navi_section_log_frames_hold_cap_until_camera_status_ends():
 def test_vehicle_navi_range_average_holds_section_until_zero():
   state = _car_state()
   state.vehicleNaviCanControl = True
+  state.speedcamSectionAvgControl = True
   state.navi_position_4b4 = {"POS_RANGE_AVG_SPEED": 103}
   cp = SimpleNamespace(dat={}, ts_nanos={"NEW_MSG_4B4": {"POS_RANGE_AVG_SPEED": 1_000_000_000}},
                        _last_update_nanos=1_100_000_000)
@@ -917,6 +919,7 @@ def _pv5_section_state():
   state.canfd_wrapped_navi = True
   state.vehicleNaviZoneControlSupported = False
   state.vehicleNaviCanControl = True
+  state.speedcamSectionAvgControl = True
   state.navi_profile_msg = CANFD_NAVI_PROFILE_MSG
   cp = CANParser("hyundai_canfd_generated", [(CANFD_HDA_INFO_MSG, math.nan)], 0)
   alt = CANParser("hyundai_canfd_generated", [(CANFD_NAVI_STATUS_MSG, math.nan)], 1)
@@ -1720,6 +1723,7 @@ def test_vehicle_navi_4de_dbc_decodes_logged_frames():
 
 def test_vehicle_navi_4de_activates_and_ends_section_on_any_canfd_model(monkeypatch):
   state, parsers = _make_real_canfd_navi(monkeypatch, CAR.HYUNDAI_IONIQ_5)
+  state.speedcamSectionAvgControl = True
   pt = parsers[Bus.pt]
   bus = pt.bus
 
@@ -1768,6 +1772,7 @@ def test_vehicle_navi_4de_sentinel_frame_does_not_activate_section(monkeypatch):
 def test_vehicle_navi_4de_other_length_is_ignored(size):
   state = _car_state()
   state.vehicleNaviCanControl = True
+  state.speedcamSectionAvgControl = True
   state.navi_position_4de = {"POS_OFFSET": 5, "POS_PATH_INDEX": 8, "POS_RANGE_AVG_SPEED": 85}
   state.navi_position_4b4 = {"POS_RANGE_AVG_SPEED": 92}
   payload = bytes.fromhex("0500b98a108ac895").ljust(size, b"\x00")[:size]
@@ -1788,6 +1793,7 @@ def test_vehicle_navi_4de_other_length_is_ignored(size):
 def test_vehicle_navi_4de_priority_and_fallback():
   state = _car_state()
   state.vehicleNaviCanControl = True
+  state.speedcamSectionAvgControl = True
   state.navi_position_4de = {"POS_OFFSET": 5, "POS_PATH_INDEX": 8, "POS_RANGE_AVG_SPEED": 0}
   cp = SimpleNamespace(
     dat={0x4DE: bytes.fromhex("0200014070730430")},
@@ -1900,6 +1906,7 @@ def test_alt_legacy_navi_signal_gating_opens_without_gv80_fingerprint(monkeypatc
 
   # B) 표준 0x4B9 차종에서는 0x4B4 구간·단독 카메라·방지턱·종류7 래치 동작이 그대로 유지된다.
   std_state, std_parsers = _make_real_canfd_navi(monkeypatch, CAR.HYUNDAI_IONIQ_5)
+  std_state.speedcamSectionAvgControl = True
   std_pt = std_parsers[Bus.pt]
   std_bus = std_pt.bus
   std_state.controls_ready_count = 122
@@ -2054,3 +2061,104 @@ def test_gv80_frc5_bump_respects_all_can_control_modes(monkeypatch, mode, bit35_
   ret = SimpleNamespace(vEgo=25.0 / 3.6, steeringAngleDeg=0.0, speedLimit=0.0, speedBumpDistance=0.0, schoolZoneActive=False)
   state._update_vehicle_navi_events(pt, ret, False)
   assert ret.speedBumpDistance == pytest.approx(expected_dist)
+
+
+def test_section_control_off_clears_section_and_cam_after_entry_pass():
+  state = _car_state()
+  state.vehicleNaviCanControl = True
+  state.speedcamSectionAvgControl = False
+  state.navi_position_4de = {"POS_OFFSET": 6, "POS_PATH_INDEX": 8, "POS_RANGE_AVG_SPEED": 0}
+  cp = SimpleNamespace(
+    dat={0x4DE: bytes.fromhex("06000140808ac8ad")},
+    ts_nanos={"NEW_MSG_4DE": {"POS_RANGE_AVG_SPEED": 1_000_000_000}},
+    _last_update_nanos=1_050_000_000,
+  )
+
+  # 1) 구간 진입 전: 진입 카메라 접근 중에는 정상 감속(가상거리 660m)
+  state.totalDistance = 0.0
+  ret = SimpleNamespace(vEgo=30.0, speedLimit=110.0, speedBumpDistance=0.0, schoolZoneActive=False)
+  state._update_vehicle_navi_events(cp, ret, True)
+  state.update_speed_limit(ret, True, distance_time_changed=False)
+  assert not ret.vehicleNaviSectionActive
+  assert ret.speedLimitDistance > 600.0
+
+  # 2) 진입 카메라 통과 후 구간 진입(0x4DE avg=115, 0x4A3 경고는 계속 ON):
+  #    설정 OFF이므로 구간 제어도 꺼지고, 1.0m 가상거리 cam 고정도 즉시 해제된다.
+  state.totalDistance = 700.0
+  state.navi_position_4de["POS_RANGE_AVG_SPEED"] = 115
+  cp.ts_nanos["NEW_MSG_4DE"]["POS_RANGE_AVG_SPEED"] = 2_000_000_000
+  cp._last_update_nanos = 2_050_000_000
+  ret2 = SimpleNamespace(vEgo=30.0, speedLimit=110.0, speedBumpDistance=0.0, schoolZoneActive=False)
+  state._update_vehicle_navi_events(cp, ret2, True)
+  state.update_speed_limit(ret2, True, distance_time_changed=False)
+  assert state.vehicleNaviSpeedZoneActive
+  assert not ret2.vehicleNaviSectionActive
+  assert not ret2.vehicleNaviActive
+  assert ret2.speedLimitDistance == 0.0
+
+
+def test_section_control_off_decelerates_only_for_upcoming_camera_then_clears():
+  state = _car_state()
+  state.vehicleNaviCanControl = True
+  state.speedcamSectionAvgControl = False
+  state.navi_position_4de = {"POS_OFFSET": 6, "POS_PATH_INDEX": 8, "POS_RANGE_AVG_SPEED": 110}
+  cp = SimpleNamespace(
+    dat={0x4DE: bytes.fromhex("0600d94d008cc8a5")},
+    ts_nanos={"NEW_MSG_4DE": {"POS_RANGE_AVG_SPEED": 1_000_000_000}},
+    _last_update_nanos=1_050_000_000,
+  )
+
+  # 구간 내부에서 전방 300m 종료 카메라가 발견된 경우: 발견 시점부터 통과 시점까지만 cam 감속
+  state.totalDistance = 5000.0
+  state.vehicleNaviEvents = [{"type": "camera", "speed": 110, "kind": 1, "target": 5300.0}]
+  ret = SimpleNamespace(vEgo=30.0, speedLimit=110.0, speedBumpDistance=0.0, schoolZoneActive=False)
+  state._update_vehicle_navi_events(cp, ret, True)
+  state.update_speed_limit(ret, True, distance_time_changed=False)
+  assert not ret.vehicleNaviSectionActive
+  assert ret.vehicleNaviActive
+  assert ret.speedLimitDistance == pytest.approx(300.0 - 30.0 * DT_CTRL)
+
+  # 종료 카메라를 지나간 직후: 0x4A3 경고와 0x4DE가 남아 있어도 즉시 0.0으로 꺼진다.
+  state.totalDistance = 5305.0
+  cp.ts_nanos["NEW_MSG_4DE"]["POS_RANGE_AVG_SPEED"] = 2_000_000_000
+  cp._last_update_nanos = 2_050_000_000
+  ret2 = SimpleNamespace(vEgo=30.0, speedLimit=110.0, speedBumpDistance=0.0, schoolZoneActive=False)
+  state._update_vehicle_navi_events(cp, ret2, True)
+  state.update_speed_limit(ret2, True, distance_time_changed=False)
+  assert not ret2.vehicleNaviSectionActive
+  assert not ret2.vehicleNaviActive
+  assert ret2.speedLimitDistance == 0.0
+
+
+def test_section_control_toggle_mid_section_immediately_updates_state():
+  state = _car_state()
+  state.vehicleNaviCanControl = True
+  state.speedcamSectionAvgControl = True
+  state.navi_position_4de = {"POS_OFFSET": 6, "POS_PATH_INDEX": 8, "POS_RANGE_AVG_SPEED": 115}
+  cp = SimpleNamespace(
+    dat={0x4DE: bytes.fromhex("0600794ec08ac8ad")},
+    ts_nanos={"NEW_MSG_4DE": {"POS_RANGE_AVG_SPEED": 1_000_000_000}},
+    _last_update_nanos=1_050_000_000,
+  )
+
+  # ON 상태: 구간 제어 활성
+  ret_on = SimpleNamespace(vEgo=30.0, speedLimit=110.0, speedBumpDistance=0.0, schoolZoneActive=False)
+  state._update_vehicle_navi_events(cp, ret_on, True)
+  assert ret_on.vehicleNaviSectionActive
+  assert ret_on.vehicleNaviSpeed == 110.0
+
+  # 구간 중 OFF 전환: 즉시 구간 제어 및 cam 거리 해제
+  state.speedcamSectionAvgControl = False
+  ret_off = SimpleNamespace(vEgo=30.0, speedLimit=110.0, speedBumpDistance=0.0, schoolZoneActive=False)
+  state._update_vehicle_navi_events(cp, ret_off, True)
+  state.update_speed_limit(ret_off, True, distance_time_changed=False)
+  assert not ret_off.vehicleNaviSectionActive
+  assert not ret_off.vehicleNaviActive
+  assert ret_off.speedLimitDistance == 0.0
+
+  # 다시 ON 전환: 구간 내부이므로 즉시 구간 제어 재활성화
+  state.speedcamSectionAvgControl = True
+  ret_on2 = SimpleNamespace(vEgo=30.0, speedLimit=110.0, speedBumpDistance=0.0, schoolZoneActive=False)
+  state._update_vehicle_navi_events(cp, ret_on2, True)
+  assert ret_on2.vehicleNaviSectionActive
+  assert ret_on2.vehicleNaviSpeed == 110.0

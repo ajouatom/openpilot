@@ -1665,7 +1665,9 @@ class CarState(CarStateBase):
         ret.vehicleNaviSpeed = 30
       return False
 
-    if self.vehicleNaviCanControl and self.vehicleNaviSpeedZoneActive:
+    section_control_enabled = self.vehicleNaviCanControl and self.vehicleNaviSpeedZoneActive and self.speedcamSectionAvgControl
+    section_suppressed = self.vehicleNaviCanControl and self.vehicleNaviSpeedZoneActive and not self.speedcamSectionAvgControl
+    if section_control_enabled:
       ret.vehicleNaviActive = True
       ret.vehicleNaviSectionActive = True
       ret.vehicleNaviSpeed = self.vehicleNaviSpeedZoneSpeed
@@ -1675,7 +1677,11 @@ class CarState(CarStateBase):
     # without a fresh matching warning, including after the previous target.
     # 0x4B5/0x4B8/0x4DE 계열도 같은 확인 게이트를 쓴다: 실물 카메라는 전수 0x4A3 경고가
     # 동반됐고, 경고 없는 단독 예고는 전부 유령이었다 (2026-11-22~23 전수 검증).
-    if self.canfd_wrapped_navi or alt_navi_arch:
+    if section_suppressed:
+      # 구간단속 평균제어 OFF 상태에서는 구간 내내 0x4A3 경고가 유지되더라도
+      # 진입 카메라 통과 후 가상거리(1.0m)로 묶지 않고, 전방에 실제 카메라가 발견될 때만 제어한다.
+      camera = cameras[0] if (speed_limit_cam and cameras) else None
+    elif self.canfd_wrapped_navi or alt_navi_arch:
       camera = self.vehicleNaviCameraStatusEvent if speed_limit_cam else None
     else:
       camera = self.vehicleNaviCameraStatusEvent if speed_limit_cam else (cameras[0] if cameras else None)
@@ -1697,6 +1703,17 @@ class CarState(CarStateBase):
     if self._vehicle_navi_is_controlled_access_road() and ret.speedLimit == 30:
       speed_limit_cam = False
     self.totalDistance += ret.vEgo * DT_CTRL
+    section_suppressed = self.vehicleNaviCanControl and self.vehicleNaviSpeedZoneActive and not self.speedcamSectionAvgControl
+    if section_suppressed:
+      # 구간단속 설정 OFF 시 구간 내부에서는 전방 실물 카메라(target > totalDistance)에만 감속하고
+      # 통과 직후 즉시 0.0으로 해제한다 (0x4A3 상시 경고의 1.0m 가상거리 유지 차단).
+      if ret.speedLimit > 0 and speed_limit_cam and self.vehicleNaviCameraTarget is not None:
+        self.speedLimitDistance = self.vehicleNaviCameraTarget
+        ret.speedLimitDistance = max(0.0, self.speedLimitDistance - self.totalDistance)
+      else:
+        self.speedLimitDistance = self.totalDistance
+        ret.speedLimitDistance = 0.0
+      return
     if ret.speedLimit > 0 and speed_limit_cam and self.vehicleNaviCanControl and self.vehicleNaviCameraTarget is not None:
       self.speedLimitDistance = self.vehicleNaviCameraTarget
       ret.speedLimitDistance = max(1.0 if self.vehicleNaviCameraStatusTarget is not None else 0.0,
