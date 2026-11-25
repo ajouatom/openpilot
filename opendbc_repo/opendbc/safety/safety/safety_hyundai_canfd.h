@@ -359,12 +359,21 @@ static bool canfd_should_block_fwd(int tx_bus, int addr, uint32_t now) {
 #define CANFD_BFWD_MAX_QUEUE 6
 #define CANFD_BFWD_START_COUNT 2
 #define CANFD_BFWD_REUSE_MAX 2
+// Drain a persistent LFA backlog caused by producer/stock clock drift, one command
+// at a time. Require 100 consecutive deep, request-ON pops so fault-avoidance OFF
+// pulses and their minimum ON run are not shortened by trimming. Only skip when
+// the step from the last output is no larger than the ordinary next output's step,
+// and at most 10. Keep the six-entry burst reserve, prefill and other IDs unchanged.
+#define CANFD_BFWD_TARGET_COUNT 2U
+#define CANFD_BFWD_TRIM_POPS 100U  // > 89 valid request frames; <= 255 (uint8_t deep_pops)
+#define CANFD_BFWD_TRIM_MAX_STEP 10
 #define CANFD_BFWD_DIAG_INTERVAL_US 5000000U
 
 typedef struct {
   int addr;
   int dst_bus;
   bool enabled;
+  bool trim;
 
   bool started;
   uint8_t head;
@@ -378,6 +387,8 @@ typedef struct {
   uint32_t last_push_us;
   uint32_t last_push_dt_us;
   uint32_t overflow_count;
+  uint8_t deep_pops;
+  uint32_t trim_count;
   uint32_t reuse_diag_last_us;
   uint32_t reuse_diag_count;
   uint32_t reuse_diag_exhausted;
@@ -389,7 +400,7 @@ typedef struct {
 
 CanfdBufferedFwd canfd_bfwd[] = {
   {.addr = 0x1A0, .dst_bus = 0, .enabled = true },  // SCC_CONTROL
-  {.addr = 0x12A, .dst_bus = 0, .enabled = true },  // LFA
+  {.addr = 0x12A, .dst_bus = 0, .enabled = true, .trim = true },  // LFA
   {.addr = 0x0CB, .dst_bus = 0, .enabled = true },  // LFA_ALT
   {.addr = 0x0EA, .dst_bus = 2, .enabled = true },  // MDPS
   {.addr = 0x1AA, .dst_bus = 2, .enabled = true },  // CRUISE_ALT_BUTTONS
@@ -447,6 +458,8 @@ static void canfd_bfwd_reset(CanfdBufferedFwd* st) {
   st->last_push_us = 0U;
   st->last_push_dt_us = 0U;
   st->overflow_count = 0U;
+  st->deep_pops = 0U;
+  st->trim_count = 0U;
   st->reuse_diag_last_us = 0U;
   st->reuse_diag_count = 0U;
   st->reuse_diag_exhausted = 0U;
@@ -468,6 +481,7 @@ static void canfd_bfwd_push(CanfdBufferedFwd* st, const CANPacket_t* pkt) {
     st->head = (st->head + 1U) % CANFD_BFWD_MAX_QUEUE;
     st->count--;
     st->overflow_count++;
+    st->deep_pops = 0U;
   }
 
   canfd_copy_packet(&st->q[st->tail], pkt);
@@ -481,6 +495,28 @@ static void canfd_bfwd_push(CanfdBufferedFwd* st, const CANPacket_t* pkt) {
   }
 }
 
+// LFA layout as in hyundai_canfd_tx_hook: torque in bytes 5-6, steer request bit 52.
+static int canfd_bfwd_lfa_torque(const CANPacket_t* pkt) {
+  return (int)(((GET_BYTE(pkt, 6) & 0xFU) << 7U) | (GET_BYTE(pkt, 5) >> 1U)) - 1024;
+}
+
+static bool canfd_bfwd_trim_active(const CanfdBufferedFwd* st) {
+  const CANPacket_t* drop = &st->q[st->head];
+  const CANPacket_t* next = &st->q[(st->head + 1U) % CANFD_BFWD_MAX_QUEUE];
+  return GET_BIT(drop, 52U) && GET_BIT(next, 52U) &&
+         (!st->has_last_pkt || GET_BIT(&st->last_pkt, 52U));
+}
+
+static bool canfd_bfwd_trim_ok(const CanfdBufferedFwd* st) {
+  const CANPacket_t* drop = &st->q[st->head];
+  const CANPacket_t* next = &st->q[(st->head + 1U) % CANFD_BFWD_MAX_QUEUE];
+  int last = canfd_bfwd_lfa_torque(&st->last_pkt);
+  int step = canfd_bfwd_lfa_torque(next) - last;
+  int normal_step = canfd_bfwd_lfa_torque(drop) - last;
+  // Merely bounding the skipped step by 10 would turn 0 -> 5 -> 10 into 0 -> 10.
+  return st->has_last_pkt && (ABS(step) <= CANFD_BFWD_TRIM_MAX_STEP) && (ABS(step) <= ABS(normal_step));
+}
+
 static bool canfd_bfwd_pop(CanfdBufferedFwd* st, CANPacket_t* pkt) {
   if ((st == NULL) || !st->enabled) {
     return false;
@@ -488,6 +524,21 @@ static bool canfd_bfwd_pop(CanfdBufferedFwd* st, CANPacket_t* pkt) {
 
   if (!st->started || (st->count == 0U)) {
     return false;
+  }
+
+  // Backlog trim, see CANFD_BFWD_TRIM_POPS.
+  if (st->trim && (st->count > CANFD_BFWD_TARGET_COUNT) && canfd_bfwd_trim_active(st)) {
+    if (st->deep_pops < CANFD_BFWD_TRIM_POPS) {
+      st->deep_pops++;
+    }
+    if ((st->deep_pops >= CANFD_BFWD_TRIM_POPS) && canfd_bfwd_trim_ok(st)) {
+      st->head = (st->head + 1U) % CANFD_BFWD_MAX_QUEUE;
+      st->count--;
+      st->trim_count++;
+      st->deep_pops = 0U;
+    }
+  } else {
+    st->deep_pops = 0U;
   }
 
   canfd_copy_packet(pkt, &st->q[st->head]);
@@ -752,7 +803,11 @@ static bool hyundai_canfd_tx_hook(const CANPacket_t *to_send_const) {
   if (violation) {
     tx = false;
   }
-  else if (hyundai_canfd_buffered_fwd) {
+  // The outer hook still calls us for a rejected DLC/relay state. Such a packet
+  // must not enter a FIFO and be emitted later through stock forwarding.
+  const bool accepted = tx && !relay_malfunction &&
+                        tx_msg_safety_check(to_send, current_safety_config.tx_msgs, current_safety_config.tx_msgs_len);
+  if (accepted && hyundai_canfd_buffered_fwd) {
     CanfdBufferedFwd* bfwd = canfd_bfwd_find(addr, GET_BUS(to_send));
     if (bfwd != NULL) {
       canfd_bfwd_push(bfwd, to_send);
@@ -765,8 +820,6 @@ static bool hyundai_canfd_tx_hook(const CANPacket_t *to_send_const) {
 
   // Only an accepted replacement may suppress stock forwarding. The outer
   // hook's allowlist/relay rejection happens after this hook returns.
-  const bool accepted = tx && !relay_malfunction &&
-                        tx_msg_safety_check(to_send, current_safety_config.tx_msgs, current_safety_config.tx_msgs_len);
   canfd_record_tx_time(GET_BUS(to_send), addr, accepted);
 
   // Held only once accepted: the rx_tx hook sends a held frame without passing the tx hook or the allowlist again.
@@ -874,6 +927,7 @@ static int hyundai_canfd_fwd_hook(CANPacket_t* to_send) {
             print(", max_age_us:"); putui(bfwd->reuse_diag_max_age_us);
             print(", max_dt_us:"); putui(bfwd->reuse_diag_max_dt_us);
             print(", overflow:"); putui(bfwd->overflow_count);
+            print(", trim:"); putui(bfwd->trim_count);
             print("\n");
             bfwd->reuse_diag_last_us = now_us;
             bfwd->reuse_diag_count = 0U;

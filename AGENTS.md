@@ -1,5 +1,19 @@
 # Repository memory
 
+- 2026-11-26: Review KINGBEAKSUU736a6665 against real GV80 uploads and native
+  forwarding hooks. Camera-SCC LFA FIFO backlog is real; do not claim a complete
+  oscillation cure or that angle control is immune. Drain0x12A only after100
+  consecutive deep request-ON pops. Never amplify the ordinary next torque step,
+  cap skipped step at10, reset confirmation across OFF/low-depth/overflow/init.
+  Preserve six slots, prefill2, reuse2, other IDs and existing overflow policy.
+  Also reject disallowed DLC/relay TX before it can mutate any control FIFO.
+  Contributor counterexamples show0->5->10 becoming0->10 and89ON becoming88ON;
+  amended native hook suite420 passes. Fifteen600s C runs cover clock drift,
+  oscillating torque, OFF pulses and jitter; frequent89ON/2OFF deliberately keeps
+  legacy behavior, including its existing overflow limitations. Windows CFFI
+  SPAS failures reproduce on baseline (packet ABI mismatch); Linux/firmware CI
+  follows publication. No vehicle flash, settings or physical cure claim.
+
 - 2026-11-25: AGNOS updater imports application -> HARDWARE -> TiciLPA ->
   serial before the full runtime bootstrap. Missing pyserial therefore blocks
   the update UI. Prepare the bundled pure-Python pyserial before agnos_init;
