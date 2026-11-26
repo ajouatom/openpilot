@@ -139,3 +139,18 @@ def test_tbt_bsd_missing_is_not_clear(fault):
   else:
     bsm = None
   assert tbt_bsd_inputs(bsm, now) == (False, True)
+
+
+@pytest.mark.parametrize('field,expected', [
+  ('INDICATOR_LEFT', (True, False)),
+  ('INDICATOR_RIGHT', (False, True)),
+])
+def test_front_corner_1e5_bsd_blocks_when_1ba_indicators_are_zero(field, expected):
+  from opendbc.car.hyundai.rear_gap import tbt_bsd_inputs
+  camera, bsm, sources = inputs()
+  now = camera._last_update_nanos
+  bsm.ts_nanos['BLINDSPOTS_FRONT_CORNER_1'] = {'COUNTER': now}
+  bsm.dat[0x1E5] = bytes(16)
+  bsm.vl['BLINDSPOTS_FRONT_CORNER_1'] = {'INDICATOR_LEFT': 0, 'INDICATOR_RIGHT': 0, field: 1}
+  assert rear_lane_change_blocks(camera, bsm, sources) == expected
+  assert tbt_bsd_inputs(bsm, now) == (True, expected[1])
