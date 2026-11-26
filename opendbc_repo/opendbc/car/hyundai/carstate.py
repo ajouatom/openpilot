@@ -245,6 +245,8 @@ class CarState(CarStateBase):
     self.blindspots_front_corner_1 = None
     self.brake_light_412 = None
     self.imu_01_10ms = None
+    self.prev_steering_angle_deg = None
+    self.steering_rate_sign = 1.0
 
     # On some cars, CLU15->CF_Clu_VehicleSpeed can oscillate faster than the dash updates. Sample at 5 Hz
     self.cluster_speed = 0
@@ -1514,6 +1516,16 @@ class CarState(CarStateBase):
       ret.steeringAngleDeg = cp.vl["MDPS"]["STEERING_ANGLE_2"] * -1
     else:
       ret.steeringAngleDeg = cp.vl["STEERING_SENSORS"]["STEERING_ANGLE"] * -1
+
+    if self.CP.carFingerprint == CAR.GENESIS_GV80 and ret.steeringRateDeg > 0:
+      if self.prev_steering_angle_deg is not None:
+        delta_angle = ret.steeringAngleDeg - self.prev_steering_angle_deg
+        if delta_angle < -1e-3:
+          self.steering_rate_sign = -1.0
+        elif delta_angle > 1e-3:
+          self.steering_rate_sign = 1.0
+      ret.steeringRateDeg = abs(ret.steeringRateDeg) * self.steering_rate_sign
+    self.prev_steering_angle_deg = ret.steeringAngleDeg
 
     trailer_signal = self.trailer_status is not None and self.trailer_status["TRAILER_CONNECTED"] != 0
     if trailer_signal:
