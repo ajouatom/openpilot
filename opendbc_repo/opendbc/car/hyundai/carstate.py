@@ -73,6 +73,7 @@ VEHICLE_NAVI_GV80_RESET_STEER_WINDOW_FRAMES = round(3.0 / DT_CTRL)  # 3초 (100H
 VEHICLE_NAVI_GV80_BUMP_PAIR_CHAIN_GAP = 60.0        # 회전 리셋 시 생존 방지턱 뒤 60m 이내 연속 쌍은 함께 보존
 VEHICLE_NAVI_GV80_BUMP_PAIR_MAX_KEEP = 180.0        # 연속 쌍 보존 절대 상한 거리
 VEHICLE_NAVI_GV80_SECTION_MIN_DISTANCE = 1000.0     # 0x4DE 없을 때 0x4A3 경고가 이 거리 이상 지속되면 구간단속
+VEHICLE_NAVI_SCHOOL_ZONE_PRE_DISTANCE = 150.0       # 0x4B8 kind=9 스쿨존 시작점 사전 감속 진입 거리(m)
 CANFD_NAVI_CAMERA_ACTIVE_BIT = 0x40
 CANFD_NAVI_STATUS_TIMEOUT_NS = 1_000_000_000
 STANDSTILL_THRESHOLD = 12 * 0.03125 * CV.KPH_TO_MS
@@ -1324,6 +1325,8 @@ class CarState(CarStateBase):
       return None
     if value == 6:
       return "bump", 0, 6
+    if value == 9:
+      return "school_zone", 30, 9
 
     if not 0 < value <= 0x1ff:
       return None
@@ -1358,6 +1361,10 @@ class CarState(CarStateBase):
               self.vehicleNaviSchoolZoneUsesCameraStatus = True
             else:
               self._clear_vehicle_navi_school_zone()
+      elif event[0] == "school_zone":
+        if (self._is_alt_legacy_navi_arch() and self.vehicleNaviSchoolZoneControl and
+            not on_controlled_access_road and self._vehicle_navi_profile_allowed(event[0], profile)):
+          self._add_vehicle_navi_event(*event, profile["offset"])
       elif self._vehicle_navi_profile_allowed(event[0], profile) and (not on_controlled_access_road or
                                                                       (event[0] != "bump" and not (event[0] == "camera" and event[1] == 30))):
         self._add_vehicle_navi_event(*event, profile["offset"])
@@ -1664,7 +1671,13 @@ class CarState(CarStateBase):
       if camera_status_ended or distance_expired:
         self._clear_vehicle_navi_school_zone()
 
-    if self.vehicleNaviSchoolZoneControl and self.vehicleNaviSchoolZoneActive and not on_controlled_access_road:
+    school_zone_pre_active = False
+    if alt_navi_arch and self.vehicleNaviSchoolZoneControl and not on_controlled_access_road:
+      school_zones = [event for event in upcoming if event["type"] == "school_zone"]
+      if school_zones and (school_zones[0]["target"] - self.totalDistance) <= VEHICLE_NAVI_SCHOOL_ZONE_PRE_DISTANCE:
+        school_zone_pre_active = True
+
+    if self.vehicleNaviSchoolZoneControl and (self.vehicleNaviSchoolZoneActive or school_zone_pre_active) and not on_controlled_access_road:
       ret.schoolZoneActive = True
       ret.speedLimit = 30
       if self.vehicleNaviCanControl:
