@@ -66,8 +66,10 @@ VEHICLE_NAVI_POSITION_INVALID_AVG_SPEED = 511
 # 0x4B5/0x4B8/0x4DE 계열 방지턱 게이팅(P12_OFF700) 및 0x4DE 미수신 시 구간단속 예비 판정 상수.
 VEHICLE_NAVI_GV80_BUMP_MAX_OFFSET = 700.0          # 이보다 먼 방지턱 예고는 등록하지 않음
 VEHICLE_NAVI_GV80_BUMP_RESET_KEEP_DISTANCE = 120.0  # 경로 리셋 때 이 거리 이내 방지턱은 보존
-VEHICLE_NAVI_GV80_FRC5_BUMP_MAX_MIN_OFFSET = 300.0  # FRC 5는 300m 이내 근거리 수신·재확인된 지점만 허용
+VEHICLE_NAVI_GV80_FRC5_BUMP_MAX_MIN_OFFSET = 250.0  # FRC 5는 250m 이내 근거리 재확인된 지점만 허용
 VEHICLE_NAVI_GV80_FRC5_BUMP_MAX_SPEED = 55.0 * CV.KPH_TO_MS  # FRC 5 비고속(55 km/h 이하) 주행에서만 허용
+VEHICLE_NAVI_GV80_FRC5_BUMP_MAX_SPEED_LIMIT = 60.0  # 제한속도 60 km/h 이상 간선도로에서는 FRC 5 방지턱 차단
+VEHICLE_NAVI_GV80_BUMP_RECONFIRM_DELTA = 20.0       # 단일 버스트(3프레임)와 구분하기 위한 최소 접근 재확인 거리차(m)
 VEHICLE_NAVI_GV80_RESET_TURN_STEER_DEG = 60.0       # 0x4B4 리셋 시 직전 3초 최대 |조향각| >= 60°일 때만 회전 리셋 판정
 VEHICLE_NAVI_GV80_RESET_STEER_WINDOW_FRAMES = round(3.0 / DT_CTRL)  # 3초 (100Hz 기준 300프레임)
 VEHICLE_NAVI_GV80_BUMP_PAIR_CHAIN_GAP = 60.0        # 회전 리셋 시 생존 방지턱 뒤 60m 이내 연속 쌍은 함께 보존
@@ -333,6 +335,7 @@ class CarState(CarStateBase):
     self.vehicleNaviGv80HorizonTimestamp = 0
     self.vehicleNaviRoadHorizon = []  # (시작 거리, 도로등급) 목록: 0x4B4/0x4B5 호라이즌 현재 도로등급 추적용
     self.vehicleNaviGv80SteerHistory = deque(maxlen=VEHICLE_NAVI_GV80_RESET_STEER_WINDOW_FRAMES)
+    self.vehicleNaviGv80FarBumpTargets = deque(maxlen=32)
     self.vehicleNaviGv80SectionWarningSpeed = 0.0
     self.vehicleNaviGv80SectionWarningStartDistance = 0.0
     self.vehicleNaviProfileTimestamp = 0
@@ -941,12 +944,14 @@ class CarState(CarStateBase):
     actually slowing the car (its target below the set speed), + or a gas tap cancels that bump."""
     if self.canfd_wrapped_navi or not self.vehicleNaviCanControl:
       return
-    if self._is_alt_legacy_navi_arch() and not self._gv80_bump_output_allowed():
-      # 0x4B5/0x4B8/0x4DE 계열 방지턱 게이팅이 출력을 막은 프레임에서는 여기서도 되살리지 않는다.
-      ret.speedBumpDistance = 0.0
-      return
     live = [event for event in self.vehicleNaviEvents
             if event["type"] == "bump" and event["target"] > self.totalDistance and not event.get("cancelled")]
+    if self._is_alt_legacy_navi_arch():
+      v_ego = float(getattr(ret, "vEgo", 0.0))
+      speed_limit = float(getattr(ret, "speedLimit", 0.0))
+      on_controlled_access_road = self._vehicle_navi_is_controlled_access_road()
+      live = [event for event in live
+              if self._gv80_bump_event_allowed(event, v_ego, on_controlled_access_road, speed_limit)]
     ret.speedBumpDistance = live[0]["target"] - self.totalDistance if live else 0.0
     if (not live or not self.speedcamCancelBump or not self.speedcamBumpDecel or self.speedcam_input_consumed or
         not (accel_rising or gas_tok) or not self.speedcam_engaged or ret.vEgo <= SPEEDCAM_SKIP_MIN_SPEED):
@@ -1052,6 +1057,8 @@ class CarState(CarStateBase):
     self.vehicleNaviCameraTarget = None
     self.vehicleNaviCameraStatusEvent = None
     self.speedcam_policy.clear()
+    if hasattr(self, "vehicleNaviGv80FarBumpTargets"):
+      self.vehicleNaviGv80FarBumpTargets.clear()
 
   def _clear_vehicle_navi_route_filtered_events(self):
     if self.vehicleNaviCanControl < 2:
@@ -1127,13 +1134,18 @@ class CarState(CarStateBase):
       return True
     return self._gv80_current_road_class() == 6
 
-  def _gv80_bump_event_allowed(self, event, v_ego, on_controlled_access_road):
-    # 기본 허용(등급 6 또는 스쿨존) 외에, 보조간선/해안도로 등 등급 5(FRC 5)에서도
-    # 비고속·비자동차전용도로이며 300m 이내 근거리 수신·재확인된 실물 방지턱은 허용한다.
-    # 원거리(400m+) 단발 유령과 고속 간선 오감속은 차단한다 (2026-11-24 390세그먼트 실측).
+  def _gv80_bump_event_allowed(self, event, v_ego, on_controlled_access_road, speed_limit=0.0):
+    # 기본 허용(등급 6 또는 스쿨존) 외에, 보조간선/해안도로 등 등급 5(FRC 5)에서는
+    # 비고속·비자동차전용도로·제한속도 60 미만이며 250m 이내로 근접 재확인(reconfirmed)된
+    # 실물 방지턱만 허용한다. 단일 버스트 유령(9/9건)을 차단하고 재확인 실물(3/3건)만 통과
+    # (2026-11-26 217세그먼트 IMU 충격 실측).
     if self._gv80_bump_output_allowed():
       return True
     if on_controlled_access_road or self._gv80_current_road_class() != 5:
+      return False
+    if speed_limit >= VEHICLE_NAVI_GV80_FRC5_BUMP_MAX_SPEED_LIMIT:
+      return False
+    if not event.get("reconfirmed", False):
       return False
     min_offset = event.get("min_offset", event["target"] - self.totalDistance)
     return (v_ego <= VEHICLE_NAVI_GV80_FRC5_BUMP_MAX_SPEED and
@@ -1372,22 +1384,33 @@ class CarState(CarStateBase):
         self._add_vehicle_navi_event(*event, profile["offset"])
 
   def _add_vehicle_navi_event(self, event_type, speed, kind, offset):
-    if self._is_alt_legacy_navi_arch() and event_type == "bump" and offset > VEHICLE_NAVI_GV80_BUMP_MAX_OFFSET:
-      # 0x4B5/0x4B8/0x4DE 계열: 너무 먼 방지턱 예고는 교차로를 몇 번 거치는 동안 실제 지점과
-      # 어긋나는 유령이 대부분이다. 실물 예고는 전수 최대 691m였다
-      # (2026-11-22~23 전수 검증).
-      return
     target = self.totalDistance + offset
+    if self._is_alt_legacy_navi_arch() and event_type == "bump" and offset > VEHICLE_NAVI_GV80_BUMP_MAX_OFFSET:
+      # 0x4B5/0x4B8/0x4DE 계열: 700m 초과 원거리 방지턱은 큐에 바로 등록하지 않되,
+      # 추후 근거리(<=250m)에서 같은 지점이 재수신됐는지 판별할 수 있게 목표 거리만 기록한다.
+      far_targets = getattr(self, "vehicleNaviGv80FarBumpTargets", None)
+      if far_targets is None:
+        far_targets = deque(maxlen=32)
+        self.vehicleNaviGv80FarBumpTargets = far_targets
+      if not any(abs(far_t - target) < 25.0 for far_t in far_targets):
+        far_targets.append(target)
+      return
     for event in self.vehicleNaviEvents:
       if event["type"] == event_type and event["speed"] == speed and event["kind"] == kind and abs(event["target"] - target) < 20:
         event["target"] = target
         if event_type == "bump":
-          event["min_offset"] = min(event.get("min_offset", offset), offset)
+          prev_min = event.get("min_offset", offset)
+          if offset < prev_min - VEHICLE_NAVI_GV80_BUMP_RECONFIRM_DELTA:
+            event["reconfirmed"] = True
+          event["min_offset"] = min(prev_min, offset)
         return
 
     new_event = {"type": event_type, "speed": speed, "kind": kind, "target": target}
     if event_type == "bump":
       new_event["min_offset"] = offset
+      far_targets = getattr(self, "vehicleNaviGv80FarBumpTargets", None)
+      if far_targets and any(abs(far_t - target) < 25.0 for far_t in far_targets):
+        new_event["reconfirmed"] = True
     self.vehicleNaviEvents.append(new_event)
     self.vehicleNaviEvents.sort(key=lambda event: event["target"])
     self.vehicleNaviEvents = self.vehicleNaviEvents[:VEHICLE_NAVI_MAX_EVENTS]
@@ -1656,9 +1679,11 @@ class CarState(CarStateBase):
     bumps = [event for event in upcoming if event["type"] == "bump"]
     if alt_navi_arch and bumps:
       # 0x4B5/0x4B8/0x4DE 계열 방지턱 게이팅: 생활·이면도로(등급 6)·스쿨존은 전 지점 허용,
-      # 등급 5(보조간선·해안도로)는 비고속·300m 이내 근거리 수신/재확인된 지점만 조건부 허용.
+      # 등급 5(보조간선·해안도로)는 비고속·제한속도 60 미만·250m 이내 재확인 지점만 허용.
       v_ego = float(getattr(ret, "vEgo", 0.0))
-      bumps = [event for event in bumps if self._gv80_bump_event_allowed(event, v_ego, on_controlled_access_road)]
+      speed_limit = float(getattr(ret, "speedLimit", 0.0))
+      bumps = [event for event in bumps
+               if self._gv80_bump_event_allowed(event, v_ego, on_controlled_access_road, speed_limit)]
     if bumps:
       ret.speedBumpDistance = bumps[0]["target"] - self.totalDistance
 
@@ -1701,8 +1726,10 @@ class CarState(CarStateBase):
     # 동반됐고, 경고 없는 단독 예고는 전부 유령이었다 (2026-11-22~23 전수 검증).
     if section_suppressed:
       # 구간단속 평균제어 OFF 상태에서는 구간 내내 0x4A3 경고가 유지되더라도
-      # 진입 카메라 통과 후 가상거리(1.0m)로 묶지 않고, 전방에 실제 카메라가 발견될 때만 제어한다.
-      camera = cameras[0] if (speed_limit_cam and cameras) else None
+      # 진입 카메라 통과 후 가상거리(1.0m)로 묶지 않고, 전방에 현재 경고 속도와 일치하는
+      # 실제 카메라가 발견될 때만 제어한다 (옆길 다른 속도 유령 카메라 차단).
+      matched_cameras = [event for event in cameras if event["speed"] == camera_status_speed]
+      camera = matched_cameras[0] if (speed_limit_cam and matched_cameras) else None
     elif self.canfd_wrapped_navi or alt_navi_arch:
       camera = self.vehicleNaviCameraStatusEvent if speed_limit_cam else None
     else:
