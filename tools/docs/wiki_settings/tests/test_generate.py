@@ -85,7 +85,7 @@ class WikiSettingsGeneratorTest(unittest.TestCase):
       catalog_commit=COMMIT,
       generated_at=STAMP,
     )
-    self.assertEqual(len(result.generated_settings), 217)
+    self.assertEqual(len(result.generated_settings), 224)
     self.assertIn("TeslaAutoSpeedLimit", result.index["settings"])
     self.assertIn("TeslaAutoTurnSignals", result.index["settings"])
     self.assertIn("NNFF", result.index["settings"])
@@ -105,18 +105,21 @@ class WikiSettingsGeneratorTest(unittest.TestCase):
     self.assertNotIn("DriverMonitoringSessionDisabled", result.index["settings"])
     self.assertIn("DriverMonitoringMode", result.index["settings"])
     self.assertIn("CarrotVisionEnabled", result.index["settings"])
+    for added in ("VehicleNaviCurveControl", "VehicleNaviCurveMppControl", "VehicleNaviRampCurveControl",
+                  "VehicleNaviCurveSpeedFactor", "VehicleNaviCurveCtrlEnd", "VehicleNaviJunctionAssist"):
+      self.assertIn(added, result.index["settings"])
     for retired in ("ClusterHudPriority", "ClusterHudCoreMode", "ClusterHudLiveFps", "CanfdStopRetry", "DisableDM",
                     "CarrotYouTubeLive", "CarrotYouTubeQuality", "CarrotYouTubeTimestamp"):
       self.assertNotIn(retired, result.index["settings"])
-    self.assertEqual(result.index["review"], {"current": 0, "needs_review": 217})
+    self.assertEqual(result.index["review"], {"current": 0, "needs_review": 224})
     self.assertEqual(result.index["locales"], ["ko", "en", "zh"])
-    self.assertEqual(len(result.pages), (217 * 3) + 2)
+    self.assertEqual(len(result.pages), (224 * 3) + 2)
     setting_pages = {
       name: text
       for name, text in result.pages.items()
       if GENERATOR.GENERATED_PAGE_RE.fullmatch(name)
     }
-    self.assertEqual(len(setting_pages), 217 * 3)
+    self.assertEqual(len(setting_pages), 224 * 3)
     self.assertTrue(all(text.count("<!-- CARROT:SETTING:BEGIN ") == 1 for text in setting_pages.values()))
     for name, text in result.pages.items():
       if name.endswith(".md"):

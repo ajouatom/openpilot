@@ -107,3 +107,35 @@ class TestDesireHelperDriverIntent:
     self.update()
     self.update()
     assert self.helper.lane_change_state != log.LaneChangeState.laneChangeStarting
+
+  def test_vehicle_navi_junction_assist_blocks_auto_overtake_not_manual_blinker(self):
+    self.helper.vehicleNaviJunctionAssist = True
+    self.helper.autoOvertakeEnabled = True
+    state = make_car_state(left_blinker=False)
+    state.cruiseState = SimpleNamespace(enabled=True, speed=25.0)
+    state.vEgo = 25.0
+    carrot_man = SimpleNamespace(
+      atcType="straight",
+      carrotCmdIndex=0,
+      carrotCmd="",
+      carrotArg="",
+      vehicleNaviJunctionType=1,
+      vehicleNaviJunctionDistance=320,
+    )
+    assert self.helper._vehicle_navi_junction_overtake_blocked(state, carrot_man)
+    state.vehicleNaviFrwInfo = 2
+    carrot_man.vehicleNaviJunctionType = 0
+    assert self.helper._vehicle_navi_junction_overtake_blocked(state, carrot_man)
+
+    self.helper.auto_overtake_slow_timer = 12.0
+    self.helper._update_auto_overtake(
+      state, lateral_active=True, below_lane_change_speed=False,
+      trailer_maneuver_blocked=False, carrotMan=carrot_man, radarState=SimpleNamespace(),
+      driver_enabled=False, stalk_press=0, remote=False,
+    )
+    assert self.helper.auto_overtake_slow_timer == 0.0
+
+    # Manual blinker lane change remains completely unblocked inside junction zones.
+    self.update(left_blinker=True)
+    self.update(left_blinker=True)
+    assert self.helper.lane_change_state == log.LaneChangeState.laneChangeStarting

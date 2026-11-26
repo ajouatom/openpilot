@@ -67,6 +67,16 @@ def _car_state(distance_time_tenths=60):
   state.vehicleNaviSegmentTimestamp = 0
   state.vehicleNaviProfileTimestamp = 0
   state.vehicleNaviProfile4b8Timestamp = 0
+  state.vehicleNaviProshortTimestamp = 0
+  state.vehicleNaviCurveSegmentTimestamp = 0
+  state.vehicleNaviRampTimestamp = 0
+  state.vehicleNaviStubTimestamp = 0
+  state.vehicleNaviCurves = []
+  state.vehicleNaviRampCurves = []
+  state.vehicleNaviJunctions = []
+  state.vehicleNaviCurveRouteActive = False
+  state.vehicleNaviCurveRouteState = 3
+  state.vehicleNaviCurvePathIndex = None
   state.vehicleNaviAvailable = False
   state.vehicleNaviRouteResetTimestamp = 0
   state.vehicleNaviRouteState = 0
@@ -103,10 +113,19 @@ def _car_state(distance_time_tenths=60):
   state.hda_info_msg = "HDA_INFO_4A3"
   state.navi_segment_msg = "NEW_MSG_4B9"
   state.navi_segment_4b9 = None
+  state.navi_curve_segment_099 = None
   state.navi_position_4b4 = None
   state.navi_profile_4be = None
   state.navi_profile_4b8 = None
+  state.navi_proshort_094 = None
+  state.navi_ramp_098 = None
+  state.navi_stub_09a = None
   state.hda_info_4a3 = None
+  state.navi_proshort_msg = "NEW_MSG_4BA"
+  state.navi_ramp_msg = None
+  state.navi_stub_msg = "NEW_MSG_4BF"
+  state.navi_proshort_4b7 = None
+  state.navi_ramp_4b0 = None
   state.speedcam_policy = SpeedcamPolicy()
   state.speedcam_accel_swallow = False
   state.speedcam_engaged = False
@@ -119,6 +138,7 @@ def _car_state(distance_time_tenths=60):
   state.speedcam_decel_long_fired = False
   state.speedcam_time = 0.0
   state.section_average = SectionAverage()
+  state._read_vehicle_navi_curve_params()
   state._read_speedcam_params()
   return state
 

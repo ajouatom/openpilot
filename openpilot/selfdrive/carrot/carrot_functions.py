@@ -189,6 +189,8 @@ class CarrotPlanner:
     self._traffic_stop_model_lead_matcher = TrafficStopModelLeadMatcher()
     self.trafficStopModelLeadOffset = 0.0
     self.last_event_time = 0.0
+    self.vehicle_navi_junction_assist = False
+    self.vehicle_navi_junction_accel_limited = False
 
   def _params_update(self):
     self.frame += 1
@@ -232,6 +234,10 @@ class CarrotPlanner:
       self.autoNaviSpeedDecelRate = float(self.params.get_int("AutoNaviSpeedDecelRate")) * 0.01
       self.aChangeCostStarting = self.params.get_float("AChangeCostStarting")
       self.trafficStopDistanceAdjust = self.params.get_float("TrafficStopDistanceAdjust") / 100.
+      try:
+        self.vehicle_navi_junction_assist = bool(self.params.get_bool("VehicleNaviJunctionAssist"))
+      except (KeyError, AssertionError, TypeError, ValueError):
+        self.vehicle_navi_junction_assist = False
     elif self.params_count >= 100:
 
       self.params_count = 0
@@ -239,7 +245,10 @@ class CarrotPlanner:
   def get_carrot_accel(self, v_ego):
     cruiseMaxVals = [self.cruiseMaxVals0, self.cruiseMaxVals1, self.cruiseMaxVals2, self.cruiseMaxVals3, self.cruiseMaxVals4, self.cruiseMaxVals5, self.cruiseMaxVals6]
     factor = self.myHighModeFactor if self.myDrivingMode == DrivingMode.High else self.mySafeFactor
-    return np.interp(v_ego, A_CRUISE_MAX_BP_CARROT, cruiseMaxVals) * factor
+    accel = np.interp(v_ego, A_CRUISE_MAX_BP_CARROT, cruiseMaxVals) * factor
+    if self.vehicle_navi_junction_accel_limited:
+      accel = min(accel, 0.8)
+    return accel
 
   def _get_base_t_follow(self, personality, v_ego):
     if personality == log.LongitudinalPersonality.moreRelaxed:
@@ -510,6 +519,16 @@ class CarrotPlanner:
     v_ego = carstate.vEgo
     a_ego = carstate.aEgo
     v_ego_kph = v_ego * CV.MS_TO_KPH
+    jtype = int(getattr(carstate, "vehicleNaviJunctionType", 0))
+    jdist = float(getattr(carstate, "vehicleNaviJunctionDistance", 0.0))
+    if jtype not in (1, 2) and hasattr(sm, "valid") and sm.valid.get("carrotMan", False):
+      carrot_man = sm["carrotMan"]
+      jtype = int(getattr(carrot_man, "vehicleNaviJunctionType", 0))
+      jdist = float(getattr(carrot_man, "vehicleNaviJunctionDistance", 0.0))
+    self.vehicle_navi_junction_accel_limited = bool(
+      self.vehicle_navi_junction_assist and jtype in (1, 2) and 0.0 <= jdist <= 300.0 and
+      v_ego > 10.0 and not carstate.gasPressed
+    )
     v_ego_cluster = carstate.vEgoCluster
     v_ego_cluster_kph = v_ego_cluster * CV.MS_TO_KPH
 

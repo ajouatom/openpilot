@@ -89,6 +89,8 @@ class DesireHelper:
     self.auto_lane_change_enable = False
     self.next_lane_change = False
 
+    self.vehicleNaviJunctionAssist = False
+
     # turn-signal lever presses (carState.*BlinkerStalkCount): an explicit request for the next lane change
     self.stalk_counts = None
     self.queued_lane_change = BLINKER_NONE
@@ -159,6 +161,11 @@ class DesireHelper:
           now-stamp < 20 and type(direction) is int and direction in (1, 2, 3)):
         self.boundary_indicator.own(now, direction)
         self.indicator_journal_time = stamp
+    if self.frame == 1 or self.frame % 100 == 0:
+      try:
+        self.vehicleNaviJunctionAssist = bool(self.params.get_bool("VehicleNaviJunctionAssist"))
+      except (KeyError, AssertionError, TypeError, ValueError):
+        self.vehicleNaviJunctionAssist = False
     if self.frame % 100 == 0:
       self.laneChangeNeedTorque = self.params.get_int("LaneChangeNeedTorque")
       self.laneChangeBsd = self.params.get_int("LaneChangeBsd")
@@ -260,6 +267,17 @@ class DesireHelper:
     if counts[1] != last[1]:
       return BLINKER_RIGHT
     return BLINKER_NONE
+
+  def _vehicle_navi_junction_overtake_blocked(self, carstate, carrotMan) -> bool:
+    if not self.vehicleNaviJunctionAssist:
+      return False
+    frw_info = int(getattr(carstate, "vehicleNaviFrwInfo", 0))
+    jtype = int(getattr(carstate, "vehicleNaviJunctionType", 0))
+    jdist = float(getattr(carstate, "vehicleNaviJunctionDistance", 0.0))
+    if jtype not in (1, 2) and carrotMan is not None:
+      jtype = int(getattr(carrotMan, "vehicleNaviJunctionType", 0))
+      jdist = float(getattr(carrotMan, "vehicleNaviJunctionDistance", 0.0))
+    return frw_info > 0 or (jtype in (1, 2) and 0.0 <= jdist <= 500.0)
 
   def _update_atc_blinker(self, carrotMan, driver_blinker_state, remote=None):
     atc_type = carrotMan.atcType

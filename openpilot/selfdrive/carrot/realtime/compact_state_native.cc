@@ -88,6 +88,13 @@ void append_i32(std::string &out, const DynamicReader &reader, Names... names) {
 }
 
 template <typename... Names>
+void append_u8(std::string &out, const DynamicReader &reader, Names... names) {
+  const auto value = find_value(reader, names...);
+  const uint64_t number = value.has_value() ? value->template as<uint64_t>() : 0;
+  append_scalar(out, static_cast<uint8_t>(std::min<uint64_t>(number, UINT8_MAX)));
+}
+
+template <typename... Names>
 void append_u16(std::string &out, const DynamicReader &reader, Names... names) {
   const auto value = find_value(reader, names...);
   const uint64_t number = value.has_value() ? value->template as<uint64_t>() : 0;
@@ -656,6 +663,11 @@ void encode_carrot_man(std::string &out, const DynamicReader &value) {
   append_i32(out, value, "vehicleNaviSpeed");
   append_bool(out, value, "vehicleNaviSectionActive");
   append_bool(out, value, "vehicleNaviAvailable");
+  append_f32(out, value, "vehicleNaviCurveCurrentSpeed");
+  append_bool(out, value, "vehicleNaviCurveIsRamp");
+  append_u8(out, value, "vehicleNaviJunctionType");
+  append_u8(out, value, "vehicleNaviJunctionSide");
+  append_i32(out, value, "vehicleNaviJunctionDistance");
 }
 
 void encode_selfdrive_state(std::string &out, const DynamicReader &value) {

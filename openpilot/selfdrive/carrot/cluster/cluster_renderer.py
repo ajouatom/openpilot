@@ -275,6 +275,14 @@ CRUISE_OVERRIDE_SPEED_CENTER_Y = SPEED_PANEL_Y + 30 * SPEED_HUD_SCALE
 CRUISE_OVERRIDE_LABEL_CENTER_Y = SPEED_PANEL_Y - 4 * SPEED_HUD_SCALE
 CRUISE_OVERRIDE_LABEL_FONT_SIZE = 25 * SPEED_HUD_SCALE
 CRUISE_OVERRIDE_SPEED_FONT_SIZE = 52 * SPEED_HUD_SCALE
+VEHICLE_CURVE_SPEED_CENTER_X = CRUISE_OVERRIDE_SPEED_CENTER_X + 100.0
+VEHICLE_CURVE_SPEED_CENTER_Y = CRUISE_OVERRIDE_SPEED_CENTER_Y
+VEHICLE_CURVE_LABEL_CENTER_Y = CRUISE_OVERRIDE_LABEL_CENTER_Y
+VEHICLE_CURVE_LABEL_FONT_SIZE = 22 * SPEED_HUD_SCALE
+VEHICLE_CURVE_SPEED_FONT_SIZE = 45 * SPEED_HUD_SCALE
+VEHICLE_JUNCTION_CENTER_X = CRUISE_OVERRIDE_SPEED_CENTER_X + 46.0
+VEHICLE_JUNCTION_CENTER_Y = CRUISE_OVERRIDE_SPEED_CENTER_Y + 46.0 * SPEED_HUD_SCALE
+VEHICLE_JUNCTION_FONT_SIZE = 20 * SPEED_HUD_SCALE
 # Center the gap number in the hollow of speed_bg.png's right curl.
 SPEED_GAP_CENTER_X = SPEED_PANEL_X + SPEED_PANEL_W * 0.92
 SPEED_GAP_CENTER_Y = SPEED_PANEL_Y + SPEED_PANEL_H * 0.835
@@ -8355,6 +8363,42 @@ class ClusterUiRenderer:
                 CRUISE_OVERRIDE_SPEED_CENTER_Y,
                 CRUISE_OVERRIDE_SPEED_FONT_SIZE,
                 override_color,
+                (0, 0, 0),
+                2,
+                anchor="center",
+            )
+
+        if state.vehicle_navi_curve_speed_kph is not None and 0.0 < state.vehicle_navi_curve_speed_kph < 250.0:
+            curve_label = "ramp" if state.vehicle_navi_curve_is_ramp else "curve"
+            curve_speed_text = str(int(round(display_speed(state.vehicle_navi_curve_speed_kph, self.is_metric))))
+            self._draw_text_with_stroke(
+                curve_label,
+                VEHICLE_CURVE_SPEED_CENTER_X,
+                VEHICLE_CURVE_LABEL_CENTER_Y,
+                VEHICLE_CURVE_LABEL_FONT_SIZE,
+                VEHICLE_NAVI,
+                (0, 0, 0),
+                2,
+                anchor="center",
+            )
+            self._draw_text_with_stroke(
+                curve_speed_text,
+                VEHICLE_CURVE_SPEED_CENTER_X,
+                VEHICLE_CURVE_SPEED_CENTER_Y,
+                VEHICLE_CURVE_SPEED_FONT_SIZE,
+                VEHICLE_NAVI,
+                (0, 0, 0),
+                2,
+                anchor="center",
+            )
+
+        if state.vehicle_navi_junction_badge:
+            self._draw_text_with_stroke(
+                state.vehicle_navi_junction_badge,
+                VEHICLE_JUNCTION_CENTER_X,
+                VEHICLE_JUNCTION_CENTER_Y,
+                VEHICLE_JUNCTION_FONT_SIZE,
+                VEHICLE_NAVI,
                 (0, 0, 0),
                 2,
                 anchor="center",

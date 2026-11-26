@@ -28,6 +28,10 @@ from cluster_models import ClusterAlert
     ("hda", "cam"),
     ("hda_section", "section"),
     ("hda_bump", "bump"),
+    ("hda_curve", "curve"),
+    ("hda_ramp", "ramp"),
+    ("curve:v", "curve"),
+    ("ramp:v", "ramp"),
     ("school", "school"),
     ("route", "route"),
     ("vturn", "vturn"),
@@ -50,6 +54,10 @@ def test_deceleration_source_display_label(source, expected) -> None:
     ("hda", "cam", 3),
     ("hda_section", "section", 3),
     ("hda_bump", "bump", 3),
+    ("hda_curve", "curve", 3),
+    ("hda_ramp", "ramp", 3),
+    ("curve:v", "curve", 3),
+    ("ramp:v", "ramp", 3),
     ("school", "school", 3),
     ("route", "route", 4),
     ("model", "model", 2),
@@ -270,3 +278,39 @@ def test_live_alert_reports_startup_wait_after_five_seconds(monkeypatch) -> None
     status=0,
     alert_type="clusterSelfdriveStartup",
   )
+
+
+@pytest.mark.parametrize(
+  ("curve_speed", "is_ramp", "jtype", "jside", "jdist", "external", "exp_speed", "exp_ramp", "exp_badge"),
+  (
+    (85.4, False, 1, 2, 220, False, 85.4, False, "FORK -> 220m"),
+    (62.0, True, 2, 1, 0, False, 62.0, True, "<- MERGE NOW"),
+    (250.0, False, 0, 0, 0, False, None, False, ""),
+    (0.0, False, 0, 0, 0, False, None, False, ""),
+    (75.0, True, 1, 2, 150, True, None, False, ""),
+  ),
+)
+def test_live_hud_exposes_conditional_vehicle_curve_ramp_and_junction(
+  curve_speed, is_ramp, jtype, jside, jdist, external, exp_speed, exp_ramp, exp_badge,
+) -> None:
+  source = object.__new__(OpenpilotLiveSource)
+  source._max_lateral_accel = 3.0
+  source._energy_gauge_label = "fuel"
+  source._carrot_navi_media = None
+  source._current_carrot_navi = lambda _now: None
+  carrot_man = SimpleNamespace(
+    remote="192.168.1.2" if external else "",
+    vehicleNaviCurveCurrentSpeed=curve_speed,
+    vehicleNaviCurveIsRamp=is_ramp,
+    vehicleNaviJunctionType=jtype,
+    vehicleNaviJunctionSide=jside,
+    vehicleNaviJunctionDistance=jdist,
+  )
+  source._service_data = lambda service: carrot_man if service == "carrotMan" else None
+  source._service_alive = lambda _service: False
+
+  decorated = source._with_live_hud_state(standby_state())
+
+  assert decorated.vehicle_navi_curve_speed_kph == exp_speed
+  assert decorated.vehicle_navi_curve_is_ramp == exp_ramp
+  assert decorated.vehicle_navi_junction_badge == exp_badge

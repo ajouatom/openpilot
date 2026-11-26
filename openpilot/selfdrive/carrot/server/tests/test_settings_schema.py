@@ -520,13 +520,23 @@ def test_speedcam_decel_cancel_and_section_average_settings_are_opt_in(settings,
     assert removed not in params_keys
 
 
-def test_vehicle_navi_curve_control_settings_are_removed(settings):
+def test_vehicle_navi_curve_control_settings_present(settings):
   driving = next(category for category in settings["menu"] if category["id"] == "DRIVING")
   speed = next(group for group in driving["groups"] if group["id"] == "SPEED")
   curve = next(group for group in speed["groups"] if group["id"] == "SPEED_CURVE")
-  assert not any(name.startswith("VehicleNaviCurve") for name in curve["params"])
+  expected = [
+    "VehicleNaviCurveControl",
+    "VehicleNaviCurveMppControl",
+    "VehicleNaviRampCurveControl",
+    "VehicleNaviCurveSpeedFactor",
+    "VehicleNaviCurveCtrlEnd",
+    "VehicleNaviJunctionAssist",
+  ]
+  for name in expected:
+    assert name in curve["params"]
   params_keys = PARAMS_KEYS_PATH.read_text(encoding="utf-8")
-  assert "VehicleNaviCurve" not in params_keys
+  for name in expected:
+    assert name in params_keys
 
 
 def test_tpms_position_setting_matches_device_support(params):
