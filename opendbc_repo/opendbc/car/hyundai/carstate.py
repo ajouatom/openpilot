@@ -601,8 +601,8 @@ class CarState(CarStateBase):
           # unrelated 24-byte frame with the same 0x3C1 id (Ioniq 5 PE, 2026-09-19 drive).
           add_and_cache(self.cp, "BLINKER_STALKS", "blinker_stalks", ignore_counter=True)
           add_and_cache(self.cp, "DOORS_SEATBELTS", "doors_seatbelts")
-          add_and_cache(self.cp, "BLINDSPOTS_FRONT_CORNER_1", "blindspots_front_corner_1", ignore_counter=True)
           if self.CP.carFingerprint == CAR.GENESIS_GV80:
+            add_and_cache(self.cp, "BLINDSPOTS_FRONT_CORNER_1", "blindspots_front_corner_1", ignore_counter=True)
             add_and_cache(self.cp, "BRAKE_LIGHT_412", "brake_light_412", ignore_counter=True)
             add_and_cache(self.cp, "IMU_01_10MS", "imu_01_10ms", ignore_counter=True)
         elif self.controls_ready_count == 126:
