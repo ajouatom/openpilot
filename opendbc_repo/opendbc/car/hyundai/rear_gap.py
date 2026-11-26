@@ -56,6 +56,10 @@ def rear_lane_change_blocks(camera, bsm, sources):
     ("FL_INDICATOR", "INDICATOR_LEFT_TWO", "INDICATOR_LEFT_FOUR"),
     ("FR_INDICATOR", "INDICATOR_RIGHT_TWO", "INDICATOR_RIGHT_FOUR"),
   )]
+  if _fresh(bsm, "BLINDSPOTS_FRONT_CORNER_1", 0x1E5, 16, now):
+    front_bsm = bsm.vl.get("BLINDSPOTS_FRONT_CORNER_1", {})
+    blocked[0] |= front_bsm.get("INDICATOR_LEFT", 0) != 0
+    blocked[1] |= front_bsm.get("INDICATOR_RIGHT", 0) != 0
   for name in sources:
     address, states = REAR_SOURCES[name]
     if not _fresh(camera, name, address, 32, now):
@@ -75,4 +79,7 @@ def tbt_bsd_inputs(bsm, now):
   fields = ("FR_INDICATOR", "INDICATOR_RIGHT_TWO", "INDICATOR_RIGHT_FOUR")
   if any(key not in values for key in fields):
     return False, True
-  return True, any(values[key] != 0 for key in fields)
+  right_blocked = any(values[key] != 0 for key in fields)
+  if _fresh(bsm, "BLINDSPOTS_FRONT_CORNER_1", 0x1E5, 16, now):
+    right_blocked = right_blocked or (bsm.vl.get("BLINDSPOTS_FRONT_CORNER_1", {}).get("INDICATOR_RIGHT", 0) != 0)
+  return True, right_blocked

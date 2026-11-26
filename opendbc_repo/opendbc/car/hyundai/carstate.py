@@ -242,6 +242,9 @@ class CarState(CarStateBase):
     self.left_blinker_stalk_count = self.right_blinker_stalk_count = 0
     self.doors_seatbelts = None
     self.cruise_buttons_alt2 = None
+    self.blindspots_front_corner_1 = None
+    self.brake_light_412 = None
+    self.imu_01_10ms = None
 
     # On some cars, CLU15->CF_Clu_VehicleSpeed can oscillate faster than the dash updates. Sample at 5 Hz
     self.cluster_speed = 0
@@ -555,6 +558,10 @@ class CarState(CarStateBase):
           # unrelated 24-byte frame with the same 0x3C1 id (Ioniq 5 PE, 2026-09-19 drive).
           add_and_cache(self.cp, "BLINKER_STALKS", "blinker_stalks", ignore_counter=True)
           add_and_cache(self.cp, "DOORS_SEATBELTS", "doors_seatbelts")
+          add_and_cache(self.cp, "BLINDSPOTS_FRONT_CORNER_1", "blindspots_front_corner_1", ignore_counter=True)
+          if self.CP.carFingerprint == CAR.GENESIS_GV80:
+            add_and_cache(self.cp, "BRAKE_LIGHT_412", "brake_light_412", ignore_counter=True)
+            add_and_cache(self.cp, "IMU_01_10MS", "imu_01_10ms", ignore_counter=True)
         elif self.controls_ready_count == 126:
           add_and_cache(self.cp, "CRUISE_BUTTONS_ALT2", "cruise_buttons_alt2", ignore_counter = True)
           add_and_cache(self.cp, "TRAILER_STATUS", "trailer_status", ignore_counter = True)
@@ -1491,7 +1498,12 @@ class CarState(CarStateBase):
     ret.vehicleGps = self.vehicle_gps.update(cp, ret.vEgoRaw, ret.gearShifter == GearShifter.reverse)
     ret.standstill = ret.wheelSpeeds.fl <= STANDSTILL_THRESHOLD and ret.wheelSpeeds.rr <= STANDSTILL_THRESHOLD
 
-    ret.brakeLights = ret.brakePressed or cp.vl["TCS"]["BrakeLight"] == 1 or ret.aEgo < -0.5
+    brake_light_412 = (self.brake_light_412 is not None and
+                       len(cp.dat.get(0x412, b"")) == 8 and
+                       self.brake_light_412["STOP_LAMP"] != 0)
+    ret.brakeLights = ret.brakePressed or cp.vl["TCS"]["BrakeLight"] == 1 or brake_light_412 or ret.aEgo < -0.5
+    if self.imu_01_10ms is not None and len(cp.dat.get(0x04A, b"")) == 32:
+      ret.yawRate = self.imu_01_10ms["IMU_YawRtVal"]
 
     ret.steeringRateDeg = cp.vl["STEERING_SENSORS"]["STEERING_RATE"]
 
@@ -1551,6 +1563,9 @@ class CarState(CarStateBase):
         bsm_info = self.cp_bsm.vl["BLINDSPOTS_REAR_CORNERS"]
         ret.leftBlindspot = (bsm_info["FL_INDICATOR"] + bsm_info["INDICATOR_LEFT_TWO"] + bsm_info["INDICATOR_LEFT_FOUR"]) > 0
         ret.rightBlindspot = (bsm_info["FR_INDICATOR"] + bsm_info["INDICATOR_RIGHT_TWO"] + bsm_info["INDICATOR_RIGHT_FOUR"]) > 0
+      if self.blindspots_front_corner_1 is not None and len(cp.dat.get(0x1E5, b"")) == 16:
+        ret.leftBlindspot = ret.leftBlindspot or self.blindspots_front_corner_1["INDICATOR_LEFT"] != 0
+        ret.rightBlindspot = ret.rightBlindspot or self.blindspots_front_corner_1["INDICATOR_RIGHT"] != 0
 
     prev_main_buttons = self.main_buttons[-1]
     if self.cruise_buttons_alt2 is not None:
@@ -1577,6 +1592,7 @@ class CarState(CarStateBase):
     # CAN FD cars enable on main button press, set available if no TCS faults preventing engagement
     ret.cruiseState.available = self.main_enabled and self.controls_ready_count >= READY_COUNT_OK #cp.vl["TCS"]["ACCEnable"] == 0
 
+    ret.brake = cp.vl["ESP_STATUS"]["BRAKE_PRESSURE"]
     avh_state = cp.vl["ESP_STATUS"]["AVH_Sta"]
     self.canfdSccHoldActive = avh_state == 1
     avh_lamp = cp.vl["ESP_STATUS"]["AVH_LAMP"]
@@ -1589,6 +1605,9 @@ class CarState(CarStateBase):
       acc_req = cp.vl["TCS"]["ACC_REQ"]
       ret.cruiseState.enabled = acc_req == 1
       ret.cruiseState.standstill = False
+      cp_cruise_info = cp_cam if self.CP.flags & HyundaiFlags.CANFD_CAMERA_SCC else cp
+      if 0x1A0 in cp_cruise_info.seen_addresses and cp_cruise_info.vl["SCC_CONTROL"]["MainMode_ACC"] == 1:
+        ret.pcmCruiseGap = int(np.clip(cp_cruise_info.vl["SCC_CONTROL"]["DISTANCE_SETTING"], 1, 4))
     else:
       cp_cruise_info = cp_cam if self.CP.flags & HyundaiFlags.CANFD_CAMERA_SCC else cp
       ret.cruiseState.enabled = cp_cruise_info.vl["SCC_CONTROL"]["ACCMode"] in (1, 2)
@@ -1657,7 +1676,9 @@ class CarState(CarStateBase):
     ret.gearStep = cp.vl["GEAR"]["GEAR_STEP"] if self.GEAR else 0
     if 1 <= ret.gearStep <= 8 and ret.gearShifter == GearShifter.unknown:
       ret.gearShifter = GearShifter.drive
-    ret.gearStep = cp.vl["GEAR_ALT"]["GEAR_STEP"] if self.GEAR_ALT else ret.gearStep
+    if self.GEAR_ALT:
+      gear_step_alt = int(cp.vl["GEAR_ALT"]["GEAR_STEP"])
+      ret.gearStep = gear_step_alt if (ret.gearShifter == GearShifter.drive and 1 <= gear_step_alt <= 8) else 0
 
     lane_info = self.cam_0x2a4 if self.cam_0x2a4 is not None else self.cam_0x362
     ret.laneLineInfoMonoTime = lane_line_time((self.cp_cam, self.cp_alt), lane_info)
