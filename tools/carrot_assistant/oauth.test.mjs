@@ -18,7 +18,9 @@ async function start(dir, port = 0) {
   const http = createServer().listen(port, '127.0.0.1');
   await new Promise(r => http.once('listening', r));
   const base = `http://127.0.0.1:${http.address().port}`;
-  const app = createApp({ oauthIssuer: base, ...(dir ? { statePath: join(dir, 'bridge.json'), oauthStatePath: join(dir, 'oauth.json') } : {}) });
+  const driveTimings = [];
+  const app = createApp({ oauthIssuer: base, onDriveTiming: timing => driveTimings.push(timing),
+    ...(dir ? { statePath: join(dir, 'bridge.json'), oauthStatePath: join(dir, 'oauth.json') } : {}) });
   // The restart test reuses a port. Do not reuse fetch sockets from its previous server.
   http.on('request', (req, res) => { res.setHeader('Connection', 'close'); app(req, res); });
   const post = (path, body, headers = {}) => fetch(`${base}${path}`, { method: 'POST', redirect: 'manual', headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify(body) });
@@ -56,7 +58,7 @@ async function start(dir, port = 0) {
     await client.connect(new StreamableHTTPClientTransport(new URL(`${base}/account/mcp`), { requestInit: { headers: { Authorization: `Bearer ${access}` } } }));
     return client;
   }
-  return { http, base, post, form, browser, register, begin, link, mcp, close: () => new Promise(r => http.close(r)) };
+  return { http, base, post, form, browser, register, begin, link, mcp, driveTimings, close: () => new Promise(r => http.close(r)) };
 }
 
 test('English OAuth consent and errors retain the same fields and security requirements', async () => {
@@ -189,7 +191,7 @@ test('fresh MCP conversations resolve only the authenticated browser, survive re
     assert.equal(context.vehicle_state, 'not_observed');
     assert.equal(context.can_drive, false);
     const listed = (await chatA.listTools()).tools;
-    assert.equal(listed.length, 21); assert.ok(listed.some(t => t.name === 'open_carrot_phone_app')); assert.equal(listed.some(t => t.name === 'connect_carrot_web'), false);
+    assert.equal(listed.length, 22); assert.ok(listed.some(t => t.name === 'open_carrot_phone_app')); assert.equal(listed.some(t => t.name === 'connect_carrot_web'), false);
     assert.equal((await chatA.callTool({ name: 'request_carrot_drive', arguments: { action: 'lane_left' } })).isError, true);
     assert.equal((await chatA.callTool({ name: 'get_carrot_drive_request', arguments: {} })).isError, true);
     assert.equal((await chatA.callTool({ name: 'read_carrot_setting_value', arguments: { name: 'AutoBlinkerControl' } })).isError, true);
@@ -268,13 +270,36 @@ test('driving scope needs explicit consent and cannot be added by refreshing a s
     const online = (await chat.callTool({ name: 'get_carrot_context', arguments: {} })).structuredContent;
     assert.equal(online.web.browser_online, true);
     assert.equal(online.vehicle_connected, null);
-    const pending = chat.callTool({ name: 'request_carrot_drive', arguments: { action: 'speed_set', value: 100 } });
+    const start = performance.now();
+    const pending = chat.callTool({ name: 'request_carrot_drive', arguments: { action: 'speed_set', value: 100 } }).then(response => ({
+      response, returned: performance.now() - start,
+    }));
     const poll = await (await waitingBrowser).json();
     assert.equal(poll.drive_command.action, 'speed_set');
     assert.equal(poll.drive_command.value, 100);
     await env.browser('drive_ack', browser.browser_token, { id: poll.drive_command.id,
       result: { id: poll.drive_command.id, status: 'rejected', reason: 'cruise_inactive_or_driver_override' } });
-    assert.equal((await pending).structuredContent.result.status, 'rejected');
+    const { response, returned } = await pending;
+    const receipt = response.structuredContent;
+    assert.equal(receipt.status, 'queued');
+    assert.equal(receipt.message, '속도 100 전달했어.');
+    const outcome = (await chat.callTool({ name: 'get_carrot_drive_request', arguments: {} })).structuredContent;
+    assert.equal(outcome.result.reason, 'cruise_inactive_or_driver_override');
+    assert.ok(env.driveTimings.at(-1)?.mcp_http_ms >= receipt.timing_ms.relay_accept);
+    console.info('loopback drive (ms)', JSON.stringify({ ...outcome.timing_ms, ...env.driveTimings.at(-1),
+      relay_accept: receipt.timing_ms.relay_accept, mcp_round_trip: returned }));
+    assert.equal((await oldChat.callTool({ name: 'get_carrot_speeds', arguments: {} })).isError, true);
+    assert.equal(listed.find(t => t.name === 'get_carrot_speeds').annotations.readOnlyHint, true);
+    await new Promise(resolve => setTimeout(resolve, 910)); // Existing browser poll rate limit.
+    const read = chat.callTool({ name: 'get_carrot_speeds', arguments: {} });
+    const speedPoll = await (await env.browser('poll_wait', browser.browser_token)).json();
+    assert.equal(speedPoll.drive_command, null);
+    const sample = { status: 'ok', vehicle_speed_kph: 64.8, set_speed_kph: 60, sample_age_ms: 40 };
+    assert.equal((await env.browser('speed_read_ack', browser.browser_token, { id: speedPoll.speed_read.id, result: sample })).status, 200);
+    const speeds = (await read).structuredContent;
+    assert.equal(speeds.vehicle_speed_kph, 64.8);
+    assert.equal(speeds.set_speed_kph, 60);
+    assert.ok(speeds.sample_age_ms >= 40);
   } finally { await Promise.all(clients.map(c => c.close())); await env.close(); }
 });
 

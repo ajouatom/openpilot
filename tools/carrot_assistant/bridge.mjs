@@ -1,7 +1,7 @@
 import { randomBytes, createHash } from 'node:crypto';
 import { readFileSync, writeFileSync, renameSync } from 'node:fs';
 import { createSettingBridge } from './setting_bridge.mjs';
-import { createDriveBridge } from './drive_bridge.mjs';
+import { createDriveBridge, speedReading } from './drive_bridge.mjs';
 import { createToolsBridge } from './tools_bridge.mjs';
 
 const digest = value => createHash('sha256').update(String(value)).digest('hex');
@@ -26,6 +26,15 @@ export function createBridge({ now = Date.now, maxSessions = 1000, statePath, is
   const toolJobs = createToolsBridge(now);
   const driving = createDriveBridge(now), waiters = new Map();
   const wake = id => waiters.get(id)?.();
+  // Reads are one-shot, never occupy the driving slot, and are discarded on disconnect.
+  const speedReads = new Map();
+  function finishSpeedRead(id, result) {
+    const read = speedReads.get(id);
+    if (!read) return;
+    clearTimeout(read.timer);
+    speedReads.delete(id);
+    read.resolve(result);
+  }
   const sessions = new Map(), browsers = new Map(), controls = new Map(), codes = new Map();
   const accountCodes = new Map();
   const record = s => ({ id: s.id, origin: s.origin, label: s.label, browserHash: s.browserHash, controlHash: s.controlHash });
@@ -53,6 +62,7 @@ export function createBridge({ now = Date.now, maxSessions = 1000, statePath, is
     }
   }
   const remove = s => {
+    finishSpeedRead(s.id, { status: 'unavailable', reason: 'connection_failed' });
     settings.remove(s.id); driving.remove(s.id); toolJobs.remove(s.id); wake(s.id);
     if (s.controlHash) persist(null, s.id);
     sessions.delete(s.id); browsers.delete(s.browserHash); codes.delete(s.codeHash);
@@ -83,7 +93,7 @@ export function createBridge({ now = Date.now, maxSessions = 1000, statePath, is
       if (s.origin !== origin) fail('Browser origin mismatch.', 403);
       if (waiters.has(s.id)) fail('A browser poll is already pending.', 409);
       s.lastSeen = now();
-      if (!settings.poll(s.id) && !driving.poll(s.id) && !toolJobs.poll(s.id) && s.command?.status !== 'queued') {
+      if (!settings.poll(s.id) && !driving.hasPending(s.id) && !speedReads.has(s.id) && !toolJobs.poll(s.id) && s.command?.status !== 'queued') {
         await new Promise(resolve => {
           const timer = setTimeout(() => { waiters.delete(s.id); resolve(); }, 7500);
           waiters.set(s.id, () => { clearTimeout(timer); waiters.delete(s.id); resolve(); });
@@ -95,22 +105,27 @@ export function createBridge({ now = Date.now, maxSessions = 1000, statePath, is
       this.accountStatus(id);
       return driving.status(id);
     },
-    async accountDriveAction(id, fields) {
+    accountSpeeds(id) {
+      if (!this.accountStatus(id).browser_online) return { status: 'unavailable', reason: 'browser_offline' };
+      const pending = speedReads.get(id);
+      if (pending) return pending.promise;
+      const { promise, resolve } = Promise.withResolvers();
+      const timer = setTimeout(() => finishSpeedRead(id, { status: 'unavailable', reason: 'read_timeout' }), 4000);
+      speedReads.set(id, { id: token(), promise, resolve, timer });
+      wake(id);
+      return promise;
+    },
+    accountDriveAction(id, fields) {
+      const started = performance.now();
       const state = this.accountStatus(id);
-      if (!state.browser_online) fail('Carrot Web is offline. Do not retry automatically.', 409);
+      if (!state.browser_online) return { status: 'blocked', submitted: false, reason: 'browser_offline', message: '당근웹이 오프라인이야.' };
       const queued = driving.queue(id, fields);
       if (queued.submitted === false) return queued;
       wake(id);
-      // Give a fast local acknowledgement a chance to arrive. A voice reply
-      // need not wait for the vehicle to finish a maneuver.
-      const deadline = performance.now() + 400;
-      let status = queued;
-      while (status.status === 'queued' && performance.now() < deadline) {
-        await new Promise(resolve => setTimeout(resolve, 25));
-        status = this.accountDriveStatus(id);
-        if (status.request_id !== queued.request_id) return { status: 'none' };
-      }
-      return status;
+      const message = { lane_left: '왼쪽 차선 변경 요청했어.', lane_right: '오른쪽 차선 변경 요청했어.',
+        speed_set: `속도 ${fields.value} 전달했어.`, speed_down: `속도 ${fields.value} 낮추도록 전달했어.`,
+        speed_up: '속도 올리도록 전달했어.' }[fields.action];
+      return { ...queued, submitted: true, message, timing_ms: { relay_accept: performance.now() - started } };
     },
     accountSettingStatus(id) { this.accountStatus(id); return settings.status(id); },
     accountToolsStatus(id) { this.accountStatus(id); return toolJobs.status(id); },
@@ -201,6 +216,7 @@ export function createBridge({ now = Date.now, maxSessions = 1000, statePath, is
           const next = { ...s, origin, label: new URL(origin).host };
           persist(next); Object.assign(s, next);
           // A new address is not permission to replay old commands.
+          finishSpeedRead(s.id, { status: 'unavailable', reason: 'connection_failed' });
           settings.remove(s.id); driving.remove(s.id); toolJobs.remove(s.id);
           s.command = null; s.lastSeen = 0; s.pollAt = -Infinity; wake(s.id);
           for (const [hash, code] of accountCodes) if (code.id === s.id) accountCodes.delete(hash);
@@ -210,7 +226,17 @@ export function createBridge({ now = Date.now, maxSessions = 1000, statePath, is
       if (s.origin !== origin) fail('Browser origin mismatch.', 403);
       if (operation === 'inspect') return { ...status(s), account_activity_at: accountActivity(s.id) };
       if (operation === 'disconnect') { remove(s); return { disconnected: true }; }
-      if (operation === 'drive_ack') return driving.ack(s.id, body.id, body.result);
+      if (operation === 'drive_ack') return driving.ack(s.id, body.id, body.result, body.local_http_ms);
+      if (operation === 'speed_read_ack') {
+        const read = speedReads.get(s.id);
+        if (!read || read.id !== body.id || read.dispatched === undefined) fail('Unknown speed read.', 409);
+        const result = speedReading.parse(body.result);
+        if (result.status === 'ok') {
+          result.sample_age_ms += Math.ceil(performance.now() - read.dispatched);
+        }
+        finishSpeedRead(s.id, result.sample_age_ms > 2000 ? { status: 'unavailable', reason: 'no_fresh_data' } : result);
+        return { received: true };
+      }
       if (operation === 'settings_ack') return settings.ack(s.id, body.id, body.result);
       if (operation === 'tools_ack') return toolJobs.ack(s.id, body.id, body.result);
       if (operation === 'account_code') {
@@ -233,7 +259,10 @@ export function createBridge({ now = Date.now, maxSessions = 1000, statePath, is
       if (operation !== 'poll') fail('Unknown operation.');
       if (now() - s.pollAt < 900) fail('Poll too fast.', 429);
       s.pollAt = now(); s.lastSeen = now();
-      return { ...status(s), settings_command: settings.poll(s.id), drive_command: driving.poll(s.id), tools_command: toolJobs.poll(s.id) };
+      const read = speedReads.get(s.id);
+      if (read) read.dispatched ??= performance.now();
+      return { ...status(s), settings_command: settings.poll(s.id), drive_command: driving.poll(s.id), tools_command: toolJobs.poll(s.id),
+        ...(read && { speed_read: { id: read.id } }) };
     },
   };
 }

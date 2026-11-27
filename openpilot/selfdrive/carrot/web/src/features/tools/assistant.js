@@ -1,6 +1,6 @@
 import { ASSISTANT_RELAY, ASSISTANT_SESSION_KEY, CHATGPT_INSTALL_URL, screenRequest, sessionValid } from './assistant_policy.js';
 import { copyPairingMessage } from './assistant_clipboard.js';
-import { executeDriveCommand, mountDriveAccess, revokeDriveAccess, driveAccessEnabled } from './assistant_drive.js';
+import { executeDriveCommand, mountDriveAccess, revokeDriveAccess, driveAccessEnabled, readDriveSpeeds } from './assistant_drive.js';
 import { executeSettingCommand, mountSettingAccess, revokeSettingAccess, settingCommandBlocked } from './assistant_settings.js';
 import { executeToolsCommand, mountToolsAccess, revokeToolsAccess } from './assistant_tools.js';
 
@@ -69,8 +69,13 @@ async function poll() {
       if (feedback) feedback.textContent = text('account_connected', 'Account connected · reusable in new voice chats');
     }
     if (result.drive_command) {
+      const started = performance.now();
       const driveResult = await executeDriveCommand(result.drive_command);
-      if (driveResult && epoch === generation) await request('drive_ack', driveResult, current);
+      if (driveResult && epoch === generation) await request('drive_ack', { ...driveResult, local_http_ms: performance.now() - started }, current);
+    }
+    if (result.speed_read) {
+      const reading = await readDriveSpeeds();
+      if (epoch === generation) await request('speed_read_ack', { id: result.speed_read.id, result: reading }, current);
     }
     if (result.settings_command && !settingCommandBlocked(result.settings_command, document.activeElement)) {
       const settingResult = await executeSettingCommand(result.settings_command);

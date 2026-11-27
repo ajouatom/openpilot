@@ -44,6 +44,15 @@ export function mountDriveAccess(container) {
   };
   label(); section.append(help, button); container.append(section);
 }
+export async function readDriveSpeeds() {
+  if (!token) return { status: 'unavailable', reason: 'device_permission' };
+  try {
+    const { ok, ...reading } = await local('speeds');
+    return reading;
+  } catch (error) {
+    return { status: 'unavailable', reason: error.status === 403 ? 'device_permission' : 'connection_failed' };
+  }
+}
 export async function executeDriveCommand(command) {
   if (!command || !/^[A-Za-z0-9_-]{43}$/.test(command.id) || !['execute', 'status'].includes(command.operation) ||
       !Number.isFinite(command.expires_at) || command.expires_at <= Date.now() || command.expires_at - Date.now() > 5000) return null;

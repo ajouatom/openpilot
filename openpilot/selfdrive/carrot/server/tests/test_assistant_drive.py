@@ -136,6 +136,20 @@ def test_separate_permissions_ownership_and_one_request(system):
     restarted.execute(token, 'http://carrot:7000', {'id': 'x' * 43, 'operation': 'status'})
 
 
+@pytest.mark.parametrize('blindspot', [False, True])
+def test_completed_speed_allows_next_lane_request_without_bypassing_bsd(system, blindspot):
+  _, _, lane, speed, _, state = system
+  send(system, action='speed_set', value=60)
+  assert speed.read(allowed=True, current=80, minimum=5, maximum=145)['target'] == 60
+  speed.finish(60)
+  assert send(system)['status'] == 'applied'
+  assert send(system, id='y' * 43, action='lane_right')['status'] == 'waiting'
+  state['right']['blindspot'] = blindspot
+  assert lane.before(state)[0] == (None if blindspot else 'right')
+  if blindspot:
+    assert send(system, id='y' * 43)['status'] == 'rejected'
+
+
 def test_consumer_restart_and_cancel_never_replay(system):
   now, service, _, _, _, state = system
   send(system)
