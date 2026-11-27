@@ -40,7 +40,12 @@ OPENPILOT_ROOT = find_openpilot_root(Path(__file__).resolve().parent)
 if OPENPILOT_ROOT is not None:
     sys.path.insert(0, str(OPENPILOT_ROOT))
 
-from openpilot.selfdrive.carrot.deceleration_source import deceleration_source_presentation, external_navigation_connected
+from openpilot.selfdrive.carrot.deceleration_source import (
+    deceleration_source_presentation,
+    external_navigation_connected,
+    format_vehicle_navi_junction,
+)
+VEHICLE_NAVI_CURVE_SPEED_MAX_KPH = 250.0
 
 LIVE_NAV_ROUTE_MAX_POINTS = 4096
 LIVE_NAVI_IMAGE_BASE64_MAX_CHARS = 2 * 1024 * 1024
@@ -442,6 +447,19 @@ class OpenpilotLiveSource:
             else None
         )
         vehicle_navi_available = bool(safe_get(carrot_man, "vehicleNaviAvailable", False))
+        raw_curve_speed = safe_optional_float(carrot_man, "vehicleNaviCurveCurrentSpeed")
+        if raw_curve_speed is None or raw_curve_speed <= 0.0 or raw_curve_speed >= VEHICLE_NAVI_CURVE_SPEED_MAX_KPH or external_nav_active:
+            vehicle_navi_curve_speed_kph = None
+        else:
+            vehicle_navi_curve_speed_kph = min(raw_curve_speed, VEHICLE_NAVI_CURVE_SPEED_MAX_KPH)
+        vehicle_navi_curve_is_ramp = bool(vehicle_navi_curve_speed_kph is not None and safe_get(carrot_man, "vehicleNaviCurveIsRamp", False))
+        vehicle_navi_junction_badge = ""
+        if not external_nav_active:
+            vehicle_navi_junction_badge = format_vehicle_navi_junction(
+                int(safe_get(carrot_man, "vehicleNaviJunctionType", 0) or 0),
+                int(safe_get(carrot_man, "vehicleNaviJunctionSide", 0) or 0),
+                float(safe_get(carrot_man, "vehicleNaviJunctionDistance", 0) or 0),
+            )
         if state.cruise_kph is not None and state.cruise_display_state != "off":
             # Keep this priority and the thresholds in sync with mici's SetSpeedOverride.
             longitudinal_plan = self._service_data("longitudinalPlan")
@@ -478,6 +496,9 @@ class OpenpilotLiveSource:
             cruise_override_kph=cruise_override_kph,
             cruise_override_label=cruise_override_label,
             cruise_override_color_mode=cruise_override_color_mode,
+            vehicle_navi_curve_speed_kph=vehicle_navi_curve_speed_kph,
+            vehicle_navi_curve_is_ramp=vehicle_navi_curve_is_ramp,
+            vehicle_navi_junction_badge=vehicle_navi_junction_badge,
         )
 
     def _live_cluster_alert(self, current_alert: ClusterAlert | None, onroad: bool) -> ClusterAlert | None:

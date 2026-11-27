@@ -1,5 +1,22 @@
 # Repository memory
 
+- 2026-11-27: Review PR588..591 before applying to carrot-wip. Preserve first
+  interrupted-build cutoff, reject failed clean/sync and clock rollback, and only
+  certify unchanged build inputs. Share observed CAN-FD brake bit50, SI yaw,
+  signed steering-rate reconstruction and fresh ECAN/CAM front BSD; keep eight-
+  speed gear clamp GV80-specific and exclude uncalibrated pressure-as-pedal.
+  Alternate navigation is protocol-gated, not GV80-only. Require real fresh
+  POSITION for section control; persistent camera warning alone is insufficient.
+  Curve/ramp and junction acceleration assistance default OFF. Reject unknown
+  exit direction, unrelated ramp paths, wrong lengths, expired route/HDA and
+  UInt8 lane sentinels; external navigation wins. Exclude uncalled auto-overtake
+  code absent from this branch. Contributor source fails12 new counterexamples;
+  reviewed source passes all13. Related offline regression2838pass/2skip plus
+  later primary-protocol regression; real-parser replay17 full segments across
+  nine platform groups passes. Linux startup/native firmware CI follows push.
+  Limited replay coverage is not closed-loop deceleration or vehicle validation.
+  Update six settings' KO/EN guides and Wiki; no vehicle writes or flash.
+
 - 2026-11-26: Review KINGBEAKSUU736a6665 against real GV80 uploads and native
   forwarding hooks. Camera-SCC LFA FIFO backlog is real; do not claim a complete
   oscillation cure or that angle control is immune. Drain0x12A only after100

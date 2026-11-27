@@ -646,3 +646,65 @@ def test_vehicle_navigation_profile_does_not_force_speed_with_cruise_off(hud_mod
   assert override.label == "MAX"
   assert override.speed_color_mode == 0
   assert not override.force_persist
+
+
+@pytest.mark.parametrize(
+  ("curve_speed_kph", "is_ramp", "is_metric", "jtype", "jside", "jdist", "expected_label", "expected_text", "expected_badge"),
+  (
+    (85.0, True, True, 1, 2, 220, "ramp", "85", "FORK -> 220m"),
+    (100.0, False, False, 0, 0, 0, "curve", "62", None),
+    (250.0, False, True, 0, 0, 0, None, None, None),
+    (0.0, False, True, 0, 0, 0, None, None, None),
+  ),
+)
+def test_conditional_curve_ramp_and_junction_hud_draws(
+  hud_module, monkeypatch, curve_speed_kph, is_ramp, is_metric, jtype, jside, jdist,
+  expected_label, expected_text, expected_badge,
+):
+  module, fake_ui_state = hud_module
+  renderer = object.__new__(module.HudRenderer)
+  renderer._set_speed_override = module.SetSpeedOverride()
+  renderer._txt_speed_bg = object()
+  renderer._font_display = object()
+  renderer._debug_speed_panel = False
+  renderer._engaged = True
+  renderer.is_cruise_set = True
+  renderer.speed = 80.0
+  renderer.set_speed = 100.0
+  renderer._cruise_speed_text_last = None
+  renderer._cruise_speed_animation_text = ""
+  renderer._cruise_speed_animation_time = 0
+  renderer._draw_texture_rect = lambda *args, **kwargs: None
+  fake_ui_state.is_metric = is_metric
+  fake_ui_state.sm = {
+    "carState": SimpleNamespace(),
+    "carrotMan": SimpleNamespace(
+      desiredSpeed=70.0,
+      desiredSource="hda_ramp" if is_ramp else "hda_curve",
+      vehicleNaviCurveCurrentSpeed=curve_speed_kph,
+      vehicleNaviCurveIsRamp=is_ramp,
+      vehicleNaviJunctionType=jtype,
+      vehicleNaviJunctionSide=jside,
+      vehicleNaviJunctionDistance=jdist,
+    ),
+    "longitudinalPlan": SimpleNamespace(cruiseTarget=100.0),
+  }
+  draws = []
+  monkeypatch.setattr(module, "draw_text_ui_style", lambda *args, **kwargs: draws.append(args))
+
+  renderer._draw_carrot_speed_panel(140, 600)
+
+  preview_draws = [args for args in draws if args[1] == 485]
+  if expected_text is None:
+    assert preview_draws == []
+  else:
+    speed_draw = next(args for args in preview_draws if args[0] == expected_text)
+    label_draw = next(args for args in preview_draws if args[0] == expected_label)
+    assert speed_draw[2:5] == (555, 44, module.COLORS.VEHICLE_NAVI_LAVENDER)
+    assert label_draw[2:5] == (504, 26, module.COLORS.VEHICLE_NAVI_LAVENDER)
+
+  if expected_badge is None:
+    assert not any("FORK" in args[0] or "MERGE" in args[0] for args in draws)
+  else:
+    badge_draw = next(args for args in draws if args[0] == expected_badge)
+    assert badge_draw[1:5] == (390, 465, 24, module.COLORS.VEHICLE_NAVI_LAVENDER)

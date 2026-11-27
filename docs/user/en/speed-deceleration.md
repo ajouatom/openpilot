@@ -5,7 +5,7 @@
 > [!NOTE]
 > This is the canonical English user guide maintained with the `carrot-wip` code. When user-visible behavior changes, update this document together with the related code and tests.
 
-This page explains all **23 speed and deceleration settings** in the current code: event targets, deceleration distance, stock-navigation CAN, road-limit adjustment, speed bumps, curve/route/model speed, and traffic-light stop adjustment.
+This page explains all **speed and deceleration settings** in the current code: event targets, deceleration distance, stock-navigation CAN, road-limit adjustment, speed bumps, curve/route/model speed, and traffic-light stop adjustment.
 
 Change them in **Carrot Web → Settings → Driving control → Speed and deceleration**.
 
@@ -280,6 +280,23 @@ There are three distinct sources:
 - **Vision curve speed** from predicted yaw rate and speed
 - **Route-turn speed** from route/turn input
 - **Applied model driving speed** from the model's overall desired velocity
+
+### Stock-navigation curve, ramp and junction assistance
+
+Shared by vehicles receiving the supported Hyundai/Kia/Genesis CAN-FD stock-navigation formats. External navigation takes priority. Curve control releases on route recalculation, expiry or loss of road information, and operates only on highways and ramps. A model name alone does not establish support.
+
+| Setting | Behavior |
+|---|---|
+| `VehicleNaviCurveControl` | Main switch for main-road and ramp curve deceleration; off by default |
+| `VehicleNaviCurveMppControl` | Also permits a predicted path without a destination; default on, requires the main switch |
+| `VehicleNaviRampCurveControl` | Permits ramp curves with a confirmed nearby exit and one matching turn signal; default on, requires the main switch |
+| `VehicleNaviCurveSpeedFactor` | Target-speed scale 50–200%, default 100%; lower values lower the target |
+| `VehicleNaviCurveCtrlEnd` | Completion lead time 0–10 seconds before the curve point, default 3; higher finishes earlier |
+| `VehicleNaviJunctionAssist` | Separate switch, default off. Within 300 m of a junction and above 36 km/h, caps acceleration at 0.8 m/s²; the accelerator releases it |
+
+Unknown exit direction and hazard lights exclude ramp curves. The curve minimum speed and navigation deceleration rate also apply. Other lower speed candidates remain effective even when the curve factor is increased. Junction assistance does not add lane changing or automatic overtaking.
+
+A valid stock-navigation curve calculation may still be displayed with control off. The displayed value is not a guaranteed safe road speed.
 
 ### `AutoCurveSpeedFactor`
 

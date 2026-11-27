@@ -233,6 +233,15 @@ class CarrotServ:
     self.autoNaviSpeedCtrlMode = self.params.get_int("AutoNaviSpeedCtrlMode")
     self.vehicleNaviCanControl = min(3, max(0, self.params.get_int("VehicleNaviCanControl")))
     self.vehicleNaviSchoolZoneControl = self.params.get_bool("VehicleNaviSchoolZoneControl")
+    self.vehicleNaviCurveControl = self._get_bool_param("VehicleNaviCurveControl", False)
+    self.vehicleNaviCurveMppControl = self._get_bool_param("VehicleNaviCurveMppControl", True)
+    self.vehicleNaviRampCurveControl = self._get_bool_param("VehicleNaviRampCurveControl", True)
+    raw_curve_factor = self._get_int_param("VehicleNaviCurveSpeedFactor", 100)
+    if raw_curve_factor <= 0:
+      raw_curve_factor = 100
+    self.vehicleNaviCurveSpeedFactor = min(2.0, max(0.5, raw_curve_factor * 0.01))
+    self.vehicleNaviCurveControlEnd = max(0.0, float(self._get_int_param("VehicleNaviCurveCtrlEnd", 3)))
+    self.vehicleNaviJunctionAssist = self._get_bool_param("VehicleNaviJunctionAssist", False)
     self.vehicleSpeedCameraControlMode = min(3, max(0, self.params.get_int("VehicleSpeedCameraControlMode")))
     self.autoNaviSpeedSafetyFactor = float(self.params.get_int("AutoNaviSpeedSafetyFactor")) * 0.01
     self.autoNaviSpeedDecelRate = float(self.params.get_int("AutoNaviSpeedDecelRate")) * 0.01
@@ -419,9 +428,71 @@ class CarrotServ:
   def _speed_bump_control_active(self, distance):
     return distance > self.autoNaviSpeedBumpEndDistance
 
+  def _get_int_param(self, key, default):
+    try:
+      return int(self.params.get_int(key))
+    except (KeyError, AssertionError, TypeError, ValueError):
+      return default
+
+  def _get_bool_param(self, key, default):
+    try:
+      return bool(self.params.get_bool(key))
+    except (KeyError, AssertionError, TypeError, ValueError):
+      return default
+
   def _vehicle_speed_bump_enabled(self, CS):
     return (not self.external_navigation_active and self.vehicleNaviCanControl and self.autoNaviSpeedCtrlMode >= 2 and
             self._speed_bump_control_active(CS.speedBumpDistance))
+
+  @staticmethod
+  def _vehicle_navi_curve_available(CS):
+    if CS is None:
+      return False
+    road_allowed = bool(getattr(CS, "vehicleNaviCurveRoadAllowed", False))
+    reference_speed = float(getattr(CS, "vehicleNaviCurveSpeed", 0.0))
+    curvature = float(getattr(CS, "vehicleNaviCurveCurvature", 0.0))
+    route_active = bool(getattr(CS, "vehicleNaviCurveRouteActive", False))
+    route_state = int(getattr(CS, "vehicleNaviCurveRouteState", 1 if route_active else 3))
+    return road_allowed and (route_active or route_state in (0, 1)) and reference_speed > 0.0 and abs(curvature) >= 1e-7
+
+  def _vehicle_navi_curve_enabled(self, CS):
+    if self.external_navigation_active or not self._vehicle_navi_curve_available(CS):
+      return False
+    if not self.vehicleNaviCurveControl:
+      return False
+    if bool(getattr(CS, "vehicleNaviCurveIsRamp", False)) and not self.vehicleNaviRampCurveControl:
+      return False
+    route_active = bool(getattr(CS, "vehicleNaviCurveRouteActive", False))
+    route_state = int(getattr(CS, "vehicleNaviCurveRouteState", 1 if route_active else 3))
+    return route_active or (self.vehicleNaviCurveMppControl and route_state == 0)
+
+  def _vehicle_navi_curve_calculated_speed(self, CS):
+    if self.external_navigation_active or not self._vehicle_navi_curve_available(CS):
+      return 0.0
+    if bool(getattr(CS, "vehicleNaviCurveIsRamp", False)) and not self.vehicleNaviRampCurveControl:
+      return 0.0
+    reference_speed = float(getattr(CS, "vehicleNaviCurveSpeed", 0.0))
+    target_speed = max(self.autoCurveSpeedLowerLimit, reference_speed * self.vehicleNaviCurveSpeedFactor)
+    return self.calculate_current_speed(float(getattr(CS, "vehicleNaviCurveDistance", 0.0)),
+                                        target_speed, self.vehicleNaviCurveControlEnd, self.autoNaviSpeedDecelRate)
+
+  def _vehicle_navi_curve_speed(self, CS):
+    if not self._vehicle_navi_curve_enabled(CS):
+      return 250.0
+    return self._vehicle_navi_curve_calculated_speed(CS)
+
+  def _vehicle_navi_curve_display_speed(self, CS):
+    return min(250.0, max(0.0, self._vehicle_navi_curve_calculated_speed(CS)))
+
+  def _vehicle_navi_junction_display(self, CS):
+    if self.external_navigation_active or CS is None:
+      return 0, 0, 0
+    jtype = int(getattr(CS, "vehicleNaviJunctionType", 0))
+    if jtype not in (1, 2):
+      return 0, 0, 0
+    jside = int(getattr(CS, "vehicleNaviJunctionSide", 0))
+    jdist = max(0, int(round(float(getattr(CS, "vehicleNaviJunctionDistance", 0.0)))))
+    return jtype, jside, jdist
 
   def _vehicle_school_zone_enabled(self, CS):
     if not CS.schoolZoneActive:
@@ -1387,6 +1458,8 @@ class CarrotServ:
     vehicle_speed_camera_active = CS is not None and self._vehicle_speed_camera_enabled(CS)
     vehicle_bump_active = CS is not None and self._vehicle_speed_bump_enabled(CS)
     vehicle_bump_speed = 250
+    vehicle_curve_speed = 250
+    vehicle_curve_is_ramp = False
     vehicle_school_zone_speed = 250
     vehicle_section_zone_speed = 250
     ### 과속카메라, 사고방지턱
@@ -1417,6 +1490,10 @@ class CarrotServ:
       self.active_carrot = 5
 
     if CS is not None:
+      vehicle_curve_speed = self._vehicle_navi_curve_speed(CS)
+      vehicle_curve_is_ramp = bool(getattr(CS, "vehicleNaviCurveIsRamp", False))
+      if vehicle_curve_speed < 250:
+        self.active_carrot = 6
       vehicle_school_zone_speed = self._vehicle_school_zone_speed(CS)
       if vehicle_school_zone_speed < 250:
         self.active_carrot = 6
@@ -1466,6 +1543,7 @@ class CarrotServ:
       (vehicle_section_zone_speed, "hda_section"),
       (vehicle_camera_speed, "hda"),
       (vehicle_bump_speed, "hda_bump"),
+      (vehicle_curve_speed, "hda_ramp" if vehicle_curve_is_ramp else "hda_curve"),
       (vehicle_school_zone_speed, "school"),
       (limit_speed, "road"),
     ]
@@ -1535,6 +1613,13 @@ class CarrotServ:
     msg.carrotMan.vehicleNaviSpeed = vehicle_navi_speed
     msg.carrotMan.vehicleNaviSectionActive = vehicle_navi_section_active
     msg.carrotMan.vehicleNaviAvailable = bool(getattr(CS, "vehicleNaviAvailable", False))
+    vehicle_navi_curve_display = self._vehicle_navi_curve_display_speed(CS)
+    jtype, jside, jdist = self._vehicle_navi_junction_display(CS)
+    msg.carrotMan.vehicleNaviCurveCurrentSpeed = vehicle_navi_curve_display
+    msg.carrotMan.vehicleNaviCurveIsRamp = bool(vehicle_navi_curve_display > 0.0 and CS is not None and getattr(CS, "vehicleNaviCurveIsRamp", False))
+    msg.carrotMan.vehicleNaviJunctionType = jtype
+    msg.carrotMan.vehicleNaviJunctionSide = jside
+    msg.carrotMan.vehicleNaviJunctionDistance = jdist
     msg.carrotMan.carrotCmdIndex = int(self.carrotCmdIndex)
     msg.carrotMan.carrotCmd = self.carrotCmd
     msg.carrotMan.carrotArg = self.carrotArg

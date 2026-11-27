@@ -1,7 +1,7 @@
 EXTERNAL_NAVI_SOURCES = frozenset((
   "cam", "section", "bump", "police", "waze", "road", "atc", "atc2", "route",
 ))
-VEHICLE_NAVI_SOURCES = frozenset(("hda", "hda_section", "hda_bump", "school"))
+VEHICLE_NAVI_SOURCES = frozenset(("hda", "hda_section", "hda_bump", "hda_curve", "hda_ramp", "school"))
 
 DECELERATION_SOURCE_LABELS = {
   "cam": "cam",
@@ -16,6 +16,8 @@ DECELERATION_SOURCE_LABELS = {
   "hda": "cam",
   "hda_section": "section",
   "hda_bump": "bump",
+  "hda_curve": "curve",
+  "hda_ramp": "ramp",
   "school": "school",
   "gas": "gas",
   "vturn": "vturn",
@@ -26,7 +28,7 @@ DECELERATION_SOURCE_LABELS = {
 
 def is_vehicle_navigation_source(source: str | None) -> bool:
   normalized = str(source or "").strip().lower()
-  return normalized in VEHICLE_NAVI_SOURCES or normalized in ("cam:v", "bump:v", "school:v")
+  return normalized in VEHICLE_NAVI_SOURCES or normalized in ("cam:v", "bump:v", "curve:v", "ramp:v", "school:v")
 
 
 def deceleration_source_presentation(source: str | None) -> tuple[str, int]:
@@ -39,18 +41,38 @@ def deceleration_source_presentation(source: str | None) -> tuple[str, int]:
   if not normalized:
     return "apply", 2
   if is_vehicle_navigation_source(normalized):
-    return DECELERATION_SOURCE_LABELS.get(normalized, normalized[:8]), 3
+    base = normalized.removesuffix(":v")
+    return DECELERATION_SOURCE_LABELS.get(base, base[:8]), 3
   if normalized in EXTERNAL_NAVI_SOURCES or normalized.endswith(":n"):
     base = normalized.removesuffix(":n")
     return DECELERATION_SOURCE_LABELS.get(base, base[:8]), 4
   if normalized.endswith(":v"):
     base = normalized.removesuffix(":v")
-    mode = 3 if base in ("cam", "section", "bump", "school") else 2
+    mode = 3 if base in ("cam", "section", "bump", "curve", "ramp", "school") else 2
     return DECELERATION_SOURCE_LABELS.get(base, base[:8]), mode
   if normalized.endswith(":c"):
     base = normalized.removesuffix(":c")
     return DECELERATION_SOURCE_LABELS.get(base, base[:8]), 2
   return DECELERATION_SOURCE_LABELS.get(normalized, normalized[:8]), 2
+
+
+def format_vehicle_navi_junction(junction_type: int, side: int, distance_m: int | float) -> str:
+  """Return compact HUD/cluster label for stock-navi fork/merge guidance, or empty string."""
+  jtype = int(junction_type or 0)
+  if jtype == 1:
+    kind = "FORK"
+  elif jtype == 2:
+    kind = "MERGE"
+  else:
+    return ""
+  arrow = "<- " if int(side or 0) == 1 else (" ->" if int(side or 0) == 2 else "")
+  dist = max(0, int(round(float(distance_m or 0))))
+  dist_text = "NOW" if dist == 0 else f"{dist}m"
+  if int(side or 0) == 1:
+    return f"{arrow}{kind} {dist_text}"
+  if int(side or 0) == 2:
+    return f"{kind}{arrow} {dist_text}"
+  return f"{kind} {dist_text}"
 
 
 def navigation_status_presentation(vehicle_available: bool, external_active: bool) -> tuple[str, int] | None:
