@@ -10,11 +10,17 @@ input,button{font:inherit;border-radius:8px;padding:12px;border:1px solid #51607
 button{cursor:pointer;white-space:nowrap;flex-shrink:0}button:hover{border-color:#ffa25b}button:disabled{opacity:.5;cursor:wait}li{list-style:none;margin:10px 0}li button{width:100%;text-align:left;white-space:normal}
 ul{padding:0}.map-frame{position:relative;aspect-ratio:1;background:#10151c}#map{display:block;width:100%;height:100%;image-rendering:auto}#map[hidden]{display:none}small,.note{color:#aab7c6}
 #mapStatus{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;margin:0;padding:24px;text-align:center}#mapStatus[hidden]{display:none}
+.billing-warning{margin:0 0 18px;padding:12px;border:1px solid #c58a43;border-radius:8px;background:#30271b;color:#ffe0b3;font-size:14px}.billing-warning p{margin:8px 0}
 #status{min-height:3em}#clear{margin-top:12px} @media(max-width:700px){.layout{grid-template-columns:1fr}main{padding:14px}}
 </style></head><body><main><header><h1 id="title">Carrot 내비게이션</h1><a href="/">Carrot Web ↗</a></header>
 <div class="layout"><section><div class="map-frame"><img id="map" alt="Navigation route map" hidden><p id="mapStatus" role="status">Waiting for route map…</p></div>
 <small>© <a href="https://www.mapbox.com/about/maps/">Mapbox</a> · © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> · <a href="https://protomaps.com/">Protomaps</a> · <a href="https://apps.mapbox.com/feedback/">Improve this map</a></small></section>
-<section><h2 id="searchTitle">목적지 검색</h2><form id="form"><input id="query" maxlength="200" minlength="2" required aria-label="Destination"><button id="search" type="submit">검색</button></form>
+<section><h2 id="searchTitle">목적지 검색</h2>
+<aside class="billing-warning" aria-labelledby="billingTitle"><strong id="billingTitle">Mapbox 요금 발생 주의</strong>
+<p id="billingUsage">이 화면의 목적지 검색·경로 계산·지도 표시는 Mapbox API를 사용합니다. 계정 요금제와 무료 한도에 따라 사용료가 청구될 수 있습니다. 사용 전 요금과 사용량을 확인하세요.</p>
+<p id="billingExternal">외부 내비의 안내·경로 수신 자체는 Mapbox 검색을 사용하지 않습니다. 다만 Mapbox 키로 배경 지도를 표시하면 지도 사용량이 발생할 수 있습니다.</p>
+<a id="billingPricing" href="https://www.mapbox.com/pricing" target="_blank" rel="noopener noreferrer">Mapbox 요금 확인 ↗</a></aside>
+<form id="form"><input id="query" maxlength="200" minlength="2" required aria-label="Destination"><button id="search" type="submit">검색</button></form>
 <ul id="results"></ul><p id="status" role="status"></p><p id="current"></p><button id="clear">Mapbox 목적지 취소</button>
 <p class="note" id="note">외부 내비의 TBT·경로가 우선입니다. Mapbox 목적지는 외부 내비 연결이 끝나면 사용합니다. 키는 Carrot Web 설정 → 네트워크에서 등록하세요.</p>
 </section></div></main><script src="/js/pages/navigation_map.js" defer></script></body></html>

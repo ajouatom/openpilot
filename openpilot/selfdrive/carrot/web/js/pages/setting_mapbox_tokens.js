@@ -102,6 +102,12 @@
         <div class="mapbox-token-card__title">${escapeHtmlLocal(text("mapbox_token_title", "Mapbox 키"))}</div>
         <div class="mapbox-token-card__status" data-role="summary-status">${escapeHtmlLocal(summaryStatus())}</div>
       </div>
+      <aside class="mapbox-token-card__billing">
+        <strong>${escapeHtmlLocal(text("mapbox_billing_title", "Mapbox 요금 발생 주의"))}</strong>
+        <p>${escapeHtmlLocal(text("mapbox_billing_usage", "Mapbox 키를 등록하면 목적지 검색·경로 계산·지도 표시에 사용됩니다. 계정 요금제와 무료 한도에 따라 사용료가 청구될 수 있으니, 등록 전 요금과 사용량을 확인하세요."))}</p>
+        <p>${escapeHtmlLocal(text("mapbox_billing_external", "외부 내비의 안내·경로 수신 자체는 Mapbox 검색을 사용하지 않습니다. 다만 Mapbox 키로 배경 지도를 표시하면 지도 사용량이 발생할 수 있습니다."))}</p>
+        <a href="https://www.mapbox.com/pricing" target="_blank" rel="noopener noreferrer">${escapeHtmlLocal(text("mapbox_billing_pricing", "Mapbox 요금 확인 ↗"))}</a>
+      </aside>
       <div class="mapbox-token-list">
         ${TOKEN_TYPES.map((type) => `
           <div class="mapbox-token-field" data-mapbox-token-type="${escapeHtmlLocal(type.key)}">

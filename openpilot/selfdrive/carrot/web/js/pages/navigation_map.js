@@ -7,6 +7,10 @@
   $("searchTitle").textContent = tr("목적지 검색", "Find a destination");
   $("search").textContent = tr("검색", "Search");
   $("clear").textContent = tr("Mapbox 목적지 취소", "Clear Mapbox destination");
+  $("billingTitle").textContent = tr("Mapbox 요금 발생 주의", "Mapbox usage may incur charges");
+  $("billingUsage").textContent = tr("이 화면의 목적지 검색·경로 계산·지도 표시는 Mapbox API를 사용합니다. 계정 요금제와 무료 한도에 따라 사용료가 청구될 수 있습니다. 사용 전 요금과 사용량을 확인하세요.", "Destination search, route calculation and map display on this page use Mapbox APIs. Charges may apply depending on your account plan and free limits. Check pricing and account usage before use.");
+  $("billingExternal").textContent = tr("외부 내비의 안내·경로 수신 자체는 Mapbox 검색을 사용하지 않습니다. 다만 Mapbox 키로 배경 지도를 표시하면 지도 사용량이 발생할 수 있습니다.", "Receiving guidance and routes from external navigation does not use Mapbox search. Displaying a background map with a Mapbox key can still generate Mapbox map usage.");
+  $("billingPricing").textContent = tr("Mapbox 요금 확인 ↗", "View Mapbox pricing ↗");
   $("note").textContent = tr("키 등록 후 목적지를 검색하고 선택하세요. 선택한 위치는 현재 주행 세션에만 사용되며, 주행이 끝나거나 장치가 재시작되면 지워집니다. 경로 지도는 주행 화면이 켜져 있고 현재 위치와 안내 경로가 있을 때 표시됩니다. 외부 내비 안내가 우선이며, 연결이 끝나면 현재 주행의 Mapbox 목적지를 사용합니다.", "After saving your Public key, search for and select a destination. The selected place is used only for the current drive and is cleared when the drive ends or the device restarts. The route map needs the driving screen, a current position and route guidance. External navigation takes priority; the current drive's Mapbox destination resumes after it disconnects.");
   async function api(path, options) {
     const response = await fetch(`/api/navigation/${path}`, {...options, cache:"no-store"});
