@@ -48,6 +48,25 @@
   min-width: 0;
 }
 
+.mapbox-token-card__billing {
+  padding: var(--sp-md);
+  border: 1px solid var(--md-warning);
+  border-radius: var(--r-sm);
+  background: color-mix(in srgb, var(--md-warning) 9%, transparent);
+  color: var(--md-on-surface);
+  font-size: var(--fs-body-sm);
+  overflow-wrap: anywhere;
+}
+
+.mapbox-token-card__billing p {
+  margin: var(--sp-sm) 0;
+}
+
+.mapbox-token-card__billing a {
+  color: var(--md-primary);
+  text-decoration: underline;
+}
+
 .mapbox-token-field {
   display: grid;
   gap: var(--sp-sm);
