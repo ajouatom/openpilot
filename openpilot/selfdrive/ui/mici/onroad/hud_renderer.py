@@ -8,6 +8,7 @@ from openpilot.common.constants import CV
 from openpilot.selfdrive.carrot.deceleration_source import (
   deceleration_source_presentation,
   external_navigation_connected,
+  format_vehicle_navi_junction,
   navigation_status_presentation,
 )
 # from openpilot.selfdrive.ui.mici.onroad.torque_bar import TorqueBar # 아이콘에 토크 적용: 토크바 미사용
@@ -858,6 +859,43 @@ class HudRenderer(Widget):
         set_x = int(panel_x + panel_w * 0.90 - set_size.x * 0.5 + 50)
         set_y = int(panel_y + panel_h * 0.10 - set_size.y * 0.5 - 20)
         draw_text_ui_style(set_label_text, set_x, set_y, set_font, set_color, font=self._font_display, border_width=1.0, shadow_offset=3.0, align="left_top", y_offset=0.0)
+
+      try:
+        cm = ui_state.sm["carrotMan"]
+        curve_speed = float(getattr(cm, "vehicleNaviCurveCurrentSpeed", 0.0))
+        curve_is_ramp = bool(getattr(cm, "vehicleNaviCurveIsRamp", False))
+        junction_badge = format_vehicle_navi_junction(
+          int(getattr(cm, "vehicleNaviJunctionType", 0) or 0),
+          int(getattr(cm, "vehicleNaviJunctionSide", 0) or 0),
+          float(getattr(cm, "vehicleNaviJunctionDistance", 0) or 0),
+        )
+      except Exception:
+        curve_speed = 0.0
+        curve_is_ramp = False
+        junction_badge = ""
+
+      navi_lavender = rl.Color(199, 125, 255, 230)
+      if 0.0 < curve_speed < 250.0:
+        disp_curve = curve_speed if ui_state.is_metric else curve_speed * KM_TO_MILE
+        curve_text = str(int(round(disp_curve)))
+        curve_label = "ramp" if curve_is_ramp else "curve"
+        c_font = 34
+        c_size = measure_text_cached(self._font_display, curve_text, c_font)
+        cx = int(panel_x + panel_w * 0.90 - c_size.x * 0.5 + 125)
+        cy = int(panel_y + panel_h * 0.25 - c_size.y * 0.5)
+        draw_text_ui_style(curve_text, cx, cy, c_font, navi_lavender, font=self._font_display, border_width=1.0, shadow_offset=3.0, align="left_top", y_offset=0.0)
+        cl_font = 24
+        cl_size = measure_text_cached(self._font_display, curve_label, cl_font)
+        clx = int(panel_x + panel_w * 0.90 - cl_size.x * 0.5 + 125)
+        cly = int(panel_y + panel_h * 0.10 - cl_size.y * 0.5 - 20)
+        draw_text_ui_style(curve_label, clx, cly, cl_font, navi_lavender, font=self._font_display, border_width=1.0, shadow_offset=3.0, align="left_top", y_offset=0.0)
+
+      if junction_badge:
+        j_font = 22
+        j_size = measure_text_cached(self._font_display, junction_badge, j_font)
+        jx = int(panel_x + panel_w * 0.90 - j_size.x * 0.5 + 50)
+        jy = int(panel_y - 38)
+        draw_text_ui_style(junction_badge, jx, jy, j_font, navi_lavender, font=self._font_display, border_width=1.0, shadow_offset=3.0, align="left_top", y_offset=0.0)
 
     # ----- cruise gap (small circle + number, bottom-mid-right) -----
     gap = self._get_cruise_gap()

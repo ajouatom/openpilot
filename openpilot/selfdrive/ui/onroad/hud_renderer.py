@@ -2,7 +2,10 @@ import time
 import pyray as rl
 from dataclasses import dataclass
 from openpilot.common.constants import CV
-from openpilot.selfdrive.carrot.deceleration_source import deceleration_source_presentation
+from openpilot.selfdrive.carrot.deceleration_source import (
+  deceleration_source_presentation,
+  format_vehicle_navi_junction,
+)
 from openpilot.selfdrive.ui.onroad.exp_button import ExpButton
 from openpilot.selfdrive.ui.ui_state import ui_state, UIStatus
 from openpilot.system.hardware.usbgpu import usbgpu_badge_state
@@ -744,6 +747,47 @@ class HudRenderer(Widget):
         font=self._font_display,
         border_width=1.0,
         shadow_offset=5.0,
+        align="center_bottom",
+      )
+
+    try:
+      cm = sm["carrotMan"]
+      curve_speed = float(getattr(cm, "vehicleNaviCurveCurrentSpeed", 0.0))
+      curve_is_ramp = bool(getattr(cm, "vehicleNaviCurveIsRamp", False))
+      junction_badge = format_vehicle_navi_junction(
+        int(getattr(cm, "vehicleNaviJunctionType", 0) or 0),
+        int(getattr(cm, "vehicleNaviJunctionSide", 0) or 0),
+        float(getattr(cm, "vehicleNaviJunctionDistance", 0) or 0),
+      )
+    except Exception:
+      curve_speed = 0.0
+      curve_is_ramp = False
+      junction_badge = ""
+
+    if 0.0 < curve_speed < 250.0:
+      disp_curve = curve_speed if ui_state.is_metric else curve_speed * KM_TO_MILE
+      curve_label = "ramp" if curve_is_ramp else "curve"
+      draw_text_ui_style(
+        str(int(round(disp_curve))), bx + 345, by - 50 + 5, 44, COLORS.VEHICLE_NAVI_LAVENDER,
+        font=self._font_display,
+        border_width=1.0,
+        shadow_offset=5.0,
+        align="center_bottom",
+      )
+      draw_text_ui_style(
+        curve_label, bx + 345, by - 96, 26, COLORS.VEHICLE_NAVI_LAVENDER,
+        font=self._font_display,
+        border_width=1.0,
+        shadow_offset=5.0,
+        align="center_bottom",
+      )
+
+    if junction_badge:
+      draw_text_ui_style(
+        junction_badge, bx + 250, by - 135, 24, COLORS.VEHICLE_NAVI_LAVENDER,
+        font=self._font_display,
+        border_width=1.0,
+        shadow_offset=4.0,
         align="center_bottom",
       )
 

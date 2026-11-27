@@ -49,6 +49,11 @@ struct CarrotMan @0x81c2f05a394cf4af {
 	positionMonoTime @34 : UInt64; # time of the fused/predicted position
 	positionSource @35 :Text;
 	positionHeadingValid @36 :Bool;
+	vehicleNaviCurveCurrentSpeed @37 : Float32; # distance-adjusted 0x094/0x4BA/0x098 curve candidate at current position, kph; 0 when unavailable
+	vehicleNaviCurveIsRamp @38 : Bool; # true when the active curve candidate comes from a 0x098 branch ramp
+	vehicleNaviJunctionType @39 : UInt8; # 0 none, 1 diverge/fork, 2 merge
+	vehicleNaviJunctionSide @40 : UInt8; # 0 unknown, 1 left, 2 right
+	vehicleNaviJunctionDistance @41 : Int32; # meters to junction (0 while inside taper zone)
 }
 
 struct CarrotNaviState @0xaedffd8f31e7b55d {
