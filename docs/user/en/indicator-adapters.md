@@ -30,6 +30,7 @@ There is no vehicle-model allowlist. USB, BLE and Panda/SPAS outputs use the sam
 
 - **USB/BLE:** the existing B1 classic CAN profile requires 500 kbit/s, eight-byte `0x3C1` and `0x413`, matching signal meanings, CRC and fresh reception. An adapter's CAN-FD hardware support does not extend this control profile.
 - **Kicker/Panda:** camera-SCC wiring must expose ECAN SPAS `0x165` (24 bytes), `0x16A` (32 bytes) and stalk `0x3C1` (8 bytes). A new request requires ten CRC-valid advancing stock SPAS frames and a fresh neutral stalk. Selecting Kicker continues to suspend external USB/BLE output.
+- **Kicker without a lever (test):** with `CanfdBlinkerKickNoLever` also on, the Kicker runs on cars with the same SPAS messages but no `0x3C1` lever (Tucson HDA1). It checks the own-lamp record and lamp isolation instead of a lever.
 - **Holding:** comma maintains an indication when camera-side `0x1EA` (32 bytes) is observed and its existing transmit path is enabled. Otherwise BLE uses S3 holding; USB retains one-touch and relight behavior.
 
 The reported EV4 `0x3E3` CAN-FD+BRS, 16-byte format is a separate protocol. Removing model-name restrictions does not add transmission support for it. Verify physical illumination, holding and release separately on a newly supported vehicle. Apply the comma update and restart; this change requires no S3 or CANable firmware reinstall.

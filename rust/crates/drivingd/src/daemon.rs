@@ -166,6 +166,7 @@ pub fn run(
                                                               // carrot 2accb1fa3: a Kick car has no native voice route.
         let native = !cp.get_passive()
             && !support.kick
+            && !support.kick_no_lever
             && ((brand == "volkswagen" && flags & 16384 != 0)
                 || (brand == "hyundai" && flags & HYUNDAI_NATIVE == HYUNDAI_NATIVE));
         (brand == "tesla" && flags & 32 != 0, native) // TeslaFlags.AUTO_TURN_SIGNALS
@@ -451,6 +452,7 @@ pub fn run(
                         sources.control,
                         &params,
                         &publication.desire,
+                        support.kick_no_lever,
                         process::monotonic(),
                     )?,
                 },

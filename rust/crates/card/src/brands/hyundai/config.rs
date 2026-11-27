@@ -16,6 +16,8 @@ pub struct CarConfig {
     pub bus: CanBus,
     /// `HyundaiSafetyFlags.CANFD_BLINKER_KICK` on a non-passive car.
     pub kick: bool,
+    /// The Kick runs without a lever message (`ext::KICK_NO_LEVER`).
+    pub kick_no_lever: bool,
 }
 
 impl CarConfig {
@@ -44,6 +46,7 @@ impl CarConfig {
                     .get_safety_configs()?
                     .iter()
                     .any(|config| config.get_safety_param() & f::safety::CANFD_BLINKER_KICK != 0),
+            kick_no_lever: cp.get_ext_flags() & f::ext::KICK_NO_LEVER != 0,
             bus: CanBus::with_offset(
                 offset,
                 flags & f::HDA2 != 0,

@@ -109,6 +109,11 @@ pub struct Kick {
     /// The direction this cycle's request asks for (3 left, 4 right, 0).
     pub direction: u8,
     pub output_ready: bool,
+    /// `CanfdBlinkerKickNoLever` on a car with stock SPAS but no 0x3C1
+    /// (Tucson HDA1, 11-26): no verified lever. The lamp is kept from reading
+    /// back as the driver by the ownership journal + isolation mask (`isolate`,
+    /// unchanged), and drivingd treats the car as an external-output car.
+    pub no_lever: bool,
 }
 
 impl Kick {
@@ -156,6 +161,7 @@ impl Kick {
             aprk_request_id: None,
             direction: 0,
             output_ready: false,
+            no_lever: false,
         }
     }
 
@@ -284,6 +290,10 @@ impl Kick {
                 }
             }
         }
+        if self.no_lever {
+            // No lever message on this car: keep the stock carState fields.
+            return;
+        }
         let valid =
             exclusive && self.driver_direction.is_some() && fresh(self.driver_stamp, now, 0.35);
         cs.set_turn_signal_driver_valid(valid);
@@ -316,7 +326,11 @@ impl Kick {
         }
         let driver_active = self.driver_direction.is_some_and(|d| d != 0)
             || fresh(self.driver_pressed_at, now, 0.2);
-        let driver_valid = self.driver_direction.is_some() && fresh(self.driver_stamp, now, 0.35);
+        // Without a lever message there is nothing to verify; the driver's
+        // lever and hazard show up as lamps, which `request` and `feedback`
+        // treat as an override.
+        let driver_valid = self.no_lever
+            || (self.driver_direction.is_some() && fresh(self.driver_stamp, now, 0.35));
         self.output_ready =
             enabled && self.owner.held && self.contract_admitted && driver_valid && !driver_active;
         self.output_ready
@@ -597,7 +611,8 @@ impl Kick {
         if self.worker.is_some() && now >= self.feedback_at {
             let driver = cs.get_blinker_lever() != 0
                 || self.driver_direction.is_some_and(|d| d != 0)
-                || now - self.driver_pressed_at < 0.2;
+                || now - self.driver_pressed_at < 0.2
+                || (self.no_lever && cs.get_left_blinker() && cs.get_right_blinker());
             let accepted = if self.ready {
                 self.accepted_id.clone()
             } else {
@@ -663,6 +678,55 @@ mod tests {
         kick.driver_stamp = 10.;
         assert!(!kick.update(true, 10.01), "lever held");
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    /// Stock SPAS1/SPAS2 at 50 Hz with advancing counters, as panda and the
+    /// contract want them.
+    fn stock(counter: u8, now: f64) -> Packet {
+        Packet {
+            mono_time: (now * 1e9) as u64,
+            frames: vec![
+                spas::frame(0x165, counter, None, 0),
+                spas::frame(0x16a, counter, None, 0),
+            ],
+        }
+    }
+
+    fn drive(no_lever: bool) -> (Kick, bool) {
+        let mut kick = Kick::new(true, bus());
+        let dir = std::env::temp_dir().join(format!(
+            "kick-nolever-{}-{no_lever}",
+            std::process::id()
+        ));
+        kick.owner = Owner::with_directory("CANFD Kick", dir.clone());
+        kick.kick_setting = true;
+        kick.onroad = true;
+        kick.no_lever = no_lever;
+        let mut lever_field = true;
+        let mut now = 10.;
+        kick.update(true, now);
+        for i in 0..15u8 {
+            now += 0.02;
+            let mut message = capnp::message::Builder::new_default();
+            let mut cs = message.init_root::<car_state::Builder<'_>>();
+            cs.set_can_valid(true);
+            cs.set_turn_signal_driver_valid(true);
+            kick.observe(&[stock(i, now)], cs.reborrow(), now);
+            lever_field = cs.reborrow_as_reader().get_turn_signal_driver_valid();
+            kick.update(true, now);
+        }
+        std::fs::remove_dir_all(&dir).ok();
+        (kick, lever_field)
+    }
+
+    #[test]
+    fn without_a_lever_the_stock_contract_alone_makes_it_ready() {
+        let (kick, field) = drive(true);
+        assert!(kick.output_ready, "no-lever Kick ready on the stock SPAS contract");
+        assert!(field, "carState lever fields left as the car reported them");
+        let (kick, field) = drive(false);
+        assert!(!kick.output_ready, "the verified-lever Kick still needs 0x3C1");
+        assert!(!field, "and owns the lever fields");
     }
 
     #[test]

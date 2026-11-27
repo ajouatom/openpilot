@@ -300,7 +300,7 @@ VW MEB(ID.4 포함)에도 수동 조향비와 학습 비율이 적용됩니다. 
 
 수동 차선변경 감지에서 순간적인 차로 폭 오류는 마지막 유효 관측부터 0.15초 이내에 정상 관측이 돌아올 때 기존 추적을 이어갑니다. 송신 단계는 감지 단계가 확정한 차선 판단을 사용합니다. [자세한 동작](lane-change.md)
 
-설정 > 차량·하드웨어 > 깜박이 제어에 자동 점등, 출력 장치, 레버 동작을 모았습니다. 자동 점등에는 `AutoBlinkerControl`, `ManualLaneChangeIndicator`, `ManualTurnIndicator`, `ModelDesireIndicator`, `ModelPathIndicator`가 있습니다. 출력 장치에는 `CanfdBlinkerKick`, `CanfdBlinkerKickMode`, `CanfdBlinkerControl`, `CanfdBlinkerTest`가 있으며 레버 동작에는 `BlinkerLatchedTurn`, `LaneChangeLeverWait`가 있습니다.
+설정 > 차량·하드웨어 > 깜박이 제어에 자동 점등, 출력 장치, 레버 동작을 모았습니다. 자동 점등에는 `AutoBlinkerControl`, `ManualLaneChangeIndicator`, `ManualTurnIndicator`, `ModelDesireIndicator`, `ModelPathIndicator`가 있습니다. 출력 장치에는 `CanfdBlinkerKick`, `CanfdBlinkerKickMode`, `CanfdBlinkerKickNoLever`, `CanfdBlinkerControl`, `CanfdBlinkerTest`가 있으며 레버 동작에는 `BlinkerLatchedTurn`, `LaneChangeLeverWait`가 있습니다.
 
 **Panda/SPAS 깜박이 출력** (`CanfdBlinkerKick`)은 공통 판단이 만든 깜박이 요청을 Panda로 송신합니다. 차종명 제한 없이 ECAN의 SPAS 0x165(24바이트)·0x16A(32바이트)와 레버 0x3C1(8바이트)가 확인된 카메라 SCC CAN-FD 구성에서 지원합니다. 수동 차로변경·수동 회전·모델 관찰·내비 회전·음성 차로변경의 시작과 유지, 종료는 기존 공통 설정을 따릅니다. 실제 레버 조작과 오래된 입력은 출력을 중단하며, 종료된 요청은 새 요청 없이 재개하지 않습니다.
 
@@ -311,6 +311,8 @@ VW MEB(ID.4 포함)에도 수동 조향비와 학습 비율이 적용됩니다. 
 수동 차로변경·수동 회전의 정상 완료가 빨라도 Panda/SPAS 출력은 첫 송신 요청부터 최소 2초 유지합니다. 송신 준비 중에는 관찰 시작부터 최대 2초 동안 정상 완료를 늦춥니다. 실제 레버 조작, 크루즈 취소, 기능 끄기, 반대 방향 램프, 입력·차선 오류는 즉시 종료 조건입니다. 실제 점멸 횟수는 차량에서 확인해야 합니다.
 
 자동 램프 피드백은 조향 요청과 격리합니다. 독점 소유권 중 검증된 실제 레버의 새 조작은 보호시간 중에도 일반 차로변경 조건에 전달되며 Kick 출력을 중단합니다.
+
+**레버 신호 없는 차 허용(시험)** (`CanfdBlinkerKickNoLever`)은 `CanfdBlinkerKick`과 함께 켜는 시험 기능이며 기본 꺼짐입니다. ECAN에 순정 SPAS `0x165`(24바이트)·`0x16A`(32바이트)는 있지만 레버 `0x3C1`이 없는 카메라 SCC CAN-FD 차량(예: 투싼 HDA1)에서만 다음 OnRoad 시작부터 Kick을 켭니다. 레버 `0x3C1`이 있는 차량은 기존 조건 그대로입니다. 레버를 확인할 수 없으므로 자체 점등 기록과 램프 격리를 확인한 뒤에만 송신하고, 비상등이나 반대쪽 램프가 켜지면 즉시 멈춥니다. 같은 방향의 레버 조작은 구분하지 못합니다. Panda 펌웨어는 바뀌지 않습니다. P단에서 블루투스 깜박이 버튼으로 점등을 먼저 확인한 뒤 주행 시험을 하세요.
 
 `RadarTrackFlip`은 `0: 정상`(기본값), `1: 좌우 반전`입니다. 전방 레이더 트랙의 좌우 위치·횡속도를 함께 반전하여 선행차 선택과 표시에 적용하며 SCC·코너·비전은 그대로 유지합니다. 차종별 자동 반전은 없고, 실제 좌우 불일치가 확인된 차량에서만 사용합니다. 변경 후 재시동 또는 재부팅하면 다음 OnRoad 시작부터 적용됩니다. [레이더 좌우 반전](radar.md#radar-track-flip)을 참고하세요.
 

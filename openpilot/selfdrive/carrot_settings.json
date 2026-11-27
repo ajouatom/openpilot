@@ -460,6 +460,7 @@
               "params": [
                 "CanfdBlinkerKick",
                 "CanfdBlinkerKickMode",
+                "CanfdBlinkerKickNoLever",
                 "CanfdBlinkerControl",
                 "CanfdBlinkerTest"
               ]
@@ -2179,6 +2180,24 @@
       "max": 1,
       "default": 1,
       "unit": 1
+    },
+    {
+      "group": "시작",
+      "name": "CanfdBlinkerKickNoLever",
+      "title": "Panda/SPAS 깜박이: 레버 신호 없는 차 허용(시험)",
+      "descr": "「Panda/SPAS 깜박이 출력」과 함께 켜는 시험 기능입니다. 기본 꺼짐. ECAN에 순정 SPAS 0x165(24바이트)·0x16A(32바이트)는 있지만 레버 0x3C1이 없는 카메라 SCC CAN-FD 차량(예: 투싼 HDA1)에서만 다음 OnRoad 시작부터 Kick을 켭니다. 레버 0x3C1이 있는 차량은 기존 Kick 조건을 그대로 씁니다.\n레버 확인 대신 자체 점등 기록과 램프 격리를 확인한 뒤에만 송신하며, 비상등이나 반대쪽 램프가 켜지면 즉시 멈춥니다. 같은 방향 레버 조작은 구분하지 못합니다. Panda 펌웨어는 바뀌지 않습니다.\n먼저 P단 정차에서 블루투스 깜박이 버튼으로 점등을 확인한 뒤 주행 시험을 하세요.",
+      "egroup": "START",
+      "etitle": "Panda/SPAS indicator: allow cars without a lever message (test)",
+      "edescr": "Test feature used together with Panda/SPAS Indicator Output. Default off. From the next onroad start it enables the Kick only on camera-SCC CAN-FD cars whose ECAN has the stock SPAS 0x165 (24 bytes) and 0x16A (32 bytes) but no 0x3C1 lever message (for example the Tucson HDA1). Cars with a 0x3C1 lever keep the existing Kick conditions.\nInstead of a lever check it sends only after the own-lamp record and lamp isolation are confirmed, and stops at once when the hazards or the opposite lamp come on. A lever operation toward the same side cannot be told apart. The Panda firmware does not change.\nFirst check the lamp parked with a Bluetooth indicator button, then test while driving.",
+      "cgroup": "启动设置",
+      "ctitle": "Panda/SPAS转向灯：允许无拨杆信号车辆（测试）",
+      "cdescr": "与Panda/SPAS转向灯输出一起开启的测试功能，默认关闭。仅在ECAN有原车SPAS 0x165（24字节）和0x16A（32字节）但没有拨杆0x3C1的摄像头SCC CAN-FD车辆（如途胜HDA1）上，从下次OnRoad起启用Kick。有0x3C1拨杆的车辆沿用原Kick条件。\n不检查拨杆，而是在确认自身点亮记录与灯光隔离后才发送；双闪或反方向灯亮起时立即停止。无法区分同方向的拨杆操作。Panda固件不变。\n请先在P挡用蓝牙转向灯按钮确认点亮，再进行行驶测试。",
+      "min": 0,
+      "max": 1,
+      "default": 0,
+      "unit": 1,
+      "control": "toggle",
+      "risk": "high"
     },
     {
       "group": "시작",

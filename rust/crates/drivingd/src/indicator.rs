@@ -25,6 +25,9 @@ fn read(name: &str) -> Value {
 
 /// `HyundaiSafetyFlags.CANFD_BLINKER_KICK`.
 const CANFD_BLINKER_KICK: u16 = 32768;
+/// Hyundai ext flag `KICK_NO_LEVER` (card flags.rs ext): the Kick runs on a
+/// car with no 0x3C1 lever message (CanfdBlinkerKickNoLever).
+const HYUNDAI_EXT_KICK_NO_LEVER: u32 = 1 << 20;
 
 /// Which observer paths this car runs (carrot modeld.py, 6af3073e3): the
 /// external receivers on any non-passive car, the Kick on a Hyundai whose
@@ -32,21 +35,27 @@ const CANFD_BLINKER_KICK: u16 = 32768;
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Support {
     pub external: bool,
+    /// A Kick car with a verified 0x3C1 lever.
     pub kick: bool,
+    /// A Kick car without a lever message: its lamp is isolated through the
+    /// ownership journal like an external output, never as a verified lever.
+    pub kick_no_lever: bool,
 }
 
 impl Support {
     pub fn read(cp: car_params::Reader<'_>) -> Result<Self, Error> {
         let passive = cp.get_passive();
-        let kick = !passive
+        let any_kick = !passive
             && cp.get_brand()?.to_str()? == "hyundai"
             && cp
                 .get_safety_configs()?
                 .iter()
                 .any(|config| config.get_safety_param() & CANFD_BLINKER_KICK != 0);
+        let no_lever = any_kick && cp.get_ext_flags() & HYUNDAI_EXT_KICK_NO_LEVER != 0;
         Ok(Self {
             external: !passive,
-            kick,
+            kick: any_kick && !no_lever,
+            kick_no_lever: no_lever,
         })
     }
 
@@ -79,10 +88,18 @@ fn flag(params: &Params, key: &str) -> Result<bool, Error> {
 fn config(params: &Params, support: Support) -> Result<IndicatorConfig, Error> {
     let mode = parameters::integer(params, "AutoBlinkerControl")?;
     let kick = flag(params, "CanfdBlinkerKick")?;
-    let supported = if kick { support.kick } else { support.external };
+    let supported = if kick {
+        support.kick || support.kick_no_lever
+    } else {
+        support.external
+    };
     let lamp = supported && matches!(mode, 1 | 2) && !flag(params, "CanfdBlinkerControl")?;
     Ok(IndicatorConfig {
-        manual_minimum: if support.kick && kick { 2. } else { 0. },
+        manual_minimum: if (support.kick || support.kick_no_lever) && kick {
+            2.
+        } else {
+            0.
+        },
         boundary: lamp && flag(params, "ManualLaneChangeIndicator")?,
         manual_turn: lamp && flag(params, "ManualTurnIndicator")?,
         model_desire: lamp && flag(params, "ModelDesireIndicator")?,
@@ -174,6 +191,7 @@ pub fn inputs(
     control: car_control::Reader<'_>,
     params: &Params,
     helper: &DesireHelper,
+    kick_no_lever: bool,
     now: f64,
 ) -> Result<Indicator, Error> {
     let valid = fresh(state, "carState", now, 0.35)? && fresh(state, "carControl", now, 0.35)?;
@@ -216,6 +234,7 @@ pub fn inputs(
                 Support {
                     external: helper.indicator_supported,
                     kick: helper.kick_supported,
+                    kick_no_lever,
                 },
             )?)
         } else {
@@ -226,4 +245,32 @@ pub fn inputs(
         turn_pose,
         boot: boot as f64 / 1e9,
     })
+}
+
+#[cfg(test)]
+mod kick_support_tests {
+    use super::*;
+    use openpilot_cereal::car_capnp::car_params::SafetyModel;
+
+    fn support(param: u16, ext: u32) -> Support {
+        let mut message = capnp::message::Builder::new_default();
+        let mut cp = message.init_root::<car_params::Builder<'_>>();
+        cp.set_brand("hyundai");
+        cp.set_ext_flags(ext);
+        let mut configs = cp.reborrow().init_safety_configs(1);
+        let mut config = configs.reborrow().get(0);
+        config.set_safety_model(SafetyModel::HyundaiCanfd);
+        config.set_safety_param(param);
+        Support::read(cp.into_reader()).unwrap()
+    }
+
+    #[test]
+    fn a_no_lever_kick_is_not_a_verified_lever_car() {
+        let lever = support(CANFD_BLINKER_KICK, 0);
+        assert!(lever.kick && !lever.kick_no_lever);
+        let no_lever = support(CANFD_BLINKER_KICK, HYUNDAI_EXT_KICK_NO_LEVER);
+        assert!(!no_lever.kick && no_lever.kick_no_lever && no_lever.external);
+        let none = support(0, HYUNDAI_EXT_KICK_NO_LEVER);
+        assert!(!none.kick && !none.kick_no_lever, "the ext flag alone means nothing");
+    }
 }

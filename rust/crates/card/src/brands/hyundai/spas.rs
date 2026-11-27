@@ -207,6 +207,16 @@ pub fn kick_compatible_with(
     camera_scc && bus % 4 == 0 && compatible_with(&size) && size(0x3c1) == Some(8)
 }
 
+/// The Kick's stock SPAS contract with no 0x3C1 lever message at all on
+/// ECAN (Tucson HDA1). A 0x3C1 of any other size is not this case.
+pub fn kick_no_lever_with(
+    size: impl Fn(u32) -> Option<usize>,
+    bus: u8,
+    camera_scc: bool,
+) -> bool {
+    camera_scc && bus.is_multiple_of(4) && compatible_with(&size) && size(0x3c1).is_none()
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Direction {
     Left,

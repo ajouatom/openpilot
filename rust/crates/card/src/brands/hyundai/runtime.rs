@@ -51,10 +51,11 @@ impl Hyundai {
             state.config.bus.ecan,
             &state.config.candidate,
         );
-        let kick = super::kick::Kick::new(
+        let mut kick = super::kick::Kick::new(
             state.config.kick && state.config.flags & f::CANFD != 0,
             state.config.bus,
         );
+        kick.no_lever = state.config.kick_no_lever;
         Ok(Self {
             state,
             controller,

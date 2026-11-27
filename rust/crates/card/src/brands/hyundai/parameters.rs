@@ -74,13 +74,28 @@ pub fn parameters(input: ParamsInput<'_>) -> Result<Builder<HeapAllocator>, Erro
     // protocol and harness, never the model name. Runtime CRC/counter/driver
     // checks still precede each new Kick request.
     let ecan_size = |address| super::bus::size(input.fingerprints, detection.bus.ecan, address);
-    let kick = detection.flags & flags::CANFD != 0
-        && super::spas::kick_compatible_with(
+    let kick_setting = input.settings.get_bool("CanfdBlinkerKick")?;
+    // CanfdBlinkerKickNoLever (opt-in, Tucson HDA1 11-26): the same stock
+    // SPAS contract but no 0x3C1 lever message on ECAN. Never when a lever
+    // message exists: then the verified-lever Kick above applies.
+    let kick_no_lever = detection.flags & flags::CANFD != 0
+        && super::spas::kick_no_lever_with(
             ecan_size,
             detection.bus.ecan,
             detection.flags & flags::CAMERA_SCC != 0,
         )
-        && input.settings.get_bool("CanfdBlinkerKick")?;
+        && kick_setting
+        && input.settings.get_bool("CanfdBlinkerKickNoLever")?;
+    let kick = detection.flags & flags::CANFD != 0
+        && ((super::spas::kick_compatible_with(
+            ecan_size,
+            detection.bus.ecan,
+            detection.flags & flags::CAMERA_SCC != 0,
+        ) && kick_setting)
+            || kick_no_lever);
+    if kick_no_lever {
+        detection.ext_flags |= flags::ext::KICK_NO_LEVER;
+    }
     if detection.flags & flags::CANFD != 0
         && detection.flags & flags::CAMERA_SCC != 0
         && super::bus::size(input.fingerprints, detection.bus.cam, 0x1ea) == Some(32)
@@ -202,4 +217,77 @@ pub fn parameters(input: ParamsInput<'_>) -> Result<Builder<HeapAllocator>, Erro
         },
     )?;
     Ok(message)
+}
+
+#[cfg(test)]
+mod kick_no_lever_tests {
+    use super::*;
+
+    /// Tucson HDA1 (cb9c2a66, route 00000441 seg 8): stock SPAS, no 0x3C1.
+    fn tucson(lever: Option<usize>) -> Vec<(u8, Vec<(u32, usize)>)> {
+        let mut bus0: Vec<(u32, usize)> = vec![
+            (0x45, 24), (0x4a, 32), (0x5a, 32), (0x60, 32), (0x65, 32), (0xa0, 24), (0xb0, 32),
+            (0xea, 24), (0xfa, 32), (0x105, 32), (0x10a, 32), (0x120, 32), (0x130, 16),
+            (0x145, 32), (0x165, 24), (0x16a, 32), (0x175, 24), (0x1aa, 16), (0x1ba, 24),
+            (0x1cf, 8), (0x1f5, 32), (0x2b0, 32), (0x386, 8), (0x413, 8), (0x4b9, 8), (0x500, 32),
+        ];
+        if let Some(size) = lever {
+            bus0.push((0x3c1, size));
+        }
+        let bus2 = vec![
+            (0xcb, 24), (0x12a, 16), (0x160, 16), (0x161, 32), (0x162, 32), (0x1a0, 32),
+            (0x1b5, 32), (0x1e0, 16), (0x1fa, 32), (0x200, 8),
+        ];
+        vec![(0, bus0), (1, vec![(0x210, 32)]), (2, bus2)]
+    }
+
+    fn run(fp: &[(u8, Vec<(u32, usize)>)], kick: bool, no_lever: bool) -> (u16, u32) {
+        let temp = tempfile::tempdir().unwrap();
+        let settings = Params::open(temp.path(), "d").unwrap();
+        settings.put("HyundaiCameraSCC", b"1").unwrap();
+        settings.put_bool("CanfdBlinkerKick", kick).unwrap();
+        settings.put_bool("CanfdBlinkerKickNoLever", no_lever).unwrap();
+        let message = parameters(ParamsInput {
+            candidate: "HYUNDAI_TUCSON_4TH_GEN",
+            fingerprints: fp,
+            firmware: &[],
+            alpha_long: false,
+            is_release: false,
+            settings: &settings,
+        })
+        .unwrap();
+        let cp = message.get_root_as_reader::<car_params::Reader<'_>>().unwrap();
+        let configs = cp.get_safety_configs().unwrap();
+        (configs.get(configs.len() - 1).get_safety_param(), cp.get_ext_flags())
+    }
+
+    const KICK: u16 = flags::safety::CANFD_BLINKER_KICK;
+    const NO_LEVER: u32 = flags::ext::KICK_NO_LEVER;
+
+    #[test]
+    fn a_car_without_a_lever_needs_both_switches() {
+        let fp = tucson(None);
+        let (param, ext) = run(&fp, true, true);
+        assert_ne!(param & KICK, 0);
+        assert_ne!(ext & NO_LEVER, 0);
+        for (kick, no_lever) in [(true, false), (false, true), (false, false)] {
+            let (param, ext) = run(&fp, kick, no_lever);
+            assert_eq!(param & KICK, 0, "{kick} {no_lever}");
+            assert_eq!(ext & NO_LEVER, 0, "{kick} {no_lever}");
+        }
+        let (on, _) = run(&fp, true, true);
+        let (off, _) = run(&fp, false, false);
+        assert_eq!(on & !KICK, off, "nothing else changes");
+    }
+
+    #[test]
+    fn a_car_with_a_lever_keeps_the_verified_lever_kick() {
+        let (param, ext) = run(&tucson(Some(8)), true, true);
+        assert_ne!(param & KICK, 0);
+        assert_eq!(ext & NO_LEVER, 0, "a verified lever: never the no-lever path");
+        // 0x3C1 of another size (EV4: 24 bytes): neither path.
+        let (param, ext) = run(&tucson(Some(24)), true, true);
+        assert_eq!(param & KICK, 0);
+        assert_eq!(ext & NO_LEVER, 0);
+    }
 }

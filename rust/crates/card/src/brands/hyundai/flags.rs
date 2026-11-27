@@ -47,6 +47,10 @@ pub mod ext {
     /// The camera's ADRV_0x1EA is DLC 32: an external indicator hold can be
     /// carried in it (carrot 6af3073e3).
     pub const CANFD_INDICATOR_HOLD: u32 = 1 << 19;
+    /// `CanfdBlinkerKickNoLever`: the Kick runs on a car with stock SPAS but
+    /// no 0x3C1 lever message; drivingd must not treat it as a verified-lever
+    /// Kick car (it isolates the lamp through the ownership journal instead).
+    pub const KICK_NO_LEVER: u32 = 1 << 20;
 }
 
 pub mod safety {

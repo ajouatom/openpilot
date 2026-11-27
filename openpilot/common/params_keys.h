@@ -330,6 +330,7 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"CanfdBlinkerControl", {PERSISTENT, BOOL, "0"}},
     {"CanfdBlinkerKick", {PERSISTENT, BOOL, "0"}},
     {"CanfdBlinkerKickMode", {PERSISTENT, INT, "1"}},
+    {"CanfdBlinkerKickNoLever", {PERSISTENT, BOOL, "0"}},
     {"CanfdBlinkerTest", {CLEAR_ON_MANAGER_START, INT, "0"}},
     {"CanfdDebug", {PERSISTENT, INT, "0"}},
 
