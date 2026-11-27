@@ -23,6 +23,7 @@ class PedalInterceptorParams:
   cruise_enabled_bit: tuple[int, int]
   cruise_speed: tuple[str, str]
   min_enable_speed: float
+  command_value: Callable[[float], float] = float
 
 
 @dataclass
@@ -48,11 +49,13 @@ class PedalInterceptorState:
     return not self.valid or self.state != 0
 
 
-def create_pedal_interceptor_command(packer, amount: float, counter: int):
+def create_pedal_interceptor_command(packer, amount: float, counter: int, command_value: Callable[[float], float] = float):
+  """Pack a normalized demand using the profile's positive-command conversion."""
+  # Test demand before encoding. A profile may assign nonzero DBC units to raw neutral.
   enabled = amount > 0.001
   values = {"ENABLE": enabled, "COUNTER_PEDAL": counter & 0xF}
   if enabled:
-    values["GAS_COMMAND"] = values["GAS_COMMAND2"] = amount * 255.0
+    values["GAS_COMMAND"] = values["GAS_COMMAND2"] = command_value(amount) * 255.0
   # Leave disabled tracks unset so CANPacker emits raw zero, as in StarPilot.
   # Physical zero would instead encode the DBC offsets into nonzero raw tracks.
   return packer.make_can_msg("GAS_COMMAND", PEDAL_INTERCEPTOR_BUS, values)
@@ -76,5 +79,5 @@ class PedalInterceptor:
         self.gas_last = min(next_gas, target)
     else:
       self.gas_last = 0.0
-    return create_pedal_interceptor_command(self.packer, self.gas_last,
-                                          frame // PEDAL_INTERCEPTOR_TX_INTERVAL)
+    return create_pedal_interceptor_command(self.packer, self.gas_last, frame // PEDAL_INTERCEPTOR_TX_INTERVAL,
+                                            self.params.command_value)
