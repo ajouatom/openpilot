@@ -93,6 +93,13 @@ SCC_PRIMARY_DUPLICATE_MAX_DREL_DELTA_M = 5.0
 RADAR_VISION_FALLBACK_MAX_ABS_DPATH_M = 1.0
 RADAR_VISION_FALLBACK_MIN_PROBABILITY = 0.40
 RADAR_MATCH_MAX_FARTHER_THAN_VISION_M = 8.0
+# K7 classic 0x238 radar: within 10 m a confident, central camera lead wins
+# when the matched radar object is clearly farther (radar ignores < 3 m and
+# can report another object at stop/pull-away).
+NEAR_VISION_PRIORITY_MAX_DREL_M = 10.0
+NEAR_VISION_PRIORITY_MIN_PROBABILITY = 0.7
+NEAR_VISION_PRIORITY_MARGIN_M = 1.5
+NEAR_VISION_PRIORITY_MARGIN_FRACTION = 0.1
 MOVING_FRONT_RANGE_XSTD_SIGMA = 1.5
 MOVING_FRONT_RANGE_MAX_DISTANCE_FRACTION = 0.15
 MOVING_FRONT_RANGE_MAX_GAP_S = 0.15
@@ -445,6 +452,22 @@ def _central_vision_fallback_allowed(
   )
 
 
+def _radar_match_farther_than_near_vision(
+  match: Any,
+  vision: Any,
+  path: tuple[tuple[float, float], ...],
+) -> bool:
+  """A near, confident camera lead is closer than the matched radar object."""
+  return bool(
+    match is not None
+    and _central_vision_fallback_allowed(vision, path)
+    and vision.probability >= NEAR_VISION_PRIORITY_MIN_PROBABILITY
+    and vision.d_rel <= NEAR_VISION_PRIORITY_MAX_DREL_M
+    and match.point.d_rel - vision.d_rel
+    > NEAR_VISION_PRIORITY_MARGIN_M + NEAR_VISION_PRIORITY_MARGIN_FRACTION * vision.d_rel
+  )
+
+
 def _radar_match_is_dangerously_farther_than_vision(
   match: Any,
   vision: Any,
@@ -526,8 +549,10 @@ class DPathRadarController:
     front_radar_measurement_delay_s: float = 0.0,
     corner_radar_measurement_delay_s: float = CORNER_RADAR_MEASUREMENT_DELAY_S,
     production_live_tracks: bool = False,
+    near_vision_priority: bool = False,
   ) -> None:
     self.primary_matcher = VisionRadarMatcher()
+    self.near_vision_priority = bool(near_vision_priority)
     self.scc_primary_fallback_matcher = VisionRadarMatcher()
     self.forced_scc_rejected_s: float | None = None  # last frame mode 3 refused a beside-path SCC body
     self._forced_scc_previous: tuple[float, RadarPointSnapshot] | None = None
@@ -1058,6 +1083,11 @@ class DPathRadarController:
       primary_match, vision, path, time_s,
     ):
       # A farther permissive match must not hide a strongly visible nearer car.
+      primary_match = None
+    elif self.near_vision_priority and _radar_match_farther_than_near_vision(
+      primary_match, vision, path,
+    ):
+      # Near range: publish the closer camera lead instead.
       primary_match = None
     if primary_match is None and self.enable_radar_tracks == 3:
       # Mode 3 tries front-radar/vision first, then SCC unless physical lateral

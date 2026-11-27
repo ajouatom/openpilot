@@ -68,7 +68,7 @@ def planner_response_gate():
       "reset_state": reset_state,
       "force_slow_decel": force_slow_decel,
       "accel_limits_turns": [-2.0, accel_max],
-      "self": SimpleNamespace(output_should_stop=should_stop),
+      "self": SimpleNamespace(output_should_stop=should_stop, radar_comfort_extras=True),
     })
 
   return enabled

@@ -52,6 +52,7 @@ const arContract = {
     "guidanceCurrent", "guidanceNext", "laneCurrent", "laneAhead", "speed", "trafficSignal", "crossroad",
     "route", "navigationStatus",
   ]],
+  classicRadarTracks: [22, ["points"]],
 };
 
 const nestedContract = {

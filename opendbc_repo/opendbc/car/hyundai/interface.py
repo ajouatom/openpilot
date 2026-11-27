@@ -6,6 +6,7 @@ from opendbc.car.hyundai.values import HyundaiFlags, CAR, DBC, CANFD_RADAR_SCC_C
                                                    CANFD_HYBRID_STATUS_ADDR, CANFD_HYBRID_STATUS_DLC, \
                                                    EV_MODE_STATUS_ADDR, EV_MODE_STATUS_DLC, bosch_mrrevo14f_bus
 from opendbc.car.hyundai.radar_interface import RADAR_START_ADDR
+from opendbc.car.hyundai.radar_classic_238 import CLASSIC_238_TRACK_MODE, classic_238_radar_available
 from opendbc.car.interfaces import CarInterfaceBase
 from opendbc.car.disable_ecu import disable_ecu
 from opendbc.car.hyundai.carcontroller import CarController
@@ -223,6 +224,11 @@ class CarInterface(CarInterfaceBase):
 
     # carrot, if camera_scc enabled, enable openpilotLongitudinalControl
     enable_radar_tracks = params.get_int("EnableRadarTracks")
+    # K7 2020: this radar has no 0x500 tracks; mode 1 reads its 0x238 objects instead.
+    if (enable_radar_tracks == CLASSIC_238_TRACK_MODE and candidate == CAR.KIA_K7_PE and
+        not ret.flags & HyundaiFlags.CANFD and classic_238_radar_available(fingerprint[1])):
+      ret.extFlags |= HyundaiExtFlags.RADAR_CLASSIC_238.value
+      print("##### K7 classic 0x238 radar objects selected")
     if ret.flags & HyundaiFlags.CAMERA_SCC.value or enable_radar_tracks > 0 or enable_radar_tracks == -2:
       ret.radarUnavailable = False
       ret.openpilotLongitudinalControl = True if camera_scc < 3 else False
@@ -318,7 +324,9 @@ class CarInterface(CarInterfaceBase):
         addr, bus = 0x730, CanBus(CP).ECAN
       disable_ecu(can_recv, can_send, bus=bus, addr=addr, com_cont_req=b'\x28\x83\x01')
 
-    if params.get_int("EnableRadarTracks") > 0 and not CP.flags & HyundaiFlags.CANFD and not pedal_interceptor and not bosch_passive:
+    # The K7 0x238 stream needs no track activation.
+    if (params.get_int("EnableRadarTracks") > 0 and not CP.flags & HyundaiFlags.CANFD and not pedal_interceptor
+        and not bosch_passive and not CP.extFlags & HyundaiExtFlags.RADAR_CLASSIC_238.value):
       result = enable_radar_tracks(CP, can_recv, can_send)
       params.put_bool("EnableRadarTracksResult", result)
 

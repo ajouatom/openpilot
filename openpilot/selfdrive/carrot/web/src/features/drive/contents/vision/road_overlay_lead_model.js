@@ -86,6 +86,10 @@ export function createRoadOverlayLeadModel(options = {}) {
     return fallback;
   }
 
+  function getClassicRadarTracks(classicRadarTracks) {
+    return Array.isArray(classicRadarTracks?.points) ? classicRadarTracks.points : [];
+  }
+
   function getRadarProjectionLine(model) {
     const laneLines = Array.isArray(model?.laneLines) ? model.laneLines : [];
     const centerLane = laneLines[2];
@@ -110,6 +114,7 @@ export function createRoadOverlayLeadModel(options = {}) {
     getDistanceBadgeTextColor,
     getPathStatusText,
     getRadarTracks,
+    getClassicRadarTracks,
     getRadarProjectionLine,
     resolveLeadTwo,
   });

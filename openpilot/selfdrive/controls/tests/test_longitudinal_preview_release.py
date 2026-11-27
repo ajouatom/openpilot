@@ -27,7 +27,8 @@ def planner_preview():
   hi = next(i for i, n in enumerate(update.body) if assigns(n, 'output_a_target_mpc'))
   code = compile(ast.Module(body=update.body[lo:hi+1], type_ignores=[]), str(lib / 'longitudinal_planner.py'), 'exec')
   times = 10 * (np.arange(17) / 32)**2
-  state = SimpleNamespace(lead_preview=.87, mpc=SimpleNamespace(mode='acc', source='lead0'))
+  state = SimpleNamespace(lead_preview=.87, radar_comfort_extras=True,
+                          mpc=SimpleNamespace(mode='acc', source='lead0'))
 
   def step(a_lead, *, a_ego=0., mode=preview.DRIVING_MODE_NORMAL, status=True, radar=True,
            track_id=52, gas=False, brake=False, reset=False, mpc_mode='acc', source='lead0', a_now=1.6, jerk=-.6):

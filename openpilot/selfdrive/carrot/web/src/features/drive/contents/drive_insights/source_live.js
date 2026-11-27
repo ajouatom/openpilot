@@ -25,6 +25,7 @@ function serviceAges(providerSnapshot) {
     "lateralPlan",
     "radarState",
     "liveTracks",
+    "classicRadarTracks",
     "carrotMan",
     "navInstructionCarrot",
     "roadCameraState",

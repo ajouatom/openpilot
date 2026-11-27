@@ -33,6 +33,7 @@ const RAW_OVERLAY_HUD_ONLY_SERVICES = new Set([
   // Drive Insights reads this through the live state provider; the camera
   // overlay never draws it, so it must not force an overlay repaint.
   "liveTracks",
+  "classicRadarTracks",
   // AR 오버레이가 자체 스케줄로 그리므로 카메라 오버레이를 다시 칠하지 않는다.
   "cameraOdometry",
   "livePose",

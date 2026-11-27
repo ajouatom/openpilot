@@ -324,3 +324,14 @@ def test_replay_restores_source_policy_from_late_metadata(tmp_path, brand, unava
   frames = load_frames(path)
   assert len(frames) == 1
   assert frames[0].recorded_radar_track_mode == expected
+
+
+def test_classic_238_follows_live_scc_lead_and_otherwise_0x238():
+  from types import SimpleNamespace
+  from openpilot.selfdrive.carrot.radar import classic_238_track_mode
+  front = SimpleNamespace(radarSource="frontRadar", measured=True)
+  scc = SimpleNamespace(radarSource="scc", measured=True)
+  assert classic_238_track_mode(1, [front]) == 1
+  assert classic_238_track_mode(1, []) == 1
+  assert classic_238_track_mode(1, [SimpleNamespace(radarSource="scc", measured=False), front]) == 1
+  assert classic_238_track_mode(1, [scc]) == 0
