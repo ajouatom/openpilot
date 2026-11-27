@@ -442,3 +442,21 @@ def test_gas_floor_resets_on_brake_or_camera_speed_change(brake_pressed, road_li
   )
 
   assert (desired_speed, source, serv.gas_override_speed) == (60, "hda", 0)
+
+
+def test_section_source_wins_tie_over_spot_camera_source():
+  serv = _serv(1)
+  serv.autoNaviSpeedSafetyFactor = 1.08
+  CS = _car_state(distance=1.0, speed_limit=110.0)
+  CS.vehicleNaviActive = True
+  CS.vehicleNaviSectionActive = True
+  CS.vehicleNaviSpeed = 110.0
+
+  cam_speed = serv.calculate_current_speed(
+    CS.speedLimitDistance, CS.speedLimit * serv.autoNaviSpeedSafetyFactor,
+    serv.autoNaviSpeedCtrlEnd, serv.autoNaviSpeedDecelRate,
+  )
+  sec_speed = CS.vehicleNaviSpeed * serv.autoNaviSpeedSafetyFactor
+  assert cam_speed == pytest.approx(sec_speed)
+  _, source = min([(sec_speed, "hda_section"), (cam_speed, "hda")], key=lambda x: x[0])
+  assert source == "hda_section"
