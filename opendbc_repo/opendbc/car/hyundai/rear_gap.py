@@ -1,6 +1,7 @@
 """Rear observations for the optional TBT indicator trigger, not a TTC estimate."""
 
 import math
+from opendbc.car.hyundai.canfd_signals import front_bsd
 
 REAR_GAP_MIN_M = 20.0
 # Both display messages plateau at raw 249; 250 also occurs as a special value.
@@ -36,7 +37,7 @@ def rear_distance_blocks(values, side, detected_states):
   return not (state in detected_states and REAR_GAP_MIN_M <= distance < REAR_GAP_SATURATION_M)
 
 
-def rear_lane_change_blocks(camera, bsm, sources):
+def rear_lane_change_blocks(camera, bsm, sources, front=None):
   """Combine received OEM BSD and independently validated rear display slots.
 
   `sources` contains only camera messages discovered on this vehicle. Once a
@@ -56,6 +57,10 @@ def rear_lane_change_blocks(camera, bsm, sources):
     ("FL_INDICATOR", "INDICATOR_LEFT_TWO", "INDICATOR_LEFT_FOUR"),
     ("FR_INDICATOR", "INDICATOR_RIGHT_TWO", "INDICATOR_RIGHT_FOUR"),
   )]
+  front_blocked = front_bsd(front if front is not None else bsm, now)
+  if front_blocked is not None:
+    blocked[0] |= front_blocked[0]
+    blocked[1] |= front_blocked[1]
   for name in sources:
     address, states = REAR_SOURCES[name]
     if not _fresh(camera, name, address, 32, now):
@@ -66,7 +71,7 @@ def rear_lane_change_blocks(camera, bsm, sources):
 
 
 
-def tbt_bsd_inputs(bsm, now):
+def tbt_bsd_inputs(bsm, now, front=None):
   """Fresh OEM right BSD only; corner distance/display slots have no authority."""
   name = "BLINDSPOTS_REAR_CORNERS"
   if not _fresh(bsm, name, 0x1BA, 24, now):
@@ -75,4 +80,8 @@ def tbt_bsd_inputs(bsm, now):
   fields = ("FR_INDICATOR", "INDICATOR_RIGHT_TWO", "INDICATOR_RIGHT_FOUR")
   if any(key not in values for key in fields):
     return False, True
-  return True, any(values[key] != 0 for key in fields)
+  right_blocked = any(values[key] != 0 for key in fields)
+  front_blocked = front_bsd(front if front is not None else bsm, now)
+  if front_blocked is not None:
+    right_blocked |= front_blocked[1]
+  return True, right_blocked

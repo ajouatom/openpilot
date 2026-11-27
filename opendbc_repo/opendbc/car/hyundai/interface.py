@@ -61,8 +61,8 @@ class CarInterface(CarInterfaceBase):
     if ret.flags & HyundaiFlags.CANFD:
       # Shared configuration for CAN-FD cars
       ret.alphaLongitudinalAvailable = True #candidate not in (CANFD_UNSUPPORTED_LONGITUDINAL_CAR | CANFD_RADAR_SCC_CAR)
-      #ret.enableBsm = 0x1e5 in fingerprint[CAN.ECAN]
-      ret.enableBsm = 0x1ba in fingerprint[CAN.ECAN] # BLINDSPOTS_REAR_CORNERS 0x1ba(442)
+      ret.enableBsm = any(fingerprint[bus].get(addr) == size
+                          for bus in (CAN.ECAN, CAN.CAM) for addr, size in ((0x1BA, 24), (0x1E5, 16)))
 
       if 0x105 in fingerprint[CAN.ECAN]:
         ret.flags |= HyundaiFlags.HYBRID.value
