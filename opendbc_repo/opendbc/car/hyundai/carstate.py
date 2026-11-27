@@ -13,6 +13,7 @@ from opendbc.car.hyundai.navi_speedcam import SpeedcamPolicy
 from opendbc.car.hyundai.section_average import DISTANCE_SCALE as SECTION_DISTANCE_SCALE, SectionAverage
 from opendbc.car.hyundai.steering_touch import HyundaiSteeringTouch
 from opendbc.car.hyundai.rear_gap import tbt_bsd_inputs
+from opendbc.car.hyundai.canfd_signals import SteeringRateSign, fresh_values, front_bsd
 from opendbc.car.hyundai.lane_line_time import lane_line_time
 from opendbc.car.hyundai.vehicle_gps import VehicleGPS, register_vehicle_gps
 from opendbc.car.hyundai.values import HyundaiFlags, CAR, DBC, Buttons, CarControllerParams, CAMERA_SCC_CAR, HyundaiExtFlags, \
@@ -242,6 +243,11 @@ class CarState(CarStateBase):
     self.left_blinker_stalk_count = self.right_blinker_stalk_count = 0
     self.doors_seatbelts = None
     self.cruise_buttons_alt2 = None
+    self.blindspots_front_corner_1 = None
+    self.brake_light_412 = None
+    self.imu_01_10ms = None
+    self.cp_bsm_front = None
+    self.steering_rate_sign = SteeringRateSign()
 
     # On some cars, CLU15->CF_Clu_VehicleSpeed can oscillate faster than the dash updates. Sample at 5 Hz
     self.cluster_speed = 0
@@ -555,6 +561,12 @@ class CarState(CarStateBase):
           # unrelated 24-byte frame with the same 0x3C1 id (Ioniq 5 PE, 2026-09-19 drive).
           add_and_cache(self.cp, "BLINKER_STALKS", "blinker_stalks", ignore_counter=True)
           add_and_cache(self.cp, "DOORS_SEATBELTS", "doors_seatbelts")
+          for parser in (self.cp, self.cp_cam):
+            if add_and_cache(parser, "BLINDSPOTS_FRONT_CORNER_1", "blindspots_front_corner_1", ignore_counter=True):
+              self.cp_bsm_front = parser
+              break
+          add_and_cache(self.cp, "BRAKE_LIGHT_412", "brake_light_412", ignore_counter=True)
+          add_and_cache(self.cp, "IMU_01_10MS", "imu_01_10ms", ignore_counter=True)
         elif self.controls_ready_count == 126:
           add_and_cache(self.cp, "CRUISE_BUTTONS_ALT2", "cruise_buttons_alt2", ignore_counter = True)
           add_and_cache(self.cp, "TRAILER_STATUS", "trailer_status", ignore_counter = True)
@@ -1491,7 +1503,13 @@ class CarState(CarStateBase):
     ret.vehicleGps = self.vehicle_gps.update(cp, ret.vEgoRaw, ret.gearShifter == GearShifter.reverse)
     ret.standstill = ret.wheelSpeeds.fl <= STANDSTILL_THRESHOLD and ret.wheelSpeeds.rr <= STANDSTILL_THRESHOLD
 
-    ret.brakeLights = ret.brakePressed or cp.vl["TCS"]["BrakeLight"] == 1 or ret.aEgo < -0.5
+    now = max(cp._last_update_nanos, cp_cam._last_update_nanos)
+    lamp = fresh_values(cp, "BRAKE_LIGHT_412", 0x412, 8, now, 300_000_000)
+    brake_light_412 = lamp is not None and lamp["STOP_LAMP"] == 1
+    ret.brakeLights = ret.brakePressed or cp.vl["TCS"]["BrakeLight"] == 1 or brake_light_412 or ret.aEgo < -0.5
+    imu = fresh_values(cp, "IMU_01_10MS", 0x04A, 32, now)
+    if imu is not None:
+      ret.yawRate = math.radians(imu["IMU_YawRtVal"])
 
     ret.steeringRateDeg = cp.vl["STEERING_SENSORS"]["STEERING_RATE"]
 
@@ -1502,6 +1520,10 @@ class CarState(CarStateBase):
       ret.steeringAngleDeg = cp.vl["MDPS"]["STEERING_ANGLE_2"] * -1
     else:
       ret.steeringAngleDeg = cp.vl["STEERING_SENSORS"]["STEERING_ANGLE"] * -1
+
+    # 0x125 carries an unsigned magnitude on this shared CAN-FD layout.
+    # Derive its direction from that same sensor, including angle-control cars.
+    ret.steeringRateDeg = self.steering_rate_sign.update(cp, now)
 
     trailer_signal = self.trailer_status is not None and self.trailer_status["TRAILER_CONNECTED"] != 0
     if trailer_signal:
@@ -1551,6 +1573,10 @@ class CarState(CarStateBase):
         bsm_info = self.cp_bsm.vl["BLINDSPOTS_REAR_CORNERS"]
         ret.leftBlindspot = (bsm_info["FL_INDICATOR"] + bsm_info["INDICATOR_LEFT_TWO"] + bsm_info["INDICATOR_LEFT_FOUR"]) > 0
         ret.rightBlindspot = (bsm_info["FR_INDICATOR"] + bsm_info["INDICATOR_RIGHT_TWO"] + bsm_info["INDICATOR_RIGHT_FOUR"]) > 0
+      front = front_bsd(self.cp_bsm_front, now)
+      if front is not None:
+        ret.leftBlindspot |= front[0]
+        ret.rightBlindspot |= front[1]
 
     prev_main_buttons = self.main_buttons[-1]
     if self.cruise_buttons_alt2 is not None:
@@ -1589,6 +1615,10 @@ class CarState(CarStateBase):
       acc_req = cp.vl["TCS"]["ACC_REQ"]
       ret.cruiseState.enabled = acc_req == 1
       ret.cruiseState.standstill = False
+      cp_cruise_info = cp_cam if self.CP.flags & HyundaiFlags.CANFD_CAMERA_SCC else cp
+      scc = fresh_values(cp_cruise_info, "SCC_CONTROL", 0x1A0, 32, now)
+      if scc is not None and scc["MainMode_ACC"] == 1 and 1 <= scc["DISTANCE_SETTING"] <= 4:
+        ret.pcmCruiseGap = int(scc["DISTANCE_SETTING"])
     else:
       cp_cruise_info = cp_cam if self.CP.flags & HyundaiFlags.CANFD_CAMERA_SCC else cp
       ret.cruiseState.enabled = cp_cruise_info.vl["SCC_CONTROL"]["ACCMode"] in (1, 2)
@@ -1601,7 +1631,7 @@ class CarState(CarStateBase):
     # The optional 250m trigger uses OEM BSD independently of corner display data.
     if self.CP.enableBsm:
       ret.tbtRearInputsAvailable, ret.tbtRightRearBlocked = tbt_bsd_inputs(
-        self.cp_bsm, max(cp._last_update_nanos, cp_cam._last_update_nanos))
+        self.cp_bsm, now, self.cp_bsm_front)
 
     speed_limit_cam = False
     corner = False
@@ -1657,7 +1687,11 @@ class CarState(CarStateBase):
     ret.gearStep = cp.vl["GEAR"]["GEAR_STEP"] if self.GEAR else 0
     if 1 <= ret.gearStep <= 8 and ret.gearShifter == GearShifter.unknown:
       ret.gearShifter = GearShifter.drive
-    ret.gearStep = cp.vl["GEAR_ALT"]["GEAR_STEP"] if self.GEAR_ALT else ret.gearStep
+    if self.GEAR_ALT:
+      gear_step_alt = int(cp.vl["GEAR_ALT"]["GEAR_STEP"])
+      ret.gearStep = gear_step_alt
+      if self.CP.carFingerprint == CAR.GENESIS_GV80 and not (ret.gearShifter == GearShifter.drive and 1 <= gear_step_alt <= 8):
+        ret.gearStep = 0
 
     lane_info = self.cam_0x2a4 if self.cam_0x2a4 is not None else self.cam_0x362
     ret.laneLineInfoMonoTime = lane_line_time((self.cp_cam, self.cp_alt), lane_info)
