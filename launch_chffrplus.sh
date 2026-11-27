@@ -490,14 +490,116 @@ REBUILD_LOG="/data/rebuild_all.last.log"
 # Present from the Params build until the main build finishes. Left behind by a power cut mid-build,
 # whose empty or truncated outputs (e.g. a .so) SCons still treats as up to date.
 BUILD_MARKER="/data/carrot_build.inprogress"
+# Inputs of the last build that finished. A boot whose inputs match only re-checks
+# existing outputs, so it does not arm the marker and a power cut during it costs nothing.
+BUILD_OK_STAMP="/data/carrot_build.ok"
+# C4: the marker of an interrupted build, kept while recovering; its mtime dates the interruption.
+INTERRUPTED_MARKER="/data/carrot_build.interrupted"
+BUILD_INPUT_STAMP=""
+
+# Commit tree, tracked working-tree changes and AGNOS version. Untracked build outputs are excluded.
+function build_input_stamp {
+  (
+    set -o pipefail
+    cd "$DIR" || exit 1
+    tree="$(git rev-parse 'HEAD^{tree}')" && [ -n "$tree" ] || exit 1
+    changes="$(git diff HEAD --binary | sha256sum | cut -c1-64)" || exit 1
+    printf '%s %s %s\n' "$tree" "$changes" "$(cat /VERSION 2>/dev/null)"
+  ) 2>/dev/null
+}
+
+function arm_build_marker {
+  # sync -f so it is on disk before SCons writes outputs.
+  : > "$BUILD_MARKER" && sync -f "$BUILD_MARKER" || echo "Cannot write $BUILD_MARKER; power-loss rebuild disabled"
+}
+
+# Called after a finished build: flush its outputs, record its inputs, then drop the marker.
+function finish_build_marker {
+  local stamp
+  if ! sync; then
+    echo "Cannot flush build outputs; retaining power-loss recovery marker"
+    return 1
+  fi
+  if stamp="$(build_input_stamp)" && [ -n "$stamp" ] && [ "$stamp" = "$BUILD_INPUT_STAMP" ] &&
+     printf '%s\n' "$stamp" > "$BUILD_OK_STAMP.tmp" && sync -f "$BUILD_OK_STAMP.tmp" &&
+     mv -f "$BUILD_OK_STAMP.tmp" "$BUILD_OK_STAMP"; then
+    :
+  else
+    rm -f "$BUILD_OK_STAMP" "$BUILD_OK_STAMP.tmp"
+  fi
+  rm -f "$BUILD_MARKER"
+  sync -f "$(dirname "$BUILD_MARKER")" 2>/dev/null || true
+}
+
+# C4: SCons renames a cache copy into place without fsync, so only entries written
+# after the interrupted build began (and leftover temporary copies) can be partial.
+# Drop those and keep the rest of the cache for the rebuild.
+function prune_interrupted_cache {
+  [ -e "$SCONS_CACHE" ] || [ -L "$SCONS_CACHE" ] || return 0
+  [ -d "$SCONS_CACHE" ] && [ ! -L "$SCONS_CACHE" ] && [ -f "$INTERRUPTED_MARKER" ] || return 1
+  # A clock reset makes the cutoff untrustworthy. Use the full-cache fallback.
+  [ "$(stat -c %Y "$INTERRUPTED_MARKER")" -le "$(date +%s)" ] || return 1
+  find "$SCONS_CACHE" -mindepth 1 ! -type d \( -cnewer "$INTERRUPTED_MARKER" -o -name '*.tmp*' \) -delete || return 1
+  [ -z "$(find "$SCONS_CACHE" -mindepth 1 ! -type d \( -cnewer "$INTERRUPTED_MARKER" -o -name '*.tmp*' \) -print -quit)" ]
+}
+
+function remove_interrupted_build_state {
+  prune_interrupted_cache || return 1
+  rm -rf "$DIR/.sconsign.dblite" "$DIR/prebuilt" || return 1
+  [ ! -e "$DIR/.sconsign.dblite" ] && [ ! -e "$DIR/prebuilt" ] && [ ! -L "$DIR/prebuilt" ]
+}
+
+# Rebuild after a power cut from the trusted part of the cache. Any failure falls
+# back to the full Rebuild All below.
+function recover_interrupted_build {
+  echo "Previous build did not finish (power loss?); rebuilding from the trusted SCons cache"
+  {
+    date
+    # SConstruct cleans its cache directory with the outputs; point that clean at
+    # an empty stand-in so the trusted cache survives.
+    rm -rf "$SCONS_CACHE.clean"
+    if ! (cd "$DIR" && SCONS_CACHE_DIR="$SCONS_CACHE.clean" timeout 600 scons -c); then
+      echo "scons -c failed; requesting full state/cache reset"
+      return 1
+    fi
+    rm -rf "$SCONS_CACHE.clean"
+    if ! with_cache_guard remove_interrupted_build_state; then
+      echo "interrupted-build recovery failed; requesting Rebuild All"
+      return 1
+    fi
+    echo "interrupted-build recovery done: outputs and build state cleared, older cache kept"
+  } > "$REBUILD_LOG" 2>&1
+  BUILD_STATE_RESET=1
+  FORCE_REBUILD=1
+  rm -f "$INTERRUPTED_MARKER"
+}
 
 function consume_rebuild_request {
+  local stamp
   if [ -f "$BUILD_MARKER" ] && [ ! -f "$REBUILD_REQUEST" ]; then
-    echo "Previous build did not finish (power loss?); requesting Rebuild All"
+    # Keep the old marker's mtime to tell which cache entries the interruption may have touched.
+    # Recovery can itself lose power before pruning. Preserve the FIRST cutoff;
+    # replacing it would reclassify the original partial cache entries as old.
+    if [ ! -f "$INTERRUPTED_MARKER" ]; then
+      mv -f "$BUILD_MARKER" "$INTERRUPTED_MARKER" || return 1
+    fi
+  fi
+  if [ -f "$INTERRUPTED_MARKER" ] || [ -f "$REBUILD_REQUEST" ]; then
+    rm -f "$BUILD_OK_STAMP"
+  fi
+  # Armed right before the Params build, unless the inputs match the last finished build.
+  stamp="$(build_input_stamp)"
+  BUILD_INPUT_STAMP="$stamp"
+  if [ -n "$stamp" ] && [ -f "$BUILD_OK_STAMP" ] && [ "$stamp" = "$(cat "$BUILD_OK_STAMP" 2>/dev/null)" ]; then
+    echo "Build inputs match the last finished build; power-loss marker not armed"
+  else
+    arm_build_marker
+  fi
+  if [ -f "$INTERRUPTED_MARKER" ] && [ ! -f "$REBUILD_REQUEST" ]; then
+    recover_interrupted_build && return 0
     echo "interrupted build" > "$REBUILD_REQUEST" || return 1
   fi
-  # Armed right before the Params build; sync -f so it is on disk before SCons writes outputs.
-  : > "$BUILD_MARKER" && sync -f "$BUILD_MARKER" || echo "Cannot write $BUILD_MARKER; power-loss rebuild disabled"
+  rm -f "$INTERRUPTED_MARKER"
   [ -f "$REBUILD_REQUEST" ] || return 0
   # Keep the request if cleanup fails or is interrupted. This function never
   # reboots; successful cleanup consumes it before compilation starts.
@@ -696,6 +798,10 @@ function launch {
   # start manager
   cd openpilot/system/manager
   if [ "$FORCE_REBUILD" = "1" ] || [ ! -f $DIR/prebuilt ]; then
+    # C4: missing binaries or a reset can force a real build even with unchanged inputs.
+    if [ "$FORCE_REBUILD" = "1" ] && [ ! -f "$BUILD_MARKER" ]; then
+      arm_build_marker
+    fi
     if ! run_startup_command ./build.py; then
       echo "openpilot build failed, not starting manager."
       show_startup_failure "openpilot build failed"
@@ -708,7 +814,7 @@ function launch {
       fi
     fi
   fi
-  rm -f "$BUILD_MARKER"
+  finish_build_marker
   # Never start driving services if a rebuild left the Params registry stale.
   if ! run_startup_command python3 "$DIR/openpilot/system/manager/params_check.py"; then
     echo "Native Params still do not match this checkout; not starting manager."
