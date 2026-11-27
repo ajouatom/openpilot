@@ -204,15 +204,25 @@ def test_scheduler_heartbeat_rollover_and_immediate_target_zero():
   sent = [(frame, msg) for frame, msg in messages if msg is not None]
   assert [frame for frame, _ in sent] == list(range(0, 68, 4))
   assert [msg[1][4] & 0xF for _, msg in sent] == list(range(16)) + [0]
-  # The reference resets directly to zero for overspeed/disable, without a ramp.
-  zero = pedal.update(68, True, 1.0, 25.0, 20.0)
+  tapered = pedal.update(68, True, 1.0, 25.0, 24.5)
+  assert tapered[1][4] & 0x80
+  # Going above the overspeed threshold releases the pedal on this send.
+  zero = pedal.update(72, True, 1.0, 25.01, 20.0)
   assert zero[1][:4] == bytes(4) and zero[1][4] & 0x80 == 0
   assert pedal.gas_last == 0.0
-  assert pedal.update(72, False, 1.0, 5.0, 20.0)[1][:4] == bytes(4)
+  assert pedal.update(76, False, 1.0, 5.0, 20.0)[1][:4] == bytes(4)
 
 
-@pytest.mark.parametrize("accel,speed,target", [(float("nan"), 0.0, 10.0), (1.0, 5.0, 0.0), (1.0, 12.0, 10.0)])
-def test_reference_invalid_and_overspeed_targets_release(accel, speed, target):
+@pytest.mark.parametrize("overspeed_kph,expected", [
+  (0.0, 0.52), (1.8, 0.468), (9.0, 0.26), (17.9, 0.52 / 180), (18.0, 0.0), (18.1, 0.0),
+])
+def test_ray_overspeed_taper_and_cutoff(overspeed_kph, expected):
+  speed = 25.0
+  assert get_ray_pedal_target(2.5, speed, speed - overspeed_kph / 3.6) == pytest.approx(expected)
+
+
+@pytest.mark.parametrize("accel,speed,target", [(float("nan"), 0.0, 10.0), (1.0, 5.0, 0.0)])
+def test_ray_invalid_targets_release(accel, speed, target):
   assert get_ray_pedal_target(accel, speed, target) == 0.0
 
 

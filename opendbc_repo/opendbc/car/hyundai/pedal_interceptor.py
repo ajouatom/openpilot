@@ -13,7 +13,7 @@ RAY_PEDAL_ACCEL_GAIN = 0.22
 RAY_PEDAL_DECEL_GAIN = 0.55
 RAY_PEDAL_RATE_UP = 0.02
 RAY_PEDAL_RATE_DOWN = 0.06
-RAY_PEDAL_OVERSPEED_CUTOFF = 0.5
+RAY_PEDAL_OVERSPEED_CUTOFF = 5.0  # m/s (18 km/h)
 RAY_PEDAL_TAPER_BELOW_TARGET = 0.75
 
 
@@ -22,7 +22,7 @@ def get_ray_pedal_target(accel: float, v_ego: float, set_speed: float) -> float:
     return 0.0
 
   speed_error = set_speed - v_ego
-  if speed_error <= -RAY_PEDAL_OVERSPEED_CUTOFF:
+  if speed_error < -RAY_PEDAL_OVERSPEED_CUTOFF:
     return 0.0
 
   pedal_offset = float(np.interp(v_ego, RAY_PEDAL_OFFSET_SPEED_BP, RAY_PEDAL_OFFSET_V))
