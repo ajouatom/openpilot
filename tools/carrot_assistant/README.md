@@ -49,8 +49,14 @@ Platform tool approvals still apply; driving tools are marked as state-changing.
 `request_carrot_drive` supports lane_left/right, remote-equivalent speed_up,
 explicit speed_down and speed_set (km/h). `get_carrot_drive_request` only observes.
 Delivery expires in5s, local controller consumption in1s. Pending lane start
-expires in3s, active observation in20s. The relay deduplicates identical calls
-and rejects other calls within10s; one request at a time. No pending work survives
+expires in 3s, active observation in 20s. A confirmed terminal result releases the slot for a
+different command. Identical action/value pairs remain suppressed for 10s from submission,
+including across intervening commands. Outstanding requests retain the slot. Uncertain,
+interrupted or expired outcomes retain the existing 10s protection. Submission replies
+immediately with the relay receipt. Ask for the previous result to see the subsequent device
+acknowledgement. While a browser is already waiting, the relay wakes its poll on submission.
+The status includes queue-to-poll and poll-to-first-ack milliseconds and, on updated web
+clients, the local HTTP duration within the latter. No pending work survives
 restart. Local request IDs prevent replay after ambiguous delivery. The existing
 lane FSM owns motion; fresh state, BSD, lane geometry, driver priority and torque
 requirements remain. Speed cannot engage assistance or impersonate attention input.
@@ -58,6 +64,12 @@ Terminal lane completion also requires observed crossing. Revocation cancels
 pending preparation, not an already-running steering trajectory.
 Full device restart is required; web-only restart is insufficient. No APK update.
 PC controller/transport tests are not on-road voice validation.
+
+With the same OAuth driving scope and local grant, `get_carrot_speeds` reads the latest valid
+carState sample on explicit request. Both values are in km/h. Vehicle speed uses vEgo × 3.6,
+and cruise set speed uses vCruise. The device rejects stale samples, invalid CAN and the
+unset cruise sentinel (255). The read uses its own request slot, and times out on older web
+clients. Refresh the ChatGPT tool list after updating the relay and device web service.
 
 Requests expire after 30 seconds; proposals after 60 seconds. Results are bounded
 and ephemeral. Duplicate delivery cannot repeat a committed write. Queued/unknown
@@ -105,6 +117,12 @@ and all account grants associated with that web connection.
   support. Google Assistant App Actions are not implemented.
 
 ## Run and deploy
+
+Relay 0.7.9 adds immediate driving receipts, consecutive distinct requests after
+verified completion, and explicit live speed reads. Deploy the relay and update
+the device together; refresh ChatGPT tool metadata afterward. No Android APK update
+is required. Validation covers local SDK/HTTP, browser and device consumers;
+physical vehicle execution and production network latency remain unmeasured.
 
 Node 24: `npm ci --ignore-scripts`, `npm test`, `npm start` (loopback 18770).
 Deploy `compose.yaml` behind the existing HTTPS reverse proxy to

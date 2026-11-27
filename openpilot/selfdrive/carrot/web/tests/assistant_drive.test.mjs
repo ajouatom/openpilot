@@ -21,11 +21,22 @@ test('drive commands require a visible web and local grant; credentials stay on 
   assert.equal(calls[0].url, '/api/assistant/drive/execute');
   assert.equal(calls[0].options.headers.Authorization, 'Bearer device-only');
   assert.equal(JSON.stringify(result).includes('device-only'), false);
+  globalThis.fetch = async (url, options) => {
+    assert.equal(url, '/api/assistant/drive/speeds');
+    assert.equal(options.headers.Authorization, 'Bearer device-only');
+    return { ok: true, json: async () => ({ ok: true, status: 'ok', vehicle_speed_kph: 64.8, set_speed_kph: 60, sample_age_ms: 10 }) };
+  };
+  assert.deepEqual(await m.readDriveSpeeds(), { status: 'ok', vehicle_speed_kph: 64.8, set_speed_kph: 60, sample_age_ms: 10 });
   document.hidden = true;
   assert.equal((await m.executeDriveCommand(command)).result.status, 'unverified');
   assert.equal(calls.length, 1);
   document.hidden = false;
+  globalThis.fetch = async (url, options) => {
+    calls.push({ url, options });
+    return { ok: true, json: async () => ({ ok: true, revoked: true }) };
+  };
   await m.revokeDriveAccess();
+  assert.equal((await m.readDriveSpeeds()).reason, 'device_permission');
   assert.equal(m.driveAccessEnabled(), false);
   assert.equal((await m.executeDriveCommand(command)).result.status, 'unverified');
   assert.equal(calls.length, 2);

@@ -13,6 +13,27 @@ from .bluetooth import runtime
 STATE = web.AppKey('assistant_drive', AssistantDrive)
 
 
+async def read_speeds(app):
+  unavailable = {'status': 'unavailable', 'reason': 'no_fresh_data'}
+  broker = app.get('realtime_broker')
+  if broker is None:
+    return unavailable
+  async with app['realtime_broker_poll_lock']:
+    await asyncio.to_thread(broker.poll, 0)
+    sm = broker.sm
+    age = time.monotonic() - sm.logMonoTime['carState'] / 1e9
+    if not sm.valid['carState'] or not sm.alive['carState'] or not 0 <= age <= 1:
+      return unavailable
+    car = sm['carState']
+    if not car.canValid:
+      return unavailable
+    actual = round(car.vEgo * 3.6, 1) if math.isfinite(car.vEgo) else None
+    target = round(car.vCruise, 1) if 0 < car.vCruise < 255 else None  # 0: no target; 255: V_CRUISE_UNSET
+    if actual is None and target is None:
+      return unavailable
+    return {'status': 'ok', 'vehicle_speed_kph': actual, 'set_speed_kph': target, 'sample_age_ms': math.ceil(age * 1000)}
+
+
 async def handle(request):
   origin = request.headers.get('Origin')
   if origin != f'{request.scheme}://{request.host}' or request.headers.get('Sec-Fetch-Site') == 'cross-site':
@@ -38,6 +59,9 @@ async def handle(request):
     elif operation == 'disable':
       service.revoke(token, origin)
       result = {'revoked': True}
+    elif operation == 'speeds':
+      service.permissions.authorize(token, origin)
+      result = await read_speeds(request.app)
     elif operation == 'execute':
       command = body.get('command')
       if not isinstance(command, dict):
