@@ -632,6 +632,7 @@ def test_carrot_radar_is_fixed_without_mode_or_sensitivity(settings, params):
     "EnableRadarTracks",
     "RadarTrackFlip",
     "EnableCornerRadar",
+    "RadarCutInLoadShed",
   ]
 
 

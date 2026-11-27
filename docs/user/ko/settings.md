@@ -277,7 +277,7 @@ VW MEB(ID.4 포함)에도 수동 조향비와 학습 비율이 적용됩니다. 
 |---|---|---|
 | 현대·기아 | `HyundaiCameraSCC`, `IsLdwsCar`, `HapticFeedbackWhenSpeedCamera` | SCC 연결 방식, LDWS 차량과 카메라 구간 햅틱 |
 | CANFD·HDA | `CanfdHDA2`, `HyundaiCanfdClusterDirectTx`, `CanfdDebug`, `HDPuse`, `CcncClusterDisplay`, `CcncTrafficBackground` | HDA2 차량, 계기판 직접 송신, 차로변경 깜빡이 자동, CAN FD 디버그·HDP 기능과 CCNC 계기판 표시 옵션 |
-| 레이더 | `EnableRadarTracks`, `RadarTrackFlip`, `EnableCornerRadar`, `CarrotRadarMode`, `CarrotRadarCutInSensitivity` | SCC 레이더, 전방 트랙 좌우 보정, 코너 레이더와 당근레이더 처리·컷인 감도 |
+| 레이더 | `EnableRadarTracks`, `RadarTrackFlip`, `EnableCornerRadar`, `RadarCutInLoadShed`, `CarrotRadarMode`, `CarrotRadarCutInSensitivity` | SCC 레이더, 전방 트랙 좌우 보정, 코너 레이더와 당근레이더 처리·컷인 감도, 레이더 과부하 때 끼어들기 계산 줄이기 |
 | 운전자 모니터링 | `DriverMonitoringEnabled`(검색 전용), `DriverMonitoringMode`, `CarrotVisionEnabled`, `MuteDoor`, `MuteSeatbelt` | 운전자 모니터링과 일부 차량 경고음 처리 |
 | 차량 보조 | `MaxAngleFrames`, `SpeedFromPCM` | 최대 조향각 관련 프레임과 순정 SCC 속도 제어 방식 |
 | 기기 하드웨어 | `CommaPedalEnabled`, `HardwareC3xLite` | ACC 미장착 차량의 Comma Pedal 허용 설정, C3X Lite 하드웨어 구성 |
@@ -309,6 +309,8 @@ VW MEB(ID.4 포함)에도 수동 조향비와 학습 비율이 적용됩니다. 
 자동 램프 피드백은 조향 요청과 격리합니다. 독점 소유권 중 검증된 실제 레버의 새 조작은 보호시간 중에도 일반 차로변경 조건에 전달되며 Kick 출력을 중단합니다.
 
 `RadarTrackFlip`은 `0: 정상`(기본값), `1: 좌우 반전`입니다. 전방 레이더 트랙의 좌우 위치·횡속도를 함께 반전하여 선행차 선택과 표시에 적용하며 SCC·코너·비전은 그대로 유지합니다. 차종별 자동 반전은 없고, 실제 좌우 불일치가 확인된 차량에서만 사용합니다. 변경 후 재시동 또는 재부팅하면 다음 OnRoad 시작부터 적용됩니다. [레이더 좌우 반전](radar.md#radar-track-flip)을 참고하세요.
+
+`RadarCutInLoadShed`(기본값 `0`)는 빗길·저속 다차로 정체에서 「장치 프로세스 동작오류」 또는 「장치 프로세스 통신속도 오류」(radarState)로 수동운전 알람이 뜨는 차량만 켭니다. 켜면 radard 발행률이 최근 20프레임(약 1초) 평균 18 Hz 아래일 때만 끼어들기 계산에서 끼어들기 판정에 원래 쓰이지 않는 땅 기준 0.5 m/s 이하인 점과, 50 km/h 미만일 때 45 m 밖의 점을 뺍니다. 앞차, 그리고 화면 표시와 차로변경 장애물 판단에 쓰는 옆 차로 정보는 그대로이며, 18.9 Hz 이상이 3초 이어지면 원래대로 돌아갑니다. 바뀌는 곳은 MPC 앞단의 레이더 처리뿐입니다. 줄이는 동안 멈춰 있다가 끼어드는 차나 50 km/h 미만에서 45 m 밖에서 다가오는 차의 감지가 늦을 수 있습니다. 다음 OnRoad 시작 때 읽으므로 변경 후 재시동하거나 기기를 재부팅해야 적용됩니다.
 
 Bosch MRRevo14F 수신을 지원하는 버전에서 Bosch MRRevo14F 후보 차종(실차 검증은 아반떼 AD뿐)의 Bosch 메시지 그룹이 감지되고 `EnableRadarTracks=1`~`3`이면, 이미 전송 중인 트랙을 passive 방식으로 수신하며 시작 시 레이더 활성화 UDS 쓰기와 SCC ECU 통신 비활성화를 건너뜁니다. `EnableRadarTracksResult`는 갱신하지 않으므로 실제 수신·CAN 유효성·레이더 오류로 확인하세요. passive는 차량 제어 전체가 꺼진다는 뜻이 아닙니다. [Bosch passive 수신 예외](radar.md#bosch-passive-reception)를 참고하세요.
 
@@ -487,7 +489,7 @@ CCNC 계기판(`CcncClusterDisplay`에 적은 차량):
 ### 차량 구성을 확인해야 하는 설정
 
 - `HyundaiCameraSCC`, `CanfdHDA2`
-- `EnableRadarTracks`, `RadarTrackFlip`, `EnableCornerRadar`, `CarrotRadarMode`, `CarrotRadarCutInSensitivity`
+- `EnableRadarTracks`, `RadarTrackFlip`, `EnableCornerRadar`, `RadarCutInLoadShed`, `CarrotRadarMode`, `CarrotRadarCutInSensitivity`
 - `SpeedFromPCM`, `DisableMinSteerSpeed`
 - `LateralTorqueCustom`, `CustomSteer*`
 - `DriverMonitoringMode`

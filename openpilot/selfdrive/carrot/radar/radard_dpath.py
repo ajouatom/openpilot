@@ -19,6 +19,7 @@ from openpilot.selfdrive.carrot.radar_motion.timing import front_radar_distance_
 from openpilot.selfdrive.carrot.radar_motion import (
   DPathRadarController,
 )
+from openpilot.selfdrive.carrot.radar_motion.controller import CutInLoadShed
 
 
 CORNER_RADAR_FLAGS = int(
@@ -120,8 +121,10 @@ class DPathRadarD:
     )
     self.radar_state = log.RadarState.new_message()
     self.radar_state_valid = False
+    self.load_shed = CutInLoadShed(params.get_int("RadarCutInLoadShed") > 0)
 
   def update(self, sm: messaging.SubMaster, rr: car.RadarData) -> None:
+    self.controller.cutin_load_shed = self.load_shed.active
     self.radar_state_valid = sm.all_checks()
     # Cap'n Proto arenas cannot reclaim replaced lists/structs. Keeping this
     # builder across frames retains old allocations for the whole drive, even
@@ -163,6 +166,9 @@ class DPathRadarD:
     radar_msg.valid = self.radar_state_valid
     radar_msg.radarState = self.radar_state
     pm.send("radarState", radar_msg)
+    shed = self.load_shed.active
+    if self.load_shed.update(time.monotonic()) != shed:
+      cloudlog.event("radard cut-in load shed", active=not shed, hz=round(self.load_shed.hz, 1))
 
 
 def main() -> None:

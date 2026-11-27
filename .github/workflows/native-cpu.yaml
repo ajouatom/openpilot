@@ -59,3 +59,4 @@ jobs:
           openpilot/selfdrive/carrot/tests/test_scc_lead_policy.py
           openpilot/selfdrive/carrot/tests/test_radar_forced_scc_gate.py
           openpilot/selfdrive/carrot/tests/test_radard_dpath.py
+          openpilot/selfdrive/carrot/tests/test_radar_cutin_load_shed.py
